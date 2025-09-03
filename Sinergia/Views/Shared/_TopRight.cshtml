@@ -1,0 +1,42 @@
+﻿<style type="text/css">
+    #logo img {
+        width: auto !important;
+        height: 32px !important;
+        padding-left: 3px;
+    }
+</style>
+
+<header id="header">
+    <div id="logo-group">
+        <!-- Logo Sinergia -->
+        <span id="logo">
+            <img src="@Url.Content("~/Content/img/logo-sinergia-192.png")" alt="Sinergia" style="height: 32px;" />
+        </span>
+    </div>
+
+    <section id="top-right">
+        <div class="pull-right">
+            @if (User.Identity.IsAuthenticated)
+            {
+                <!-- Nome utente e logout -->
+                <ul id="mobile-profile-img" class="header-dropdown-list hidden-xs padding-5">
+                    <li class="">
+                        <a href="#" class="dropdown-toggle no-margin userdropdown" data-toggle="dropdown">
+                            <span>@User.Identity.Name</span> <!-- Visualizzazione nome utente -->
+                        </a>
+                        <ul class="dropdown-menu pull-right">
+                            <li>
+                                <a href="@Url.Action("Profile", "User")" class="padding-10 padding-top-0 padding-bottom-0"><i class="fa fa-user"></i> Profilo</a>
+                            </li>
+                            <li class="divider"></li>
+                            <li>
+                                <a href="@Url.Action("Logout", "Account")" class="padding-10 padding-top-5 padding-bottom-5" data-action="userLogout"><i class="fa fa-sign-out fa-lg"></i> <strong>Logout</strong></a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            }
+        </div>
+    </section>
+</header>
+

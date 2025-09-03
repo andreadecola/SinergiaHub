@@ -1,0 +1,845 @@
+﻿@model List<Sinergia.Models.AvvisoParcellaViewModel>
+@{
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+    bool puoAggiungere = ViewBag.PuoAggiungere == true;
+    bool mostraAzioni = puoAggiungere || Model.Any(c => c.PuoModificare || c.PuoEliminare);
+}
+
+@section styles {
+    <style>
+        #avvisiTable th, #avvisiTable td {
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        #controlliAvvisi select,
+        #controlliAvvisi input {
+            min-width: 90px;
+        }
+    </style>
+}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<link href="~/Content/css/style-mobile.css" rel="stylesheet" />
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliAvvisi" class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>
+
+<!-- 📥 Export Avvisi Parcella CSV/PDF -->
+<div class="d-flex justify-content-end mb-3">
+    <form method="get" id="exportAvvisiForm"
+          class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+
+        <input type="date" name="da" class="form-control form-control-sm w-auto"
+               value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
+
+        <input type="date" name="a" class="form-control form-control-sm w-auto"
+               value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+
+        <button type="submit" formaction="@Url.Action("EsportaAvvisiParcellaCsv", "Pratiche")"
+                class="btn btn-outline-success btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+        </button>
+
+        <button type="submit" formaction="@Url.Action("EsportaAvvisiParcellaPdf", "Pratiche")"
+                class="btn btn-outline-danger btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+        </button>
+    </form>
+</div>
+
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovoAvviso()">Nuovo Avviso Parcella</button>
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered" id="avvisiTable">
+            <thead>
+                <tr>
+                    <th>Pratica</th>
+                    <th>Data</th>
+                    <th>Stato</th>
+                    <th>Importo</th>
+                    <th>Cassa Previdenziale (%)</th>
+                    <th>Contributo (€)</th>
+                    <th>Metodo Pagamento</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-center">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in Model)
+                {
+                    <tr data-id="@a.ID_AvvisoParcelle">
+                        <td>@a.NomePratica</td>
+                        <td>@(a.DataAvviso?.ToString("dd/MM/yyyy") ?? "")</td>
+                        <td class="stato">@a.Stato</td>
+                        <td>@(a.Importo?.ToString("C") ?? "")</td>
+                        <td>@(a.ContributoIntegrativoPercentuale?.ToString("0.##") ?? "")%</td>
+                        <td>@(a.ContributoIntegrativoImporto?.ToString("C") ?? "")</td>
+                        <td>@a.MetodoPagamento</td>
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial("~/Views/AvvisiParcella/_AzioniAvvisoParcella.cshtml", a)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var a in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-avviso" data-id="@a.ID_AvvisoParcelle">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">@a.NomePratica</span>
+                <span class="badge bg-@(a.Stato == "Pagato" ? "success" : "secondary")">@a.Stato</span>
+            </div>
+
+            <div class="small text-muted"><strong>Data:</strong> @(a.DataAvviso?.ToString("dd/MM/yyyy") ?? "-")</div>
+            <div class="small text-muted"><strong>Importo:</strong> @(a.Importo?.ToString("C") ?? "-")</div>
+            <div class="small text-muted"><strong>Cassa Previdenziale:</strong> @(a.ContributoIntegrativoPercentuale?.ToString("0.##") ?? "-")%</div>
+            <div class="small text-muted"><strong>Contributo:</strong> @(a.ContributoIntegrativoImporto?.ToString("C") ?? "-")</div>
+            <div class="small text-muted"><strong>Metodo Pagamento:</strong> @a.MetodoPagamento</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("~/Views/AvvisiParcella/_AzioniAvvisoParcella.cshtml", a)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneAvvisi" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+<!-- Modale Inserimento/Modifica -->
+<div class="modal fade" id="avvisoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form id="avvisoForm">
+            <div class="modal-content">
+                <div class="modal-header text-black">
+                    <h5 class="modal-title" id="avvisoModalLabel">Nuovo Avviso Parcella</h5>
+                    <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_AvvisoParcelle" />
+                    <input type="hidden" name="TipologiaPratica" />
+                    <input type="hidden" name="TariffaOraria" />
+                    <input type="hidden" name="OreEffettive" />
+                    <input type="hidden" name="DescrizioneCompenso" />
+
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label">Pratica</label>
+                            <select name="ID_Pratiche" class="form-select form-select-sm" required id="selectPraticaAvviso">
+                                <option value="">-- Seleziona una pratica --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Tipologia compenso</label>
+                            <input type="text" id="tipoCompensoLabel" class="form-control form-control-sm" readonly />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Professionista</label>
+                            <input type="text" id="nomeProfessionistaAvviso" class="form-control form-control-sm" readonly />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Data Avviso</label>
+                            <input name="DataAvviso" type="date" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Stato</label>
+                            <select name="Stato" class="form-select form-select-sm" required>
+                                <option value="">-- Seleziona stato --</option>
+                                <option value="In attesa">In attesa</option>
+                                <option value="Inviato">Inviato</option>
+                                <option value="Pagato">Pagato</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Importo</label>
+                            <input name="Importo" type="number" class="form-control form-control-sm" step="0.01" min="0" required oninput="calcolaTotaleAvvisoParcella()" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Contributo Integrativo (%)</label>
+                            <input name="ContributoIntegrativoPercentuale" class="form-control form-control-sm" readonly />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Importo Contributo</label>
+                            <input name="ContributoIntegrativoImporto" class="form-control form-control-sm" readonly oninput="calcolaTotaleAvvisoParcella()" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Aliquota IVA (%)</label>
+                            <select name="AliquotaIVA" class="form-select form-select-sm" required onchange="calcolaTotaleAvvisoParcella()">
+                                <option value="">-- Seleziona --</option>
+                                <option value="0">Esente</option>
+                                <option value="4">4%</option>
+                                <option value="5">5%</option>
+                                <option value="10">10%</option>
+                                <option value="22">22%</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Importo IVA</label>
+                            <input name="ImportoIVA" class="form-control form-control-sm" readonly />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Totale Avviso Parcella</label>
+                            <input name="TotaleAvvisoParcella" class="form-control form-control-sm" readonly />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Metodo di Pagamento</label>
+                            <select class="form-select form-select-sm" name="MetodoPagamento" id="metodoPagamento" required onchange="controllaMetodoPagamento()">
+                                <option value="">-- Seleziona --</option>
+                                <option value="Contanti">Contanti</option>
+                                <option value="Bonifico">Bonifico</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Note</label>
+                            <textarea name="Note" rows="1" class="form-control form-control-sm "></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modale Eliminazione -->
+<div class="modal fade" id="eliminaAvvisoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Elimina Avviso Parcella</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">Confermi l’eliminazione dell'avviso?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneAvviso">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Dati Bancari -->
+<div class="modal fade" id="datiBancariModal" tabindex="-1" aria-labelledby="datiBancariModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="DatiBancariForm">
+                <div class="modal-header text-black">
+                    <h5 class="modal-title" id="datiBancariModalLabel">Dati Bancari del Professionista</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body">
+
+
+                    <!-- ⚠️ Avviso -->
+                    <div class="alert alert-warning p-2 mb-3" role="alert">
+                        I campi contrassegnati con <span class="text-danger">*</span> sono obbligatori.
+                    </div>
+
+                    <!-- Hidden per ID e Tipo -->
+                    <input type="hidden" name="ID_Cliente" />
+                    <input type="hidden" name="TipoCliente" value="Professionista" />
+                    <input type="hidden" id="hiddenProfessionistaAvviso" value="@ViewBag.IDProfessionista" />
+                    <input type="hidden" id="hiddenIDProfessionistaAvviso" name="ID_Professionista" />
+
+                    <div class="mb-2">
+                        <label class="form-label">Istituto di Credito <span class="text-danger">*</span></label>
+                        <input type="text" name="NomeBanca" class="form-control form-control-sm"
+                               placeholder="Es. Intesa Sanpaolo, Unicredit, BNL" required />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">IBAN <span class="text-danger">*</span></label>
+                        <input type="text" name="IBAN" class="form-control form-control-sm"
+                               placeholder="Es. IT60X0542811101000000123456" required />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Intestatario <span class="text-danger">*</span></label>
+                        <input type="text" name="Intestatario" class="form-control form-control-sm"
+                               placeholder="Nome e Cognome dell'intestatario del conto" required />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">BIC/SWIFT</label>
+                        <input type="text" name="BIC_SWIFT" class="form-control form-control-sm"
+                               placeholder="Es. BCITITMM o codice della banca estera" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Note</label>
+                        <textarea name="Note" rows="2" class="form-control form-control-sm"
+                                  placeholder="Eventuali annotazioni sui dati bancari..."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="salvaDatiBancari()">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    let idAvvisoDaEliminare = 0;
+
+    // ➕ Nuovo avviso
+    function apriNuovoAvviso() {
+        const form = document.getElementById("avvisoForm");
+        form.reset();
+
+        // ✏️ Pulisci anche i campi contributo integrativo
+        form.querySelector('[name="ContributoIntegrativoPercentuale"]').value = "";
+        form.querySelector('[name="ContributoIntegrativoImporto"]').value = "";
+        // ✅ Riabilita select in creazione
+        document.getElementById("selectPraticaAvviso").disabled = false;
+        document.getElementById("avvisoModalLabel").textContent = "Nuovo Avviso Parcella";
+        caricaPraticheInSelect(); // 👈 carica le pratiche nel dropdown
+
+        new bootstrap.Modal(document.getElementById("avvisoModal")).show();
+    }
+
+
+
+    // ✏️ Modifica avviso
+    function apriModificaAvviso(id) {
+        fetch(`/Pratiche/GetAvvisoParcella?id=${id}`)
+            .then(r => r.json())
+            .then(res => {
+                console.log("🔍 Risposta completa:", res);
+
+                if (!res.success) {
+                    toastr.error("Errore nel caricamento.");
+                    return;
+                }
+
+                const a = res.avviso;
+                console.log("📦 Dati avviso ricevuti:", a);
+
+                const form = document.getElementById("avvisoForm");
+                form.reset();
+
+                // 🔁 Compilazione dei campi base
+                form.querySelector('[name="ID_AvvisoParcelle"]').value = a.ID_AvvisoParcelle;
+                form.querySelector('[name="ID_Pratiche"]').value = a.ID_Pratiche;
+                form.querySelector('[name="Importo"]').value = a.Importo || "";
+                form.querySelector('[name="Stato"]').value = a.Stato || "";
+                form.querySelector('[name="Note"]').value = a.Note || "";
+                form.querySelector('[name="MetodoPagamento"]').value = a.MetodoPagamento || "";
+                form.querySelector('[name="TipologiaPratica"]').value = a.TipologiaPratica || "";
+                form.querySelector('[name="TariffaOraria"]').value = a.TariffaOraria || "";
+                form.querySelector('[name="OreEffettive"]').value = a.OreEffettive || "";
+                form.querySelector('[name="DescrizioneCompenso"]').value = a.DescrizioneCompenso || "";
+
+
+
+                // 🔁 Data Avviso
+                if (a.DataAvviso) {
+                    const match = a.DataAvviso.match(/\d+/);
+                    if (match) {
+                        const timestamp = parseInt(match[0]);
+                        const data = new Date(timestamp);
+                        const yyyy = data.getFullYear();
+                        const mm = String(data.getMonth() + 1).padStart(2, '0');
+                        const dd = String(data.getDate()).padStart(2, '0');
+                        form.querySelector('[name="DataAvviso"]').value = `${yyyy}-${mm}-${dd}`;
+                    }
+                }
+
+                // 🔁 Professionista e tipologia di compenso
+                document.getElementById("nomeProfessionistaAvviso").value = a.NomeUtenteCreatore || "";
+                document.getElementById("tipoCompensoLabel").value = a.TipologiaPratica || "";
+
+
+
+                // 🔁 Nome pratica in dropdown
+                const select = form.querySelector('[name="ID_Pratiche"]');
+                let option = select.querySelector(`option[value="${a.ID_Pratiche}"]`);
+                if (!option) {
+                    option = document.createElement("option");
+                    option.value = a.ID_Pratiche;
+                    option.textContent = a.NomePratica || "Pratica selezionata";
+                    select.appendChild(option);
+                }
+                select.value = a.ID_Pratiche;
+                select.disabled = true; // ⛔ Disabilita select in modifica
+
+                // 🔁 Campi contributo integrativo
+                form.querySelector('[name="ContributoIntegrativoPercentuale"]').value = a.ContributoIntegrativoPercentuale || "";
+                form.querySelector('[name="ContributoIntegrativoImporto"]').value = a.ContributoIntegrativoImporto || "";
+
+                // 🔁 ✅ NUOVI CAMPI: Aliquota, IVA, Totale
+                form.querySelector('[name="AliquotaIVA"]').value = a.AliquotaIVA || "";
+                form.querySelector('[name="ImportoIVA"]').value = a.ImportoIVA || "";
+                form.querySelector('[name="TotaleAvvisoParcella"]').value = a.TotaleAvvisoParcella || "";
+
+                // ✅ Mappa pratica-professionista
+                if (!window.mappaPraticaProfessionista) window.mappaPraticaProfessionista = {};
+                if (!window.mappaPraticaProfessionista[a.ID_Pratiche]) {
+                    window.mappaPraticaProfessionista[a.ID_Pratiche] = {
+                        id: a.ID_UtenteResponsabile,
+                        nome: a.NomeUtenteCreatore,
+                        contributoPercentuale: a.ContributoIntegrativoPercentuale
+                    };
+                }
+
+                // 🔁 Attiva eventi
+                select.dispatchEvent(new Event("change"));
+                calcolaContributoIntegrativo();
+
+                // 🔁 Mostra la modale
+                document.getElementById("avvisoModalLabel").textContent = "Modifica Avviso Parcella";
+                new bootstrap.Modal(document.getElementById("avvisoModal")).show();
+            });
+    }
+
+
+
+
+    // 💾 Salva (submit)
+    $('#avvisoForm').on('submit', function (e) {
+        e.preventDefault();
+
+        // 🔓 Se la select è disabilitata, abilitala temporaneamente per includerla nel FormData
+        const select = document.getElementById("selectPraticaAvviso");
+        const eraDisabilitata = select.disabled;
+        if (eraDisabilitata) select.disabled = false;
+
+        const formData = new FormData(this);
+
+        // 🔒 Ripristina lo stato disabled se era disabilitata
+        if (eraDisabilitata) select.disabled = true;
+
+        const id = formData.get("ID_AvvisoParcelle");
+        const url = id && parseInt(id) > 0
+            ? '/Pratiche/ModificaAvvisoParcella'
+            : '/Pratiche/CreaAvvisoParcella';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("avvisoModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+
+    // 🗑️ Elimina
+    function confermaEliminazioneAvviso(id) {
+        idAvvisoDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaAvvisoModal")).show();
+    }
+
+    $('#btnConfermaEliminazioneAvviso').on('click', function () {
+        fetch('/Pratiche/EliminaAvvisoParcella', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idAvvisoDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // 🔄 Carica la lista delle pratiche nella select
+    function caricaPraticheInSelect() {
+        fetch('/Pratiche/GetListaPratiche')
+            .then(res => res.json())
+            .then(data => {
+                const select = document.getElementById("selectPraticaAvviso");
+                select.innerHTML = '<option value="">-- Seleziona una pratica --</option>';
+                window.mappaPraticaProfessionista = {};
+
+                if (data.success && Array.isArray(data.pratiche)) {
+                    data.pratiche.forEach(p => {
+                        const option = document.createElement('option');
+                        option.value = p.ID_Pratiche;
+                        option.textContent = p.Titolo;
+                        select.appendChild(option);
+
+                        // Salva tutti i dati utili in mappa
+                        window.mappaPraticaProfessionista[p.ID_Pratiche] = {
+                            id: p.ID_UtenteResponsabile,
+                            nome: p.NomeProfessionista,
+                            contributoPercentuale: p.PercentualeContributoIntegrativo,
+                            tipologia: p.Tipologia // 👈 aggiunto
+                        };
+                    });
+
+                    // Aggiungi listener solo una volta
+                    if (!select.dataset.listenerAggiunto) {
+                        select.addEventListener("change", function () {
+                            const idPratica = this.value;
+                            const campoProfessionista = document.getElementById("nomeProfessionistaAvviso");
+                            const campoTipologia = document.getElementById("tipoCompensoLabel");
+
+                            if (window.mappaPraticaProfessionista && window.mappaPraticaProfessionista[idPratica]) {
+                                const info = window.mappaPraticaProfessionista[idPratica];
+                                campoProfessionista.value = info.nome || "Professionista non trovato";
+                                document.getElementById("hiddenIDProfessionistaAvviso").value = info.id || "";
+                                campoTipologia.value = info.tipologia || "N.D."; // ✅ <-- QUI LA CORREZIONE
+                            }
+                            else {
+                                campoProfessionista.value = "";
+                                document.getElementById("hiddenIDProfessionistaAvviso").value = "";
+                                campoTipologia.textContent = "";
+                            }
+                        });
+
+                        select.dataset.listenerAggiunto = "true";
+                    }
+
+                    // Triggera il change se già selezionata
+                    if (select.value) {
+                        select.dispatchEvent(new Event("change"));
+                    }
+                } else {
+                    toastr.warning("Nessuna pratica disponibile.");
+                }
+            })
+            .catch(() => {
+                toastr.error("Errore nel caricamento delle pratiche.");
+            });
+    }
+
+
+    // questo controlla il metodo di pagamento
+
+    function controllaMetodoPagamento() {
+        const metodo = document.getElementById("metodoPagamento").value;
+
+        if (metodo === "Bonifico") {
+            const idPratica = document.getElementById("selectPraticaAvviso").value;
+
+            if (!idPratica) {
+                toastr.warning("Seleziona prima una pratica.");
+                document.getElementById("metodoPagamento").value = "";
+                return;
+            }
+
+            // ✅ Recupera il professionista dalla mappa caricata in precedenza
+            const infoProfessionista = window.mappaPraticaProfessionista[idPratica];
+            const idProfessionista = infoProfessionista?.id;
+
+            if (!idProfessionista || parseInt(idProfessionista) <= 0) {
+                toastr.warning("Professionista non trovato per la pratica selezionata.");
+                document.getElementById("metodoPagamento").value = "";
+                return;
+            }
+
+            apriModaleDatiBancariProfessionista(idProfessionista);
+        }
+    }
+
+
+
+    // DATI BANCARI
+    function apriModaleDatiBancariProfessionista(idProfessionista) {
+        const form = document.getElementById("DatiBancariForm");
+        form.reset();
+
+        form.querySelector('[name="ID_Cliente"]').value = idProfessionista || "";
+        form.querySelector('[name="TipoCliente"]').value = "Professionista";
+        document.getElementById("hiddenProfessionistaAvviso").value = idProfessionista || ""; // ✅ sicurezza extra
+
+        if (!idProfessionista || idProfessionista === "0") {
+            new bootstrap.Modal(document.getElementById("datiBancariModal")).show();
+            return;
+        }
+
+        fetch(`/Pratiche/GetDatiBancari?idCliente=${idProfessionista}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Risposta non valida dal server.");
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.IBAN) {
+                    // I dati bancari esistono, quindi non apriamo la modale
+                    return;
+                }
+
+                // Dati mancanti: apri la modale per inserirli
+                toastr.warning("Dati bancari mancanti. Inserisci i dati per procedere.");
+                new bootstrap.Modal(document.getElementById("datiBancariModal")).show();
+            })
+            .catch(err => {
+                console.error("Errore nel recupero dei dati bancari:", err);
+                toastr.warning("Dati bancari mancanti o errore nella lettura. Inserisci i dati.");
+                new bootstrap.Modal(document.getElementById("datiBancariModal")).show();
+            });
+
+    }
+
+    function salvaDatiBancari() {
+        const form = document.getElementById("DatiBancariForm");
+
+        // 👉 Check manuale dei required
+        const nomeBanca = form.querySelector('[name="NomeBanca"]').value.trim();
+        const iban = form.querySelector('[name="IBAN"]').value.trim();
+        const intestatario = form.querySelector('[name="Intestatario"]').value.trim();
+
+        if (!nomeBanca || !iban || !intestatario) {
+            toastr.error("Tutti i campi obbligatori devono essere compilati.");
+            return;
+        }
+
+        const formData = new FormData(form);
+        const idCliente = formData.get("ID_Cliente");
+
+        if (!idCliente) {
+            // Salva in variabile JS (caso edge)
+            datiBancariTemporaneiProfessionista = {
+                NomeBanca: nomeBanca,
+                IBAN: iban,
+                Intestatario: intestatario,
+                BIC_SWIFT: formData.get("BIC_SWIFT"),
+                Note: formData.get("Note")
+            };
+
+            toastr.success("Dati bancari salvati temporaneamente.");
+            bootstrap.Modal.getInstance(document.getElementById('datiBancariModal')).hide();
+            setTimeout(() => {
+                const modaleAvviso = new bootstrap.Modal(document.getElementById('modaleAvvisoParcella'));
+                modaleAvviso.show();
+            }, 300);
+            return;
+        }
+
+        // Invio al server
+        fetch('/Pratiche/SalvaDatiBancari', {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById('datiBancariModal')).hide();
+                    setTimeout(() => {
+                        const modaleAvviso = new bootstrap.Modal(document.getElementById('modaleAvvisoParcella'));
+                        modaleAvviso.show();
+                    }, 300);
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                console.error("Errore:", err);
+                toastr.error("Errore durante il salvataggio dati bancari.");
+            });
+    }
+
+
+
+    // fine dati bancari
+
+
+    // calcolo contributo integrativo e calcolo totale della parcella
+    function calcolaContributoIntegrativo() {
+        const select = document.getElementById("selectPraticaAvviso");
+        const idPratica = select.value;
+        const importo = parseFloat(document.querySelector('[name="Importo"]').value);
+
+        if (!idPratica || isNaN(importo) || importo <= 0) {
+            document.querySelector('[name="ContributoIntegrativoPercentuale"]').value = "";
+            document.querySelector('[name="ContributoIntegrativoImporto"]').value = "";
+            return;
+        }
+
+        const info = window.mappaPraticaProfessionista[idPratica];
+        const percentuale = info?.contributoPercentuale;
+
+        if (percentuale != null && !isNaN(percentuale)) {
+            const contributo = (importo * percentuale / 100).toFixed(2);
+            document.querySelector('[name="ContributoIntegrativoPercentuale"]').value = percentuale;
+            document.querySelector('[name="ContributoIntegrativoImporto"]').value = contributo;
+        } else {
+            document.querySelector('[name="ContributoIntegrativoPercentuale"]').value = "";
+            document.querySelector('[name="ContributoIntegrativoImporto"]').value = "";
+        }
+    }
+
+    function calcolaTotaleAvvisoParcella() {
+        const form = document.getElementById("avvisoForm");
+        if (!form) return;
+
+        const importoBase = parseFloat(form.querySelector('[name="Importo"]').value) || 0;
+        const contributo = parseFloat(form.querySelector('[name="ContributoIntegrativoImporto"]').value) || 0;
+        const aliquota = parseFloat(form.querySelector('[name="AliquotaIVA"]').value) || 0;
+
+        const imponibile = importoBase + contributo;
+        const importoIVA = +(imponibile * aliquota / 100).toFixed(2);
+        const totale = +(imponibile + importoIVA).toFixed(2);
+
+        form.querySelector('[name="ImportoIVA"]').value = importoIVA;
+        form.querySelector('[name="TotaleAvvisoParcella"]').value = totale;
+    }
+
+
+    // fine calcolo
+
+    // 🔁 Aggiungi eventi per il calcolo automatico del contributo integrativo
+    document.getElementById("selectPraticaAvviso").addEventListener("change", calcolaContributoIntegrativo);
+    document.querySelector('[name="Importo"]').addEventListener("input", calcolaContributoIntegrativo);
+
+
+    // 🔍 Filtro e paginazione
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('avvisiTable');
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = document.querySelectorAll('.card-avviso');
+
+        const controlliContainer = document.getElementById('controlliAvvisi');
+        const paginationContainer = document.getElementById('paginazioneAvvisi');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+        const selectStato = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // ⚙️ Stato
+        ['Tutti', 'In attesa', 'Inviato', 'Pagato'].forEach(stato => {
+            const option = document.createElement('option');
+            option.value = stato;
+            option.textContent = stato;
+            selectStato.appendChild(option);
+        });
+        selectStato.className = 'form-select form-select-sm w-auto';
+
+        // Aggiungi i controlli alla barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectStato);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroStato = selectStato.value;
+
+            let filteredRows = rows.filter(row => {
+                const text = row.innerText.toLowerCase();
+                const statoCell = row.querySelector('td.stato');
+                const stato = statoCell ? statoCell.innerText.trim() : '';
+                const statoMatch = (filtroStato === 'Tutti' || stato === filtroStato);
+                return text.includes(keyword) && statoMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // Tabella desktop
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+
+            // Card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredRows.forEach(row => {
+                const id = row.getAttribute('data-id');
+                const card = document.querySelector(`.card-avviso[data-id="${id}"]`);
+                if (card) card.style.display = '';
+            });
+
+            // Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectStato.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+</script>

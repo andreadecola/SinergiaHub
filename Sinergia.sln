@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sinergia.MVC", "Sinergia\Sinergia.MVC.csproj", "{B79352B8-BA72-46DF-94DE-DBE0E2ACB89C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sinergia.Model", "Sinergia.Model\Sinergia.Model.csproj", "{3B00D56B-D1B9-4DEE-8034-ACFC2E148EF0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Security", "Sinergia.Security\Security.csproj", "{26526248-038B-4BE6-A471-7B9CC985A65D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B79352B8-BA72-46DF-94DE-DBE0E2ACB89C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B79352B8-BA72-46DF-94DE-DBE0E2ACB89C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B79352B8-BA72-46DF-94DE-DBE0E2ACB89C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B79352B8-BA72-46DF-94DE-DBE0E2ACB89C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3B00D56B-D1B9-4DEE-8034-ACFC2E148EF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B00D56B-D1B9-4DEE-8034-ACFC2E148EF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B00D56B-D1B9-4DEE-8034-ACFC2E148EF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B00D56B-D1B9-4DEE-8034-ACFC2E148EF0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{26526248-038B-4BE6-A471-7B9CC985A65D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26526248-038B-4BE6-A471-7B9CC985A65D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26526248-038B-4BE6-A471-7B9CC985A65D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26526248-038B-4BE6-A471-7B9CC985A65D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

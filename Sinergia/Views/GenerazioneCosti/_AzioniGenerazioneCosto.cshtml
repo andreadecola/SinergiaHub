@@ -1,0 +1,55 @@
+﻿@model Sinergia.Models.GenerazioneCostiViewModel
+
+<div class="d-inline-flex flex-wrap gap-1 align-items-center">
+
+    <!-- 📄 Dettagli costo -->
+    <button type="button" class="btn btn-info btn-sm"
+            title="Dettagli"
+            onclick="caricaDettagliCosto(this)"
+            data-id="@Model.ID_GenerazioneCosto">
+        <i class="fa fa-info-circle"></i>
+    </button>
+
+    <!-- 🛑 Crea eccezione -->
+    @if (Model.Stato == "Previsionale"
+        && !(Model.Periodicita != null && Model.Periodicita.IndexOf("giornal", StringComparison.OrdinalIgnoreCase) >= 0)
+        && !(string.Equals(Model.Categoria, "Costo Team", StringComparison.OrdinalIgnoreCase)
+             && Model.Periodicita != null
+             && (Model.Periodicita.IndexOf("settiman", StringComparison.OrdinalIgnoreCase) >= 0
+                 || Model.Periodicita.IndexOf("quindicin", StringComparison.OrdinalIgnoreCase) >= 0))
+        && !string.Equals(Model.Categoria, "Costo Progetto", StringComparison.OrdinalIgnoreCase))
+    {
+        <button type="button" class="btn btn-warning btn-sm"
+                title="Crea un'eccezione per sospendere o modificare questo costo"
+                data-id="@Model.ID_GenerazioneCosto"
+                data-id-utente="@Model.ID_Utente"
+                data-id-team="@Model.ID_Team"
+                data-id-ricorrenza="@Model.ID_Riferimento"
+                data-categoria="@Model.Categoria"
+                data-data="@Model.DataRegistrazione?.ToString(" yyyy-MM-dd")"
+                onclick="apriModaleEccezione(this)">
+            <i class="fa fa-ban"></i>
+        </button>
+    }
+
+    <!-- 👁 Visualizza eccezione -->
+    @if (Model.HaEccezione == true)
+    {
+        <button type="button" class="btn btn-secondary btn-sm"
+                title="Visualizza eccezione"
+                onclick="apriDettaglioEccezione(@Model.ID_GenerazioneCosto)">
+            <i class="fa fa-eye"></i>
+        </button>
+
+       if (Model.ID_Eccezione.HasValue)
+        {
+            <button type="button" class="btn btn-danger btn-sm"
+                    title="Elimina eccezione"
+                    onclick="eliminaEccezione(this)"
+                    data-id="@Model.ID_Eccezione">
+                <i class="fa fa-trash"></i>
+            </button>
+        }
+    }
+
+</div>

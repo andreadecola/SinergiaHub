@@ -1,0 +1,284 @@
+﻿@model Sinergia.Models.DashboardViewModel
+  @{ViewBag.Title = "Cruscotto";} 
+
+
+<!-- ✅ Aggiungi nel <head> -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+
+<div class="container-fluid px-3">
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
+        <h4 class="mb-2 mb-md-0">Benvenuto, @Model.NomeUtente</h4>
+
+        @using (Html.BeginForm("Cruscotto", "Home", FormMethod.Get, new { @class = "d-flex flex-column flex-md-row gap-2 align-items-start align-items-md-center" }))
+        {
+            @Html.DropDownList("intervalloGiorni",
+                new SelectList(new[] { 15, 30, 60, 90, 120, 180, 365 }, Model.IntervalloGiorni),
+                new { @class = "form-select form-select-sm shadow-sm", style = "width: 90px;", onchange = "this.form.submit();" })
+        }
+    </div>
+</div>
+
+@if (Model.ID_ClienteSelezionato == 0 || string.IsNullOrWhiteSpace(Model.NomeCliente))
+{
+    <div class="alert alert-warning">
+        Nessun cliente selezionato. Seleziona un cliente dal menu in alto per visualizzare i dati.
+    </div>
+}
+else
+{
+    <p class="text-muted">
+        Stai operando per il cliente: <strong>@Model.NomeCliente</strong> |
+        Dati ultimi <strong>@Model.IntervalloGiorni</strong> giorni
+    </p>
+
+    if (Model.CollaboratoriAssegnati?.Any() == true)
+    {
+        <div class="mb-3 ms-3">
+            <strong>Collaboratori assegnati:</strong>
+            <ul class="list-unstyled small mt-1">
+                @foreach (var c in Model.CollaboratoriAssegnati)
+                {
+                    <li>- @c.Nome @c.Cognome (ID: @c.ID_Utente)</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <hr />
+
+    <div class="row g-3">
+
+        <!-- ✅ Pratiche Attive -->
+        <div class="col-md-4 col-sm-6">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-folder-fill me-1"></i> Pratiche Attive
+                </div>
+                <div class="card-body">
+                    @if (Model.Pratiche?.Any() == true)
+                    {
+                        <ul class="list-group list-group-sm">
+                            @foreach (var p in Model.Pratiche)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span>@p.Titolo</span>
+                                    <a href="@Url.Action("DettaglioPratica", "Pratiche", new { id = p.ID_Pratiche })" class="text-primary">
+                                        <i class="bi bi-box-arrow-up-right"></i>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <div class="text-muted small">Nessuna pratica attiva.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ✅ Avvisi Parcella -->
+        <div class="col-md-4 col-sm-6">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-receipt-cutoff me-1"></i> Avvisi Parcella
+                </div>
+                <div class="card-body">
+                    @if (Model.AvvisiParcella?.Any() == true)
+                    {
+                        <ul class="list-group list-group-sm">
+                            @foreach (var avv in Model.AvvisiParcella)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span>@avv.NomePratica </span>
+                                    <a href="@Url.Action("GestioneParcelle", "Pratiche", new { id = avv.ID_AvvisoParcelle })" class="text-success">
+                                        <i class="bi bi-box-arrow-up-right"></i>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <div class="text-muted small">Nessun avviso disponibile.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ✅ Notifiche Recenti -->
+        <div class="col-md-4 col-sm-6">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-bell-fill me-1"></i> Notifiche Recenti
+                </div>
+                <div class="card-body">
+                    @if (Model.Notifiche?.Any() == true)
+                    {
+                        <ul class="list-group list-group-sm">
+                            @foreach (var n in Model.Notifiche)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span>@n.Titolo</span>
+                                    <div class="d-flex gap-2">
+                                        <!-- Segna come letta -->
+                                        @*<a href="@Url.Action("SegnaComeLetta", "Home", new { id = n.ID_Notifica })"
+                                               class="text-muted" title="Segna come letta">
+                                                <i class="bi bi-check-circle"></i>
+                                            </a>*@
+                                        <!-- Vai alla pratica -->
+                                        @if (!string.IsNullOrEmpty(n.LinkPratica))
+                                        {
+                                            <a href="@n.LinkPratica" class="text-warning" title="Vai alla pratica">
+                                                <i class="bi bi-box-arrow-up-right"></i>
+                                            </a>
+                                        }
+                                        <!-- Vedi tutte le notifiche (partial) -->
+                                        <a class="btn btn-sm btn-outline-primary p-0 px-1"
+                                           href="@Url.Action("NotificheList", "Home", new { stato = "Tutte", tipo = "Tutti" })"
+                                           title="Vedi tutte le notifiche">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <div class="text-muted small">Nessuna notifica recente.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+
+
+        @*✅ Operazioni Previsionali*@
+        <div class="col-md-4 col-sm-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-secondary text-white fw-bold">
+                    <i class="bi bi-lightbulb-fill me-1"></i> Operazioni Previsionali
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.OperazioniPrevisionali?.Any() == true)
+                    {
+                        <ul class="list-group list-group-flush">
+                            @foreach (var op in Model.OperazioniPrevisionali)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center small">
+                                    <span>
+                                        <strong>@op.TipoOperazione:</strong> @op.Descrizione
+                                    </span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-bold @(op.ImportoPrevisto < 0 ? "text-danger" : "text-success")">
+                                            @string.Format("{0:C}", op.ImportoPrevisto)
+                                        </span>
+                                        <a class="btn btn-sm btn-outline-primary"
+                                           href="@Url.Action("OperazioniPrevisionaliList", "Home", new { id = op.ID_Previsione })">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <div class="text-muted small p-3">Nessuna operazione previsionale.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+
+
+        @*✅ Operazioni Economiche*@
+        <div class="col-md-4 col-sm-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-info text-white fw-bold">
+                    <i class="bi bi-bar-chart-fill me-1"></i> Operazioni Economiche
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.OperazioniEconomiche?.Any() == true)
+                    {
+                        <ul class="list-group list-group-flush">
+                            @foreach (var oe in Model.OperazioniEconomiche)
+                            {
+                                var isEntrata = oe.Importo >= 0;
+                                <li class="list-group-item d-flex justify-content-between align-items-center small">
+                                    <span>
+                                        <strong>@(isEntrata ? "Entrata" : "Uscita"):</strong> @oe.Descrizione
+                                    </span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-bold @(isEntrata ? "text-success" : "text-danger")">
+                                            @oe.Importo.ToString("C")
+                                        </span>
+                                        <a class="btn btn-sm btn-outline-primary"
+                                           href='@Url.Action("OperazioniEconomicheList", "Home", new { tipo = "Tutte" })'>
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <div class="text-muted small p-3">Nessuna operazione economica.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+
+        @*✅ Operazioni Finanziarie*@
+        <div class="col-md-4 col-sm-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-dark text-white fw-bold">
+                    <i class="bi bi-cash-coin me-1"></i> Operazioni Finanziarie
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.OperazioniFinanziarie?.Any() == true)
+                    {
+                        <ul class="list-group list-group-flush">
+                            @foreach (var of in Model.OperazioniFinanziarie)
+                            {
+                                var isEntrata = string.Equals(of.TipoOperazione, "Entrata", StringComparison.OrdinalIgnoreCase);
+                                <li class="list-group-item d-flex justify-content-between align-items-center small">
+                                    <span>
+                                        <strong>@(isEntrata ? "Entrata" : "Uscita"):</strong> @of.Descrizione
+                                        @if (!string.IsNullOrWhiteSpace(of.NomePratica))
+                                        {
+                                            <span class="text-muted"> · @of.NomePratica</span>
+                                        }
+                                    </span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-bold @(isEntrata ? "text-success" : "text-danger")">
+                                            @of.Importo.ToString("C")
+                                        </span>
+                                        <a class="btn btn-sm btn-outline-primary"
+                                           href='@Url.Action("OperazioniFinanziarieList", "Home", new { tipo = "Tutte" })'
+                                           title="Vedi tutte le operazioni">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <div class="text-muted small p-3">Nessuna operazione finanziaria.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+}
+
+

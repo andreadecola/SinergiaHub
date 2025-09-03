@@ -1,0 +1,386 @@
+﻿@model IEnumerable<Sinergia.Models.NotificaViewModel>
+@{
+    var lista = Model?.ToList() ?? new List<Sinergia.Models.NotificaViewModel>();
+
+    Func<bool, string> rowClass = letta => letta ? "table-light" : "table-warning";
+    Func<bool, string> badgeClass = letta => letta ? "badge bg-success" : "badge bg-warning text-dark";
+
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Notifiche";
+
+    int countNonLette = lista.Count(x => !x.Letto && (x.Stato ?? "") != "Letta");
+    int countLette = lista.Count - countNonLette;
+}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<div class="d-flex justify-content-between mb-2" id="controlliNotifiche">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <input id="searchNotifiche" type="text" class="form-control form-control-sm w-auto" placeholder="Cerca titolo o descrizione...">
+
+        <select id="filtroStatoNotifiche" class="form-select form-select-sm w-auto">
+            <option value="Tutte">Tutte</option>
+            <option value="Non letta">Non lette (@countNonLette)</option>
+            <option value="Letta">Lette (@countLette)</option>
+        </select>
+
+        <select id="pageSizeNotifiche" class="form-select form-select-sm w-auto">
+            <option value="10">10 per pagina</option>
+            <option value="25">25 per pagina</option>
+            <option value="50">50 per pagina</option>
+        </select>
+    </div>
+
+    <div class="d-flex align-items-center gap-2">
+        <button id="btnSegnaTutte" class="btn btn-outline-success btn-sm">
+            <i class="fa fa-check"></i> Segna tutte come lette
+        </button>
+    </div>
+</div>
+
+@if (!lista.Any())
+{
+    <div class="alert alert-info my-2">Nessuna notifica trovata.</div>
+}
+else
+{
+    <!-- 🖥️ Tabella Desktop -->
+    <div class="d-none d-md-block table-responsive">
+        <table class="table table-striped table-bordered table-sm align-middle" id="notificheTable">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:140px;">Data</th>
+                    <th style="width:150px;">Tipo</th>
+                    <th>Titolo</th>
+                    <th>Descrizione</th>
+                    <th style="width:100px;">Stato</th>
+                    <th class="text-center" style="width:120px;">Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var n in lista.OrderByDescending(x => x.DataCreazione))
+                {
+                    var isUnread = !n.Letto && (n.Stato ?? "") != "Letta";
+                    var stato = isUnread ? "Non letta" : (n.Stato ?? "Letta");
+                    <tr class="@rowClass(n.Letto)" data-stato="@stato">
+                        <td>
+                            @n.DataCreazione.ToString("dd/MM/yyyy HH:mm")
+                            @if (n.DataLettura.HasValue)
+                            {
+                                <div class="text-muted xsmall">Letta: @n.DataLettura.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                            }
+                        </td>
+                        <td>@(string.IsNullOrWhiteSpace(n.Tipo) ? "—" : n.Tipo)</td>
+                        <td>@(string.IsNullOrWhiteSpace(n.Titolo) ? "—" : n.Titolo)</td>
+                        <td>@(string.IsNullOrWhiteSpace(n.Descrizione) ? "—" : n.Descrizione)</td>
+                        <td><span class="@badgeClass(n.Letto)">@stato</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-primary btn-sm"
+                                    title="Dettaglio"
+                                    onclick="apriDettaglioNotifica(@n.ID_Notifica)">
+                                <i class="fa fa-search"></i>
+                            </button>
+
+                            @if (isUnread)
+                            {
+                                <button class="btn btn-outline-success btn-sm"
+                                        title="Segna come letta"
+                                        onclick="segnaComeLetta(@n.ID_Notifica, this)">
+                                    <i class="fa fa-check"></i>
+                                </button>
+                            }
+
+                            <button class="btn btn-outline-danger btn-sm"
+                                    title="Elimina"
+                                    onclick="eliminaNotifica(@n.ID_Notifica, this)">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 📱 Card Mobile -->
+    <div class="d-block d-md-none mt-3">
+        @foreach (var n in lista.OrderByDescending(x => x.DataCreazione))
+        {
+            var isUnread = !n.Letto && (n.Stato ?? "") != "Letta";
+            var stato = isUnread ? "Non letta" : (n.Stato ?? "Letta");
+            <div class="border rounded shadow-sm p-3 mb-3 bg-white card-notifica" data-stato="@stato">
+                <div class="small text-muted"><strong>Data:</strong> @n.DataCreazione.ToString("dd/MM/yyyy HH:mm")</div>
+                @if (n.DataLettura.HasValue)
+                {
+                    <div class="text-muted xsmall">Letta: @n.DataLettura.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                }
+                <div><strong>Tipo:</strong> @(string.IsNullOrWhiteSpace(n.Tipo) ? "—" : n.Tipo)</div>
+                <div><strong>Titolo:</strong> @(string.IsNullOrWhiteSpace(n.Titolo) ? "—" : n.Titolo)</div>
+                <div><strong>Descrizione:</strong> @(string.IsNullOrWhiteSpace(n.Descrizione) ? "—" : n.Descrizione)</div>
+                <div><strong>Stato:</strong> <span class="@badgeClass(n.Letto)">@stato</span></div>
+                <div class="mt-2">
+                    <button class="btn btn-outline-primary btn-sm"
+                            title="Dettaglio"
+                            onclick="apriDettaglioNotifica(@n.ID_Notifica)">
+                        <i class="fa fa-search"></i> Dettaglio
+                    </button>
+                    @if (isUnread)
+                    {
+                        <button class="btn btn-outline-success btn-sm"
+                                title="Segna come letta"
+                                onclick="segnaComeLetta(@n.ID_Notifica, this)">
+                            <i class="fa fa-check"></i> Segna come letta
+                        </button>
+                    }
+                    <button class="btn btn-outline-danger btn-sm"
+                            title="Elimina"
+                            onclick="eliminaNotifica(@n.ID_Notifica, this)">
+                        <i class="fa fa-trash"></i> Elimina
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- 🔄 Paginazione -->
+    <div class="d-flex justify-content-end align-items-center gap-2 mt-2" id="paginazioneNotifiche"></div>
+}
+
+@* Modale dettaglio *@
+<div class="modal fade" id="dettaglioNotificaModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header text-black">
+                <h5 class="modal-title">Dettaglio notifica</h5>
+                <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="contenutoDettaglioNotifica" class="small">Caricamento...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Elimina Notifica -->
+<div class="modal fade" id="eliminaNotificaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Elimina Notifica</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Confermi l'eliminazione della notifica?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="confermaEliminaNotifica()">
+                    Elimina
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+// ==== AZIONI ====
+
+// formato date
+function fmtDateTime(val) {
+    if (!val) return '-';
+    var m = /Date\((\d+)\)/.exec(val);
+    var d = m ? new Date(parseInt(m[1], 10)) : new Date(val);
+    return isNaN(d) ? '-' : d.toLocaleString();
+}
+
+// dettaglio notifica
+function apriDettaglioNotifica(id) {
+    const url = '@Url.Action("GetDettaglioNotifica","Home")';
+    const box = document.getElementById('contenutoDettaglioNotifica');
+    box.innerHTML = 'Caricamento...';
+
+    $.getJSON(url, { id: id, autoMark: true }, function (res) {
+        if (!res || !res.success) {
+            box.innerHTML = '<div class="text-danger">Errore nel caricamento.</div>';
+            return;
+        }
+        const d = res.dettaglio;
+        box.innerHTML = `
+            <div class="row g-2">
+                <div class="col-md-6"><strong>Tipo:</strong> ${d.Tipo ?? '-'}</div>
+                <div class="col-md-6"><strong>Stato:</strong> ${d.Stato ?? '-'}</div>
+                <div class="col-md-6"><strong>Creata:</strong> ${fmtDateTime(d.DataCreazione)}</div>
+                <div class="col-md-6"><strong>Letta:</strong> ${fmtDateTime(d.DataLettura)}</div>
+                <div class="col-12"><strong>Titolo:</strong> ${d.Titolo ?? '-'}</div>
+                <div class="col-12"><strong>Descrizione:</strong><br>${(d.Descrizione ?? '-').replace(/\n/g,'<br>')}</div>
+                ${d.LinkPratica ? `<div class="col-12 mt-2">
+                    <a class="btn btn-outline-primary btn-sm" href="${d.LinkPratica}">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> Apri pratica
+                    </a>
+                </div>` : ''}
+            </div>`;
+        new bootstrap.Modal(document.getElementById('dettaglioNotificaModal')).show();
+    }).fail(() => {
+        box.innerHTML = '<div class="text-danger">Errore di rete.</div>';
+    });
+}
+
+// segna singola come letta (reload dopo successo)
+function segnaComeLetta(id, btn) {
+    const url = '@Url.Action("SegnaComeLetta","Home")';
+    $.post(url, { id: id }, function (r) {
+        if (r && r.success) {
+            location.reload(); // 🔄 ricarica la pagina
+        } else {
+            alert('Operazione non riuscita.');
+        }
+    }).fail(() => alert('Errore di rete.'));
+}
+
+// segna tutte come lette (reload dopo successo)
+function segnaTutteComeLette() {
+    const url = '@Url.Action("SegnaTutteComeLette","Home")';
+    $.post(url, function (r) {
+        if (r && r.success) {
+            location.reload(); // 🔄 ricarica la pagina
+        } else {
+            alert('Operazione non riuscita.');
+        }
+    }).fail(() => alert('Errore di rete.'));
+}
+
+// elimina con modale (reload dopo successo)
+let _elimCtx = { id: null, tr: null };
+function eliminaNotifica(id, btn) {
+    _elimCtx.id = id;
+    _elimCtx.tr = btn.closest('tr');
+    new bootstrap.Modal(document.getElementById('eliminaNotificaModal')).show();
+}
+function confermaEliminaNotifica() {
+    if (!_elimCtx.id) return;
+
+    const url = '@Url.Action("EliminaNotifica","Home")';
+
+    $.post(url, { id: _elimCtx.id }, function (r) {
+        if (r && r.success) {
+            // chiudo la modale
+            const m = bootstrap.Modal.getInstance(document.getElementById('eliminaNotificaModal'));
+            if (m) m.hide();
+
+            // toast di successo (se toastr è presente)
+            if (window.toastr) {
+                toastr.success('Notifica eliminata con successo.');
+            }
+
+            // aspetta un attimo così il toast si vede, poi ricarica
+            setTimeout(function () { location.reload(); }, 700);
+        } else {
+            if (window.toastr) toastr.error('Operazione non riuscita.');
+            else alert('Operazione non riuscita.');
+        }
+    }).fail(function () {
+        if (window.toastr) toastr.error('Errore di rete.');
+        else alert('Errore di rete.');
+    });
+}
+
+
+// ==== FILTRI & PAGINAZIONE ====
+    (function () {
+        const table = document.getElementById('notificheTable');
+        const tbody = table ? table.querySelector('tbody') : null;
+        const allRows = tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+
+        // 📱 Card mobile
+        const allCards = Array.from(document.querySelectorAll('.card-notifica'));
+
+        const searchInput = document.getElementById('searchNotifiche');
+        const statoSelect = document.getElementById('filtroStatoNotifiche');
+        const pageSizeSelect = document.getElementById('pageSizeNotifiche');
+        const pagContainer = document.getElementById('paginazioneNotifiche');
+
+        let pageSize = parseInt(pageSizeSelect.value || '10');
+        let currentPage = 1;
+
+        function matches(el, term, stato) {
+            const text = el.innerText.toLowerCase();
+            const okTerm = !term || text.includes(term);
+
+            if (stato === 'Tutte') return okTerm;
+
+            // Controlla stato da classe o da data-attribute
+            const statoAttr = el.getAttribute('data-stato');
+            const isUnread = statoAttr === 'Non letta';
+            const isRead = statoAttr === 'Letta';
+
+            const okStato =
+                (stato === 'Non letta' && isUnread) ||
+                (stato === 'Letta' && isRead);
+
+            return okTerm && okStato;
+        }
+
+        function render() {
+            const term = (searchInput.value || '').toLowerCase();
+            const stato = statoSelect.value || 'Tutte';
+
+            // Filtra
+            const filteredRows = allRows.filter(r => matches(r, term, stato));
+            const filteredCards = allCards.filter(c => matches(c, term, stato));
+
+            // Calcola pagine in base alla vista attiva
+            const totalItems = window.innerWidth >= 768 ? filteredRows.length : filteredCards.length;
+            const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+            currentPage = Math.min(currentPage, totalPages);
+
+            // 🖥️ Tabella desktop
+            allRows.forEach(r => r.style.display = 'none');
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
+
+            // 📱 Card mobile
+            allCards.forEach(c => c.style.display = 'none');
+            filteredCards
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(c => c.style.display = '');
+
+            // 🔄 Paginazione
+            pagContainer.innerHTML = '';
+            const info = document.createElement('span');
+            info.textContent = `Pagina ${currentPage} di ${totalPages}`;
+            info.className = 'me-2';
+            pagContainer.appendChild(info);
+
+            const prev = document.createElement('button');
+            prev.textContent = '← Indietro';
+            prev.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prev.disabled = (currentPage === 1);
+            prev.onclick = () => { currentPage--; render(); };
+            pagContainer.appendChild(prev);
+
+            const next = document.createElement('button');
+            next.textContent = 'Prossima →';
+            next.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            next.disabled = (currentPage === totalPages);
+            next.onclick = () => { currentPage++; render(); };
+            pagContainer.appendChild(next);
+        }
+
+        searchInput.addEventListener('input', () => { currentPage = 1; render(); });
+        statoSelect.addEventListener('change', () => { currentPage = 1; render(); });
+        pageSizeSelect.addEventListener('change', () => { pageSize = parseInt(pageSizeSelect.value); currentPage = 1; render(); });
+
+        render();
+    })();
+
+</script>
+
+

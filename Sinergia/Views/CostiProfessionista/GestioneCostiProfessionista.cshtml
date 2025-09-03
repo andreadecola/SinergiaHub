@@ -1,0 +1,75 @@
+﻿@model List<Sinergia.Models.CostoProfessionistaCompletoViewModel>
+
+@{
+    ViewBag.Title = "Gestione Costi Professionista";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section styles {
+    <style>
+        span[role="status"] {
+            display: none !important;
+        }
+
+        .table > tbody > tr > td {
+            padding: 8px;
+            vertical-align: middle;
+        }
+
+        .mylabel {
+            margin-bottom: 4px;
+            color: #999;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
+    </style>
+}
+
+<div id="content">
+    <div class="row">
+        <div class="col-xs-12 col-sm-7 col-md-7 col-lg-4">
+            <h1 class="page-title txt-color-blueDark">
+                <i class="fa fa-user-md fa-fw"></i>  Costi del Professionista
+            </h1>
+        </div>
+    </div>
+
+    <section id="widget-grid">
+        <div class="row">
+            <article class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
+                <div class="jarviswidget" id="wid-id-costi-professionista" data-widget-editbutton="false" data-widget-deletebutton="false">
+                    <header>
+                        <span class="widget-icon"><i class="fa fa-list"></i></span>
+                        <h2 class="fadeInLeft animated"> Costi Professionisti</h2>
+                    </header>
+                    <div>
+                        <div class="widget-body no-padding">
+                            <div id="contenitoreListaCostiProfessionista" class="table-responsive">
+                                @try
+                                {
+                                    @Html.Partial("~/Views/CostiProfessionista/_GestioneCostiProfessionistaList.cshtml", Model)
+                                }
+                                catch (Exception ex)
+                                {
+                                    <div class="alert alert-danger m-3">
+                                        <strong>❌ Errore nella partial:</strong> @ex.Message <br />
+                                        <strong>File:</strong> @(ex.TargetSite?.DeclaringType?.FullName)<br />
+                                        @(ex.InnerException != null ? $"<br />Inner: {ex.InnerException.Message}" : "")
+                                        <details style="white-space: pre-wrap; margin-top: 10px;">
+                                            <summary>Stack Trace</summary>
+                                            @ex.StackTrace
+                                        </details>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </section>
+</div>

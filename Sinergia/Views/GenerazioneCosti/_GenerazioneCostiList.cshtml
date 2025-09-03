@@ -1,0 +1,779 @@
+﻿@model List<Sinergia.Models.GenerazioneCostiViewModel>
+
+@{
+    var puoModificare = ViewBag.PuoModificare == true;
+    bool mostraAzioni = puoModificare || Model.Any(c => c.ID_GenerazioneCosto > 0);
+}
+
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<!-- 🔍 Controlli + Titolo/Azioni -->
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+    <div id="controlliGenerazioneCosti" class="d-flex flex-wrap align-items-center gap-1"></div>
+
+    @if (ViewBag.MostraPagamentoManuale == true)
+    {
+        <button class="btn btn-outline-primary btn-sm" id="btnApriModalePagamento" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"
+                data-bs-toggle="tooltip"
+                title="Usa questo bottone per registrare i costi , Ricordati di selezionare il Professionista.">
+            <i class="fa fa-euro-sign me-1"></i> Esegui Pagamento
+        </button>
+    }
+</div>
+
+<!-- 📥 Export Generazione Costi CSV/PDF -->
+<div class="d-flex justify-content-end mb-3">
+    <form method="get" class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+        <input type="date" name="dataDa" class="form-control form-control-sm w-auto"
+               value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
+        <input type="date" name="dataA" class="form-control form-control-sm w-auto"
+               value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+
+        <button type="submit" formaction="@Url.Action("EsportaGenerazioneCostiCsv", "Pratiche")"
+                class="btn btn-outline-success btn-sm">
+            <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+        </button>
+
+        <button type="submit" formaction="@Url.Action("EsportaGenerazioneCostiPdf", "Pratiche")"
+                class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+        </button>
+    </form>
+</div>
+
+
+<!-- Modale pagamento -->
+<div class="modal fade" id="modalePagamentoCosti" tabindex="-1" aria-labelledby="modalePagamentoCostiLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalePagamentoCostiLabel">Seleziona Professionista per il Pagamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <select id="selectProfessionistaModal" class="form-select">
+                    <option value="">-- Seleziona professionista --</option>
+                    @foreach (var prof in ViewBag.ListaProfessionisti as List<Sinergia.Model.Utenti>)
+                    {
+                        <option value="@prof.ID_Utente">@prof.Nome @prof.Cognome</option>
+                    }
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="btnConfermaPagamento">Conferma Pagamento</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="d-none d-md-block">
+    <table class="table table-bordered table-striped table-sm align-middle w-100" id="generazioneCostiTable">
+        <thead class="table-light">
+            <tr>
+                <th class="text-nowrap">ID</th>
+                <th class="text-nowrap">Professionista</th>
+                <th class="text-nowrap">Categoria</th>
+                <th class="text-nowrap">Origine</th>
+                <th>Pratica</th>
+                <th>Descrizione</th>
+                <th class="text-nowrap">Importo</th>
+                <th class="text-nowrap">Periodicità</th>
+                <th class="text-nowrap">Stato</th>
+                <th class="text-nowrap text-center">Data</th>
+                @if (mostraAzioni)
+                {
+                    <th class="text-center text-nowrap">Azioni</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in Model)
+            {
+                <tr data-id="@c.ID_GenerazioneCosto">
+                    <td style="width:6%;">@c.ID_CodiceCosto</td>
+                    <td style="width:14%;">@c.NomeProfessionista</td>
+                    <td style="width:10%;">@c.Categoria</td>
+                    <td style="width:8%;">@c.Origine</td>
+                    <td style="width:12%; white-space: normal;">@(string.IsNullOrEmpty(c.TitoloPratica) ? "-" : c.TitoloPratica)</td>
+                    <td style="width:22%; white-space: normal;">@c.Descrizione</td>
+                    <td style="width:8%;">@(c.Importo.HasValue ? c.Importo.Value.ToString("C") : "-")</td>
+                    <td style="width:8%;">@(!string.IsNullOrEmpty(c.Periodicita) ? c.Periodicita : "-")</td>
+                    <td style="width:7%;">
+                        @if (c.Stato == "Previsionale")
+                        {
+                            <span class="badge bg-warning text-dark">Previsionale</span>
+                        }
+                        else if (c.Stato == "Pagato")
+                        {
+                            <span class="badge bg-success">Pagato</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">@c.Stato</span>
+                        }
+                    </td>
+                    <td class="text-center" style="width:7%;">@((c.DataRegistrazione.HasValue) ? c.DataRegistrazione.Value.ToString("dd/MM/yyyy") : "-")</td>
+                    @if (mostraAzioni)
+                    {
+                        <td class="text-center" style="width:6%;">
+                            @Html.Partial("~/Views/GenerazioneCosti/_AzioniGenerazioneCosto.cshtml", c)
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+
+<!-- 📱 Card view mobile -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var c in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-costo" data-id="@c.ID_GenerazioneCosto">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">@c.Descrizione</span>
+                <span class="badge stato bg-@(c.Stato == "Previsionale" ? "warning text-dark" : c.Stato == "Pagato" ? "success" : "secondary")">
+                    @c.Stato
+                </span>
+            </div>
+            <div class="small text-muted"><strong>ID:</strong> @c.ID_CodiceCosto</div>
+            <div class="small text-muted"><strong>Professionista:</strong> @c.NomeProfessionista</div>
+            <div class="small text-muted"><strong>Categoria:</strong> @c.Categoria</div>
+            <div class="small text-muted"><strong>Origine:</strong> @c.Origine</div>
+            <div class="small text-muted"><strong>Importo:</strong> @(c.Importo.HasValue ? c.Importo.Value.ToString("C") : "-")</div>
+            <div class="small text-muted"><strong>Data:</strong> @(c.DataRegistrazione.HasValue ? c.DataRegistrazione.Value.ToString("dd/MM/yyyy") : "-")</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("~/Views/GenerazioneCosti/_AzioniGenerazioneCosto.cshtml", c)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneGenerazioneCosti" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+            new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Apri modale pagamento
+        const btnApri = document.getElementById('btnApriModalePagamento');
+        if (btnApri) {
+            btnApri.addEventListener('click', function () {
+                var modale = new bootstrap.Modal(document.getElementById('modalePagamentoCosti'));
+                modale.show();
+            });
+        }
+
+        // Conferma pagamento
+        const btnConferma = document.getElementById('btnConfermaPagamento');
+        if (btnConferma) {
+            btnConferma.addEventListener('click', function () {
+                var select = document.getElementById('selectProfessionistaModal');
+                var idProfessionista = select.value;
+                if (!idProfessionista) {
+                    toastr.warning("Devi selezionare un professionista prima di procedere.");
+                    return;
+                }
+                $.post('/Pratiche/EseguiPagamentoCostiAutomatico', { idProfessionista: idProfessionista }, function (res) {
+                    if (res.success) {
+                        toastr.success(res.messaggio);
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        toastr.error(res.messaggio);
+                    }
+                }).fail(function () {
+                    toastr.error("Errore durante la richiesta al server.");
+                });
+            });
+        }
+    });
+</script>
+<!-- MODALE DETTAGLIO COSTO -->
+<div class="modal fade" id="modalDettagliCosto" tabindex="-1" aria-labelledby="modalDettagliCostoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header  text-dark">
+                <h5 class="modal-title" id="modalDettagliCostoLabel">Dettaglio Costo Generato</h5>
+                <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body" id="modalDettagliBody">
+                <p>Caricamento...</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODALE DETTAGLIO ECCEZIONE -->
+<div class="modal fade" id="dettaglioEccezioneModal" tabindex="-1" aria-labelledby="dettaglioEccezioneLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title" id="dettaglioEccezioneLabel">Dettaglio Eccezione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <div id="contenutoDettaglioEccezione">
+                    <!-- Riempito dinamicamente via JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- MODALE CREAZIONE ECCEZIONE -->
+<div class="modal fade" id="modaleEccezione" tabindex="-1" aria-labelledby="modaleEccezioneLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form id="formEccezione">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title text-dark" id="modaleEccezioneLabel">Sospendi o modifica costo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body">
+
+                    <!-- Hidden -->
+                    <input type="hidden" id="idGenerazioneCosto" name="ID_GenerazioneCosto" />
+                    <input type="hidden" id="categoria" name="Categoria" />
+                    <input type="hidden" id="idProfessionista" name="ID_Professionista" />
+                    <input type="hidden" id="idTeam" name="ID_Team" />
+                    <input type="hidden" id="idRicorrenza" name="ID_RicorrenzaCosto" />
+                    <input type="hidden" id="idTipologiaCosto" name="ID_TipologiaCosto" />
+
+                    <!-- Periodo -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="dataInizio" class="form-label">Data Inizio</label>
+                            <input type="date" id="dataInizio" name="DataInizio" class="form-control" required />
+                        </div>
+                        <div class="col">
+                            <label for="dataFine" class="form-label">Data Fine</label>
+                            <input type="date" id="dataFine" name="DataFine" class="form-control" />
+                        </div>
+                    </div>
+
+                    <!-- Tipo eccezione -->
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" id="flagSaltaCosto" name="SaltaCosto" />
+                        <label class="form-check-label" for="flagSaltaCosto">
+                            Non generare questo costo nel periodo
+                        </label>
+                    </div>
+
+                    <div class="mt-3">
+                        <label for="importo" class="form-label">Nuovo importo (opzionale)</label>
+                        <input type="number" step="0.01" id="importo" name="NuovoImporto" class="form-control" placeholder="Inserisci nuovo importo se desideri sovrascriverlo" />
+                    </div>
+
+                    <!-- Note -->
+                    <div class="mt-3">
+                        <label for="noteEccezione" class="form-label">Motivazione (visibili nel dettaglio)</label>
+                        <textarea id="noteEccezione" name="Motivazione" class="form-control" rows="3" placeholder="Motivazione Obbligatora..."></textarea>
+                    </div>
+
+                    <div id="eccezioneMessaggio" class="alert alert-danger d-none mt-3"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="submit" class="btn btn-primary">Salva Eccezione</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- MODALE CONFERMA ELIMINAZIONE ECCEZIONE -->
+<div class="modal fade" id="confermaEliminazioneEccezioneModal" tabindex="-1" aria-labelledby="confermaEliminazioneEccezioneLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="confermaEliminazioneEccezioneLabel">Conferma eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Sei sicuro di voler eliminare questa eccezione? Questa operazione non è reversibile.</p>
+                <input type="hidden" id="idEccezioneDaEliminare" />
+                <div id="eliminazioneEccezioneMessaggio" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" id="btnConfermaEliminazioneEccezione">
+                    <i class="fa fa-trash"></i> Elimina
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    let idEccezioneSelezionata = null;
+    let idEccezioneDaEliminare = null;
+
+    function apriModaleEccezione(button) {
+        const idCosto = $(button).data("id");
+
+        $.ajax({
+            url: "/Pratiche/GetDettaglioCosto",
+            type: "GET",
+            data: { id: idCosto },
+            success: function (response) {
+                if (!response.success) {
+                    alert(response.message || "Errore durante il recupero dei dati.");
+                    return;
+                }
+
+                const costo = response.costo;
+
+                // 📌 Campi nascosti
+                $("#formEccezione #idGenerazioneCosto").val(costo.ID_GenerazioneCosto);
+                $("#formEccezione #categoria").val(costo.Categoria || "");
+                $("#formEccezione #idProfessionista").val(costo.ID_Utente || "");
+                $("#formEccezione #idTeam").val(costo.ID_Team || "");
+
+                // Aggiorna eventuale testo statico della categoria (se presente)
+                if ($("#categoriaStatic").length) {
+                    $("#categoriaStatic").text(costo.Categoria || "");
+                }
+
+                // 📅 Range date: mese della DataRegistrazione (fallback: mese corrente)
+                const base = costo.DataRegistrazione ? new Date(costo.DataRegistrazione) : new Date();
+                const primoGiorno = new Date(base.getFullYear(), base.getMonth(), 1);
+                const ultimoGiorno = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+
+                $("#formEccezione #dataInizio").val(formatDate(primoGiorno));
+                $("#formEccezione #dataFine").val(formatDate(ultimoGiorno));
+
+                // 🧹 Reset motivazione e messaggi
+                $("#formEccezione #motivazione").val("");
+                $("#eccezioneMessaggio").addClass("d-none").text("");
+
+                // Mostra la modale
+                const modal = new bootstrap.Modal(document.getElementById("modaleEccezione"));
+                modal.show();
+            },
+            error: function () {
+                alert("Errore durante il caricamento dei dati.");
+            }
+        });
+    }
+
+    // Helper minimal per input type="date" (no timezone shift)
+    function formatDate(d) {
+        const pad = (n) => (n < 10 ? "0" + n : n);
+        return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    }
+
+
+
+    // 📌 Salva eccezione
+    function submitFormEccezione(event) {
+        event.preventDefault();
+
+        const form = event.target;
+        const url = '/Pratiche/CreaEccezione';
+
+        fetch(url, {
+            method: 'POST',
+            body: new FormData(form)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    toastr.success(data.message);
+                    bootstrap.Modal.getInstance(document.getElementById('modaleEccezione'))?.hide();
+                    location.reload();
+                } else {
+                    const msg = document.getElementById('eccezioneMessaggio');
+                    msg.textContent = data.message || 'Errore nel salvataggio';
+                    msg.classList.remove('d-none');
+                }
+            })
+            .catch(() => {
+                const msg = document.getElementById('eccezioneMessaggio');
+                msg.textContent = 'Errore di comunicazione col server.';
+                msg.classList.remove('d-none');
+            });
+    }
+
+    // 📌 Carica dettaglio eccezione e mostra la modale
+    function apriDettaglioEccezione(idCosto) {
+        const contenuto = document.getElementById('contenutoDettaglioEccezione');
+        contenuto.innerHTML = '<p><i class="fa fa-spinner fa-spin"></i> Caricamento...</p>';
+
+        const modal = new bootstrap.Modal(document.getElementById('dettaglioEccezioneModal'));
+        modal.show();
+
+        fetch(`/Pratiche/GetDettaglioEccezione?` + new URLSearchParams({ idCosto: String(idCosto) }))
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success || !data.eccezione) {
+                    contenuto.innerHTML = '<div class="alert alert-danger">Errore nel recupero del dettaglio.</div>';
+                    return;
+                }
+
+                const e = data.eccezione;
+
+                // Format date in dd/MM/yyyy (inline)
+                const formatDate = (val) => {
+                    if (!val) return '—';
+                    const d = new Date(val);
+                    if (isNaN(d)) return '—';
+                    return String(d.getDate()).padStart(2, '0') + '/' +
+                        String(d.getMonth() + 1).padStart(2, '0') + '/' +
+                        d.getFullYear();
+                };
+
+                // Formatter valuta (it-IT, EUR)
+                const nf = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
+
+                // Gestione importi: supporto a possibili nomi campi (NuovoImporto/ImportoModificato)
+                const originaleRaw = (e.ImportoOriginale != null) ? e.ImportoOriginale : e.ImportoOriginaleEuro;
+                const nuovoRaw = (e.NuovoImporto != null) ? e.NuovoImporto :
+                    (e.ImportoModificato != null) ? e.ImportoModificato :
+                        (e.Importo != null ? e.Importo : null);
+
+                const originale = originaleRaw != null ? Number(originaleRaw) : null;
+                const nuovo = nuovoRaw != null ? Number(nuovoRaw) : null;
+
+                let importoHtml = '';
+                if (originale != null && nuovo != null && nuovo !== originale) {
+                    const delta = nuovo - originale;
+                    importoHtml = `
+                    <dt class="col-sm-4">Importo</dt>
+                    <dd class="col-sm-8">
+                        <span class="d-inline-block me-2"><s>${nf.format(originale)}</s></span>
+                        <span class="d-inline-block fw-bold">${nf.format(nuovo)}</span>
+                        <span class="badge bg-warning text-dark ms-2">modificato ${delta >= 0 ? '+' : ''}${nf.format(delta)}</span>
+                    </dd>
+                `;
+                } else if (nuovo != null) {
+                    importoHtml = `
+                    <dt class="col-sm-4">Importo</dt>
+                    <dd class="col-sm-8">${nf.format(nuovo)}</dd>
+                `;
+                }
+
+                contenuto.innerHTML = `
+                <dl class="row">
+                    <dt class="col-sm-4">Categoria</dt><dd class="col-sm-8">${e.Categoria || ''}</dd>
+                    <dt class="col-sm-4">Soggetto</dt><dd class="col-sm-8">${e.NomeSoggetto || '—'}</dd>
+                    <dt class="col-sm-4">Periodo</dt><dd class="col-sm-8">${formatDate(e.DataInizio)} - ${formatDate(e.DataFine)}</dd>
+                    ${importoHtml}
+                    <dt class="col-sm-4">Motivazione</dt><dd class="col-sm-8">${e.Motivazione || '—'}</dd>
+                </dl>
+                <div class="text-end mt-3">
+                    <button class="btn btn-danger" onclick="confermaEliminazioneEccezione(${e.ID_Eccezione})">
+                        <i class="fa fa-trash"></i> Elimina Eccezione
+                    </button>
+                </div>
+            `;
+            })
+            .catch(() => {
+                contenuto.innerHTML = '<div class="alert alert-danger">Errore di comunicazione col server.</div>';
+            });
+    }
+
+
+    function confermaEliminazioneEccezione(idEccezione) {
+        if (!idEccezione) {
+            toastr.error("ID eccezione non valido.");
+            return;
+        }
+
+        // Mostra direttamente la modale di conferma
+        const modal = new bootstrap.Modal(document.getElementById('confermaEliminazioneEccezioneModal'));
+        modal.show();
+
+        // Al click sul bottone conferma, invia la richiesta
+        document.getElementById("btnConfermaEliminazioneEccezione").onclick = function () {
+            fetch('/Pratiche/EliminaEccezione', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `idEccezione=${idEccezione}`
+            })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        toastr.success(res.message);
+                        bootstrap.Modal.getInstance(document.getElementById("confermaEliminazioneEccezioneModal"))?.hide();
+
+                        // 🔁 Ricarica l’intera pagina
+                        setTimeout(() => location.reload(), 600);
+                    } else {
+                        toastr.error(res.message);
+                    }
+                })
+                .catch(() => {
+                    toastr.error("Errore durante l’eliminazione dell’eccezione.");
+                });
+        };
+    }
+
+    // 📌 Inizializzazione submit eccezione
+    document.addEventListener('DOMContentLoaded', function () {
+        const formEccezione = document.getElementById('formEccezione');
+        if (formEccezione) {
+            formEccezione.addEventListener('submit', submitFormEccezione);
+        }
+    });
+
+
+    function parseDotNetDate(dotNetDateString) {
+        if (!dotNetDateString) return null;
+        var timestamp = parseInt(dotNetDateString.replace(/\/Date\((\d+)\)\//, '$1'), 10);
+        return new Date(timestamp);
+    }
+
+    function formatDate(date) {
+        if (!date) return "-";
+        return date.toLocaleDateString('it-IT') + " " + date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    }
+    // caricamneto dettaglio costo
+    function caricaDettagliCosto(button) {
+        var idCosto = button.getAttribute("data-id");
+        var modalBody = document.getElementById("modalDettagliBody");
+        modalBody.innerHTML = "<p>Caricamento...</p>";
+
+        fetch('/Pratiche/GetDettaglioJoinCostoRicorrenza?idGenerazioneCosto=' + idCosto)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const gc = data.generazioneCosto;
+                    const rc = data.ricorrenzaCosto;
+
+                    const dataCreazione = parseDotNetDate(gc.DataCreazione);
+                    const dataUltimaModifica = parseDotNetDate(gc.DataUltimaModifica);
+
+                    let html = `
+                    <p><strong>Creato da:</strong> ${gc.NomeCreatore}</p>
+                    <p><strong>Data creazione:</strong> ${formatDate(dataCreazione)}</p>
+                    <p><strong>Modificato da:</strong> ${gc.NomeModificatore}</p>
+                    <p><strong>Data modifica:</strong> ${formatDate(dataUltimaModifica)}</p>
+                    <p><strong>Pratica:</strong> ${gc.TitoloPratica}</p>
+                    <p><strong>Categoria:</strong> ${gc.Categoria}</p>
+                    <p><strong>Descrizione:</strong> ${gc.Descrizione}</p>
+                    <p><strong>Importo:</strong> ${gc.Importo?.toFixed(2) ?? "-"}</p>
+                    <p><strong>Periodicità:</strong> ${gc.Periodicita ?? "-"}</p>
+                `;
+
+                    if (rc) {
+                        html += `
+                        <hr />
+                        <h6>Dettaglio Ricorrenza</h6>
+                        <p><strong>Valore:</strong> ${rc.Valore?.toFixed(2) ?? "-"}</p>
+                        <p><strong>Data Inizio:</strong> ${new Date(rc.DataInizio).toLocaleDateString()}</p>
+                        <p><strong>Data Fine:</strong> ${new Date(rc.DataFine).toLocaleDateString()}</p>
+                        <p><strong>Modalità Ripartizione:</strong> ${rc.ModalitaRipartizione ?? "-"}</p>
+                        <p><strong>Note:</strong> ${rc.Note ?? "-"}</p>
+                    `;
+                    }
+
+                    modalBody.innerHTML = html;
+                } else {
+                    modalBody.innerHTML = "<p>Errore nel caricamento del dettaglio.</p>";
+                }
+
+                const modal = new bootstrap.Modal(document.getElementById('modalDettagliCosto'));
+                modal.show();
+            })
+            .catch(() => {
+                modalBody.innerHTML = "<p>Errore nella richiesta al server.</p>";
+            });
+    }
+
+
+    // codice js per bottone per eseguire metodo esegui pagamento costi automatico
+    function eseguiPagamentoCosti() {
+        var idProfessionista = $('#selectProfessionista').val();
+        if (!idProfessionista) {
+            toastr.warning("Seleziona un professionista prima di eseguire il pagamento.");
+            return;
+        }
+
+        $.post('/Pratiche/EseguiPagamentoCostiAutomatico', { idProfessionista: idProfessionista }, function (res) {
+            if (res.success) {
+                toastr.success(res.messaggio);
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                // Se il messaggio specifica che non c'è plafond o è insufficiente
+                if (res.messaggio.toLowerCase().includes("plafond")) {
+                    toastr.warning(res.messaggio);
+                } else {
+                    toastr.error(res.messaggio);
+                }
+            }
+        }).fail(function () {
+            toastr.error("Errore durante la richiesta al server.");
+        });
+    }
+
+    // 🔍 Filtro e paginazione - Generazione Costi
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('generazioneCostiTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = Array.from(document.querySelectorAll('.card-costo')); // mobile
+
+        const controlliContainer = document.getElementById('controlliGenerazioneCosti');
+        const paginationContainer = document.getElementById('paginazioneGenerazioneCosti');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+        const selectProfessionista = document.createElement('select');
+        const selectCategoria = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // 👤 Professionista
+        selectProfessionista.innerHTML = '<option value="">Tutti i professionisti</option>';
+        selectProfessionista.className = 'form-select form-select-sm w-auto';
+
+        // 🏷️ Categoria
+        selectCategoria.innerHTML = '<option value="">Tutte le categorie</option>';
+        selectCategoria.className = 'form-select form-select-sm w-auto';
+
+        // 🔄 Popolamento opzioni dinamiche (da tabella)
+        const professionisti = new Set();
+        const categorie = new Set();
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 3) {
+                professionisti.add(cells[1].innerText.trim());
+                categorie.add(cells[2].innerText.trim());
+            }
+        });
+
+        Array.from(professionisti).sort().forEach(nome => {
+            const opt = document.createElement('option');
+            opt.value = nome;
+            opt.textContent = nome;
+            selectProfessionista.appendChild(opt);
+        });
+
+        Array.from(categorie).sort().forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            opt.textContent = cat;
+            selectCategoria.appendChild(opt);
+        });
+
+        // ➕ Inserisci controlli nella barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectProfessionista);
+        controlliContainer.appendChild(selectCategoria);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroProf = selectProfessionista.value;
+            const filtroCat = selectCategoria.value;
+
+            // Filtra tabella desktop
+            let filteredRows = rows.filter(row => {
+                const text = row.innerText.toLowerCase();
+                const celle = row.querySelectorAll('td');
+
+                const matchText = text.includes(keyword);
+                const matchProf = !filtroProf || celle[1].innerText.trim() === filtroProf;
+                const matchCat = !filtroCat || celle[2].innerText.trim() === filtroCat;
+
+                return matchText && matchProf && matchCat;
+            });
+
+            // Filtra card mobile
+            let filteredCards = cards.filter(card => {
+                const text = card.innerText.toLowerCase();
+                const profEl = card.querySelector('.small.text-muted:nth-child(3)'); // professionista
+                const catEl = card.querySelector('.small.text-muted:nth-child(4)'); // categoria
+
+                const profText = profEl ? profEl.innerText.replace('Professionista:', '').trim() : '';
+                const catText = catEl ? catEl.innerText.replace('Categoria:', '').trim() : '';
+
+                const matchText = text.includes(keyword);
+                const matchProf = !filtroProf || profText === filtroProf;
+                const matchCat = !filtroCat || catText === filtroCat;
+
+                return matchText && matchProf && matchCat;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+
+            cards.forEach(c => c.style.display = 'none');
+            filteredCards.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(c => c.style.display = '');
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectProfessionista.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectCategoria.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+
+</script>

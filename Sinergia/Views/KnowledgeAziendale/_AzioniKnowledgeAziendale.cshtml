@@ -1,0 +1,31 @@
+﻿@model Sinergia.Models.KnowledgeAziendaleViewModel
+@{
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+}
+
+<div class="d-flex justify-content-center gap-1">
+
+    @if (permessiUtente?.Permessi.Any(p => p.Modifica) == true)
+    {
+        <button class="btn btn-warning btn-sm" title="Modifica"
+                onclick="apriModificaKnowledgeAziendale(@Model.KnowledgeAziendaleID)">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+
+    @if (permessiUtente?.Permessi.Any(p => p.Elimina) == true)
+    {
+        <button class="btn btn-danger btn-sm" title="Elimina"
+                onclick="confermaEliminazioneKnowledgeAziendale(@Model.KnowledgeAziendaleID)">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+
+    @if (!Model.Letto) // proprietà bool nel ViewModel
+    {
+        <button class="btn btn-success btn-sm" title="Segna come letto"
+                onclick="segnaDocumentoComeLetto(@Model.KnowledgeAziendaleID, this)">
+            <i class="fa fa-check"></i>
+        </button>
+    }
+</div>

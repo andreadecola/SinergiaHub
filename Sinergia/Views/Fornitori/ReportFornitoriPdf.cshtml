@@ -1,0 +1,87 @@
+﻿@model List<Sinergia.Models.AziendaViewModel>
+
+@{
+    Layout = null; // ✅ PDF senza layout del sito
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Report Fornitori</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            margin: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+        }
+
+        th, td {
+            border: 1px solid #000;
+            padding: 4px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h2>Elenco Fornitori</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Tipo Rag. Sociale</th>
+                <th>Partita IVA</th>
+                <th>Cod. Fiscale</th>
+                <th>Cod. Univoco</th>
+                <th>Telefono</th>
+                <th>Email</th>
+                <th>Città</th>
+                <th>Nazione</th>
+                <th>Stato</th>
+                <th>Banca</th>
+                <th>IBAN</th>
+                <th>Settore</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var f in Model)
+            {
+                <tr>
+                    <td>@f.ID_Azienda</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.Nome) ? "-" : f.Nome)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.TipoRagioneSociale) ? "-" : f.TipoRagioneSociale)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.PartitaIVA) ? "-" : f.PartitaIVA)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.CodiceFiscale) ? "-" : f.CodiceFiscale)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.CodiceUnivoco) ? "-" : f.CodiceUnivoco)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.Telefono) ? "-" : f.Telefono)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.Email) ? "-" : f.Email)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.Citta) ? "-" : f.Citta)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.Nazione) ? "-" : f.Nazione)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.Stato) ? "-" : f.Stato)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.NomeBanca) ? "-" : f.NomeBanca)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.IBAN) ? "-" : f.IBAN)</td>
+                    <td>@(string.IsNullOrWhiteSpace(f.NomeSettoreFornitore) ? "-" : f.NomeSettoreFornitore)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>
+

@@ -1,0 +1,500 @@
+﻿@model List<Sinergia.Models.TemplateIncaricoViewModel>
+@{
+    var utenteLoggato = Session["User"] as Sinergia.Model.Utenti;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+    bool puoAggiungere = ViewBag.PuoAggiungere == true;
+    bool mostraAzioni = puoAggiungere || Model.Any(c => c.PuoModificare || c.PuoEliminare);
+    var idProfessioneCorrente = ViewBag.ID_Professione != null ? ViewBag.ID_Professione.ToString() : "0";
+}
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<!-- Bootstrap -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Toastr -->
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<!-- SweetAlert -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- Summernote -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/summernote/0.8.20/summernote-bs5.min.css" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/summernote/0.8.20/summernote-bs5.min.js"></script>
+
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliTemplateIncarichi" class="d-flex flex-wrap align-items-center gap-2 mb-2">
+    <label for="filtroProfessione" class="form-label mb-0">Filtra per Professione:</label>
+    <select id="filtroProfessione"
+            class="form-select form-select-sm w-auto"
+            style="min-width: 200px; max-width: 250px;">
+        <option value="0">Tutte</option>
+        @foreach (var p in ViewBag.Professioni as List<SelectListItem>)
+        {
+            <option value="@p.Value" @(p.Value == idProfessioneCorrente ? "selected" : "")>@p.Text</option>
+        }
+    </select>
+</div>
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <a href="@Url.Action("CreaTemplateIncarico", "Pratiche")" class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            Nuovo Template Incarico
+        </a>
+        <button type="button" class="btn btn-outline-success btn-sm mx-1" data-bs-toggle="modal" data-bs-target="#importaTemplateModal" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            📂 Importa Template
+        </button>
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped table-sm align-middle" id="templateTable">
+            <thead class="table-light">
+                <tr>
+                    <th class="text-nowrap">Nome Template</th>
+                    <th class="text-nowrap">Professione</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-center text-nowrap">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr data-idprofessione="@t.ID_Professione">
+                        <td class="text-nowrap">@t.NomeTemplate</td>
+                        <td class="text-nowrap">@t.NomeProfessione</td>
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial("~/Views/TemplateIncarichi/_AzioniTemplateIncarico.cshtml", t)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var t in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-template" data-idprofessione="@t.ID_Professione">
+            <div class="fw-bold text-primary mb-1">@t.NomeTemplate</div>
+            <div class="small text-muted"><strong>Professione:</strong> @t.NomeProfessione</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("~/Views/TemplateIncarichi/_AzioniTemplateIncarico.cshtml", t)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneTemplateIncarichi" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+
+<!-- Modale Eliminazione -->
+<div class="modal fade" id="eliminaTemplateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Elimina Template</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">Confermi l’eliminazione del template?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazione">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* visualizzazione template  *@
+<div class="modal fade" id="visualizzaTemplateModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="titoloTemplateModal">Visualizza Template</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="contenutoTemplateHtml">
+                <!-- HTML template qui -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 📂 Modale Importazione Template -->
+<div class="modal fade" id="importaTemplateModal" tabindex="-1" aria-labelledby="importaTemplateLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="importaTemplateLabel">Importa Template da DOCX</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formImportaTemplate" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Seleziona file DOCX</label>
+                        <input type="file" name="file" id="fileDocx" accept=".docx" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Professione associata (opzionale)</label>
+                        <select name="idProfessione" class="form-select">
+                            <option value="">-- Nessuna --</option>
+                            @foreach (var p in ViewBag.Professioni as List<SelectListItem>)
+                            {
+                                <option value="@p.Value">@p.Text</option>
+                            }
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-sm">📂 Importa e Salva</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 📑 Modale Modifica Template -->
+<div class="modal fade" id="modificaTemplateModal" tabindex="-1" aria-labelledby="modificaTemplateLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modificaTemplateLabel">Modifica Template Incarico</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <input type="hidden" id="idTemplateModifica" />
+
+                <div class="mb-3">
+                    <label class="form-label">Nome Template</label>
+                    <input type="text" id="nomeTemplateModifica" class="form-control form-control-sm" />
+                </div>
+
+                <div class="mb-3 flex-grow-1 d-flex flex-column" style="height: 80vh;">
+                    <label class="form-label">Contenuto</label>
+                    <textarea id="summernoteModifica" class="form-control flex-grow-1"></textarea>
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-success btn-sm" onclick="salvaModificaTemplate()">💾 Salva Modifiche</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+    let idTemplateDaEliminare = 0;
+
+    // submit
+    $('#templateForm').on('submit', function (e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const id = formData.get("ID_Template");
+        const url = id && parseInt(id) > 0
+            ? '/TemplateIncarichi/ModificaTemplate'
+            : '/TemplateIncarichi/CreaTemplate';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("templateModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    function confermaEliminazioneTemplate(id) {
+        idTemplateDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaTemplateModal")).show();
+    }
+
+    $('#btnConfermaEliminazione').on('click', function () {
+        fetch('/Pratiche/EliminaTemplateIncarico', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idTemplateDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    function visualizzaTemplateDaDb(id, titolo) {
+        $.get('/Pratiche/GetTemplateIncarico', { id: id }, function (res) {
+            if (res.success) {
+                document.getElementById('contenutoTemplateHtml').innerHTML = res.template.ContenutoHtml;
+                document.getElementById('titoloTemplateModal').textContent = res.template.NomeTemplate || titolo;
+                new bootstrap.Modal(document.getElementById('visualizzaTemplateModal')).show();
+            } else {
+                toastr.error(res.message);
+            }
+        });
+    }
+
+
+
+    // gestione template esterni
+
+        $(document).ready(function () {
+            // Upload DOCX → server → Salvataggio immediato
+            $('#formImportaTemplate').on('submit', function (e) {
+                e.preventDefault();
+
+                var formData = new FormData(this);
+
+                $.ajax({
+                    url: '@Url.Action("UploadTemplateDocx", "Pratiche")',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function (res) {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            $('#importaTemplateModal').modal('hide');
+                            location.reload();
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    },
+                    error: function () {
+                        toastr.error("Errore durante l'importazione.");
+                    }
+                });
+            });
+        });
+
+
+    // ✅ Apri modale e carica dati
+    function apriModificaTemplate(id) {
+        $.get('/Pratiche/GetTemplateIncarico', { id: id }, function (res) {
+            if (!res.success) {
+                toastr.error(res.message || "Errore caricamento template");
+                return;
+            }
+
+            // Compila campi base
+            $('#idTemplateModifica').val(res.template.IDTemplateIncarichi);
+            $('#nomeTemplateModifica').val(res.template.NomeTemplate);
+
+            // Metto contenuto in attesa (lo prenderà Summernote all'apertura)
+            $('#summernoteModifica').val(res.template.ContenutoHtml);
+
+            // Mostra modale
+            new bootstrap.Modal(document.getElementById('modificaTemplateModal')).show();
+        });
+    }
+
+    // ✅ Inizializza Summernote solo quando la modale viene mostrata
+    $('#modificaTemplateModal').on('shown.bs.modal', function () {
+        if (!$('#summernoteModifica').next().hasClass('note-editor')) {
+            $('#summernoteModifica').summernote({
+                height: 450,
+                placeholder: "Modifica il contenuto del template..."
+            });
+        }
+
+        // Imposta contenuto da server
+        let contenuto = $('#summernoteModifica').val();
+        $('#summernoteModifica').summernote('code', contenuto);
+    });
+
+
+
+    // ✅ Salva modifica template
+    function salvaModificaTemplate() {
+        var id = $('#idTemplateModifica').val();
+        var nome = $('#nomeTemplateModifica').val();
+
+        // Recupero contenuto da Summernote
+        var contenuto = "";
+        if ($('#summernoteModifica').next().hasClass('note-editor')) {
+            contenuto = $('#summernoteModifica').summernote('code');
+        } else {
+            contenuto = $('#summernoteModifica').val();
+        }
+
+        if (!nome || !contenuto) {
+            toastr.warning("⚠️ Nome e contenuto sono obbligatori.");
+            return;
+        }
+
+        $.ajax({
+            url: '/Pratiche/ModificaTemplateIncarico',
+            type: 'POST',
+            data: {
+                IDTemplateIncarichi: id,   // 👈 deve avere lo stesso nome della property del ViewModel
+                NomeTemplate: nome,
+                ContenutoHtml: contenuto
+            },
+            success: function (res) {
+                if (res.success) {
+                    toastr.success(res.message);
+                    $('#modificaTemplateModal').modal('hide');
+                    location.reload(); // oppure refresh tabella AJAX
+                } else {
+                    toastr.error(res.message);
+                }
+            },
+            error: function (xhr, status, error) {
+                console.error("AJAX ERROR:", status, error, xhr.responseText);
+                toastr.error("❌ Errore durante il salvataggio.");
+            }
+        });
+    }
+
+
+
+    // 🔍 Filtro e paginazione - Template Incarichi
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('templateTable');
+        if (!table) return;
+
+        // 🖥️ Righe tabella desktop
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+        // 📱 Card mobile
+        const cards = Array.from(document.querySelectorAll('.card-template'));
+
+        const controlliContainer = document.getElementById('controlliTemplateIncarichi');
+        const paginationContainer = document.getElementById('paginazioneTemplateIncarichi');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // ➕ Inserisci controlli nella barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const selectedProfessione = document.getElementById('filtroProfessione').value;
+
+            // Filtra righe desktop
+            let filteredRows = rows.filter(row => {
+                const text = row.innerText.toLowerCase();
+                const idProfessione = row.getAttribute('data-idprofessione');
+                const matchKeyword = text.includes(keyword);
+                const matchProfessione = (selectedProfessione === "0") || (idProfessione === selectedProfessione);
+                return matchKeyword && matchProfessione;
+            });
+
+            // Filtra card mobile
+            let filteredCards = cards.filter(card => {
+                const text = card.innerText.toLowerCase();
+                const idProfessione = card.getAttribute('data-idprofessione');
+                const matchKeyword = text.includes(keyword);
+                const matchProfessione = (selectedProfessione === "0") || (idProfessione === selectedProfessione);
+                return matchKeyword && matchProfessione;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // 🖥️ Mostra/nasconde righe tabella
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+
+            // 📱 Mostra/nasconde card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredCards.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(c => c.style.display = '');
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // 🎯 Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+        document.getElementById('filtroProfessione').addEventListener('change', () => {
+            currentPage = 1;
+            renderTable();
+        });
+
+
+        renderTable();
+    });
+
+</script>
+
+
+
+

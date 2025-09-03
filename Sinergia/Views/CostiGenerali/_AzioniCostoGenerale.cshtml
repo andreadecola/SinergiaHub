@@ -1,0 +1,52 @@
+﻿@model Sinergia.Models.TipologieCostiViewModel
+@{
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+}
+
+<div class="d-flex justify-content-center flex-wrap gap-1">
+    @* ✏️ Modifica *@
+    @if (permessiUtente?.Permessi.Any(p => p.Modifica) == true)
+    {
+        <button class="btn btn-warning btn-sm"
+                title="Modifica costo generale"
+                onclick="apriModificaTipologia(@Model.ID_TipoCosto)">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+
+    @* 🗑️ Elimina *@
+    @if (permessiUtente?.Permessi.Any(p => p.Elimina) == true)
+    {
+        <button class="btn btn-danger btn-sm"
+                title="Elimina costo generale"
+                onclick="confermaEliminazioneTipologia(@Model.ID_TipoCosto)">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+
+    @* 📅 Ricorrenza *@
+    <button class="btn btn-info btn-sm"
+            title="Gestisci ricorrenza"
+            onclick="apriModaleRicorrenza(@Model.ID_TipoCosto)">
+        <i class="fa-solid fa-calendar-alt me-1"></i>
+        <i class="fa-solid fa-euro-sign"></i>
+    </button>
+
+    @* 👤 Assegna a professionisti *@
+    <button class="btn btn-success btn-sm"
+            title="Assegna a professionisti"
+            onclick="apriAssegnaCostoGenerale(@Model.ID_TipoCosto)">
+        <i class="fa fa-user"></i>
+    </button>
+
+    @* 👥 Visualizza assegnati *@
+    @if (Model.NumeroAssegnati > 0)
+    {
+        <button class="btn btn-primary btn-sm"
+                title="Visualizza assegnati"
+                onclick="apriDettaglioCostoGenerale(@Model.ID_TipoCosto)">
+            <i class="fa fa-users"></i>
+        </button>
+    }
+</div>
+

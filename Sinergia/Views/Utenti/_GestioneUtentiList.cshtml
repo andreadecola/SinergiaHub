@@ -1,0 +1,408 @@
+﻿@model List<Sinergia.Models.UtenteViewModel>
+@{
+    var utenteLoggato = Session["User"] as Sinergia.Model.Utenti;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+
+    bool puoAggiungere = ViewBag.PuoAggiungere == true;
+    bool mostraAzioni = puoAggiungere || Model.Any(u => u.PuoModificare || u.PuoEliminare);
+}
+
+@using Newtonsoft.Json
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<link href="~/Content/css/style-mobile.css" rel="stylesheet" />
+
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliUtenti" class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>
+
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (ViewBag.PuoAggiungere == true)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" type="button" data-bs-toggle="modal" data-bs-target="#utenteModal" onclick="addNewUtente()">
+            Nuovo Utente
+        </button>
+    }
+</div>
+
+@if (ViewBag.UtenteCorrente != null && ViewBag.UtenteCorrente.ToString() == "Admin")
+{
+    <!-- 📥 Export Utenti CSV/PDF -->
+    <div class="d-flex justify-content-end mb-3">
+        <form method="get" id="exportUtentiForm"
+              class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+
+            <button type="submit" formaction="@Url.Action("EsportaUtentiCsv", "Utenti")"
+                    class="btn btn-outline-success btn-sm"
+                    style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+                <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+            </button>
+
+            <button type="submit" formaction="@Url.Action("EsportaUtentiPdf", "Utenti")"
+                    class="btn btn-outline-danger btn-sm"
+                    style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>
+        </form>
+    </div>
+}
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table id="utentiTable" class="table table-striped table-bordered w-100">
+            <thead>
+                <tr>
+                    <th class="d-none d-md-table-cell">ID</th>
+                    <th>Nome</th>
+                    <th>Cognome</th>
+                    <th class="d-none d-md-table-cell">Email</th>
+                    <th class="d-none d-md-table-cell">Tipo</th>
+                    <th class="d-none d-md-table-cell">Stato</th>
+                    <th class="d-none d-md-table-cell">Nome Account</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-nowrap text-start" style="width: 270px; white-space: nowrap;">
+                            <span class="fw-bold">Azioni</span>
+                        </th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var utente in Model)
+                {
+                    <tr data-tipo="@utente.TipoUtente" data-stato="@utente.Stato" data-nome="@($"{utente.Nome} {utente.Cognome} {utente.MAIL1}")">
+                        <td class="d-none d-md-table-cell">@utente.ID_Utente</td>
+                        <td>@utente.Nome</td>
+                        <td>@utente.Cognome</td>
+                        <td class="d-none d-md-table-cell">@utente.MAIL1</td>
+                        <td class="d-none d-md-table-cell">@utente.TipoUtente</td>
+                        <td class="d-none d-md-table-cell">@utente.Stato</td>
+                        <td class="d-none d-md-table-cell">
+                            @if (utente.Stato?.ToLower() == "attivo")
+                            {
+                                @($"{utente.Nome.Substring(0,1).ToLower()}.{utente.Cognome.ToLower().Replace(" ", "")}")
+                            }
+                            else
+                            {
+                                @:N/A
+                            }
+                        </td>
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial("~/Views/Utenti/_AzioniUtente.cshtml", utente)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var utente in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-utente" data-id="@utente.ID_Utente">
+            <div class="fw-bold text-primary">@($"{utente.Nome} {utente.Cognome}")</div>
+            <div class="small text-muted"><strong>Email:</strong> @utente.MAIL1</div>
+            <div class="small text-muted"><strong>Tipo:</strong> @utente.TipoUtente</div>
+            <div class="small text-muted"><strong>Stato:</strong> @utente.Stato</div>
+            <div class="small text-muted">
+                <strong>Nome Account:</strong>
+                @if (utente.Stato?.ToLower() == "attivo")
+                {
+                    @($"{utente.Nome.Substring(0,1).ToLower()}.{utente.Cognome.ToLower().Replace(" ", "")}")
+                }
+                else
+                {
+                    @:N/A
+                }
+            </div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("~/Views/Utenti/_AzioniUtente.cshtml", utente)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneUtenti" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+<!-- Modale Conferma Eliminazione -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteModalLabel">Elimina Utente</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questo utente?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Gestione Permessi -->
+<div class="modal fade" id="permessiModal" tabindex="-1" aria-labelledby="permessiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-sm-down">
+        <div class="modal-content">
+            <div class="modal-header text-dark">
+                <h5 class="modal-title" id="permessiModalLabel">Gestione Permessi</h5>
+                <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+
+            <div class="modal-body p-2 pb-0" id="permessiContent">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Caricamento...</span>
+                    </div>
+                    <p>Caricamento permessi in corso...</p>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-success" onclick="SalvaPermessi()">Salva Permessi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+
+    function ApriPermessi(idUtente) {
+        console.log("🧪 Chiamo ApriPermessi con ID:", idUtente);
+
+        fetch('/Utenti/GetPermessi?idUtente=' + idUtente)
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById('permessiContent').innerHTML = html;
+                const modal = new bootstrap.Modal(document.getElementById('permessiModal'));
+                modal.show();
+            })
+            .catch(err => {
+                toastr.error("Errore nel caricamento permessi.");
+                console.error(err);
+            });
+    }
+
+    function SalvaPermessi() {
+        const form = document.getElementById('permessiForm');
+        if (!form) return;
+
+        const idUtente = form.querySelector('input[name="ID_Utente"]').value;
+        if (!idUtente) {
+            toastr.error("ID Utente mancante.");
+            return;
+        }
+
+        const rows = form.querySelectorAll('tbody tr');
+        const permessi = [];
+
+        rows.forEach(row => {
+            permessi.push({
+                ID_Menu: row.querySelector('.id-menu').value,
+                Vedi: row.querySelector('.vedi').checked,
+                Aggiungi: row.querySelector('.aggiungi').checked,
+                Modifica: row.querySelector('.modifica').checked,
+                Elimina: row.querySelector('.elimina').checked,
+            });
+        });
+
+        const body = {
+            ID_Utente: idUtente,
+            Permessi: permessi
+        };
+
+        fetch('/Utenti/AssegnaPermessi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('permessiModal')).hide();
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                toastr.error("Errore durante il salvataggio permessi.");
+                console.error(err);
+            });
+    }
+
+
+
+    function DisattivaPermessi(idUtente) {
+        if (!idUtente || isNaN(idUtente)) {
+            toastr.warning("ID utente non valido.");
+            return;
+        }
+
+        fetch('/Utenti/DisattivaPermessi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ idUtente: idUtente })
+        })
+            .then(response => response.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    setTimeout(() => location.reload(), 500); // Leggero delay per mostrare il toast
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(error => {
+                console.error("Errore durante la disattivazione dei permessi:", error);
+                toastr.error("Errore durante la richiesta al server.");
+            });
+    }
+
+
+    // 🔍 Filtro e paginazione Utenti
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('utentiTable');
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = document.querySelectorAll('.card-utente');
+
+        const controlliContainer = document.getElementById('controlliUtenti');
+        const paginationContainer = document.getElementById('paginazioneUtenti');
+
+        // Elementi filtro
+        const searchInput = document.createElement('input');
+        const selectTipo = document.createElement('select');
+        const selectStato = document.createElement('select');
+        const selectPageSize = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📌 Tipo
+        ['Tutti', 'Admin', 'Collaboratore', 'Professionista'].forEach(tipo => {
+            const option = document.createElement('option');
+            option.value = tipo;
+            option.textContent = tipo;
+            selectTipo.appendChild(option);
+        });
+        selectTipo.className = 'form-select form-select-sm w-auto';
+
+        // ⚙️ Stato
+        ['Tutti', 'Attivo', 'Disattivato'].forEach(stato => {
+            const option = document.createElement('option');
+            option.value = stato;
+            option.textContent = stato;
+            selectStato.appendChild(option);
+        });
+        selectStato.className = 'form-select form-select-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // Aggiungi controlli alla barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectTipo);
+        controlliContainer.appendChild(selectStato);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroTipo = selectTipo.value;
+            const filtroStato = selectStato.value;
+
+            let filteredRows = rows.filter(row => {
+                const tipo = row.getAttribute('data-tipo') || '';
+                const stato = row.getAttribute('data-stato') || '';
+                const testo = row.getAttribute('data-nome') || '';
+
+                const tipoMatch = (filtroTipo === 'Tutti' || tipo === filtroTipo);
+                const statoMatch = (filtroStato === 'Tutti' || stato === filtroStato);
+                const ricercaMatch = testo.includes(keyword);
+
+                return tipoMatch && statoMatch && ricercaMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // Tabella desktop
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+
+            // Card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredRows.forEach(row => {
+                const id = row.querySelector('td')?.innerText;
+                const card = document.querySelector(`.card-utente[data-id="${id}"]`);
+                if (card) card.style.display = '';
+            });
+
+            // Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectTipo.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectStato.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+</script>

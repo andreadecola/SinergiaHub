@@ -1,0 +1,86 @@
+﻿<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Sei offline - Sinergia</title>
+
+    <!-- 🎨 Stili CSS in linea (niente file esterni per funzionare anche offline) -->
+    <style>
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            margin: 2em;
+            text-align: center;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        h1 {
+            font-style: italic;
+            color: #003366;
+        }
+
+        p {
+            margin: 1rem 0;
+        }
+
+        button {
+            padding: 0.5em 1.5em;
+            font-size: 1em;
+            background-color: #003366;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+            button:hover {
+                background-color: #0055aa;
+            }
+    </style>
+</head>
+<body>
+
+    <!-- 📛 Messaggio principale -->
+    <h1>Sei offline</h1>
+    <p>La connessione a Internet sembra non disponibile.</p>
+    <p>Verifica la rete oppure clicca il pulsante per riprovare.</p>
+
+    <!-- 🔄 Pulsante per forzare il reload -->
+    <button type="button">⤾ Ricarica</button>
+
+    <script>
+    // 🔁 Reload manuale quando si clicca il pulsante
+    document.querySelector("button").addEventListener("click", () => {
+      window.location.reload();
+    });
+
+    // 🌐 Se la connessione torna, la pagina si ricarica automaticamente
+    window.addEventListener('online', () => {
+      window.location.reload();
+    });
+
+    // 🛰 Controllo periodico: anche se il browser pensa di essere online,
+    // controlliamo se il server risponde veramente
+    async function checkNetworkAndReload() {
+      try {
+        const response = await fetch('.');
+        if (response.status >= 200 && response.status < 500) {
+          // Il server risponde → ricarica la pagina
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // Il server non è raggiungibile → ignora e riprova
+      }
+      // ⏳ Riprova ogni 2.5 secondi
+      window.setTimeout(checkNetworkAndReload, 2500);
+    }
+
+    // ⏱ Avvia il ciclo di verifica
+    checkNetworkAndReload();
+    </script>
+</body>
+</html>

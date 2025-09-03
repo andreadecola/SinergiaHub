@@ -1,0 +1,21 @@
+﻿@model Sinergia.Models.AvvisoParcellaViewModel
+
+<div class="d-flex gap-1 flex-wrap">
+    @if (Model.PuoModificare)
+    {
+        <button class="btn btn-warning btn-sm" title="Modifica" onclick="apriModificaAvviso(@Model.ID_AvvisoParcelle)">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+    @if (Model.PuoEliminare)
+    {
+        <button class="btn btn-danger btn-sm" title="Elimina" onclick="confermaEliminazioneAvviso(@Model.ID_AvvisoParcelle)">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+    <a href="@Url.Action("StampaAvvisoParcella", "Pratiche", new { idAvviso = Model.ID_AvvisoParcelle })"
+       class="btn btn-outline-secondary btn-sm" target="_blank" title="Stampa PDF">
+        <i class="fas fa-file-pdf"></i>
+    </a>
+</div>
+

@@ -1,0 +1,850 @@
+﻿@model List<Sinergia.Models.ClienteEsternoViewModel>
+@{
+    var utenteLoggato = Session["User"] as Sinergia.Model.Utenti;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+
+    bool puoAggiungere = ViewBag.PuoAggiungere == true;
+    bool mostraAzioni = puoAggiungere || Model.Any(c => c.PuoModificare || c.PuoEliminare);
+}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+@*<style>
+        #clientiTable th,
+        #clientiTable td {
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .w-5 { width: 5%; }
+        .w-10 { width: 10%; }
+        .w-15 { width: 15%; }
+
+        /* 🟥 Questo impedisce scroll orizzontale su mobile */
+        body {
+            overflow-x: hidden;
+        }
+
+        /* ✅ Riduce padding su mobile */
+        @@media (max-width: 768px) {
+            .container,
+            .container-fluid,
+            .row,
+            .d-block.d-md-none {
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+
+            .card {
+                margin-left: auto;
+                margin-right: auto;
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .card-body {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+
+            .btn {
+                flex-shrink: 1;
+                max-width: 100%;
+                white-space: nowrap;
+            }
+
+            /* 🔥 Nasconde proprio la tabella su mobile, non solo display:none */
+            .d-none.d-md-block {
+                display: none !important;
+                width: 0 !important;
+                height: 0 !important;
+                overflow: hidden !important;
+                visibility: hidden !important;
+            }
+        }
+    </style>*@
+<link href="~/Content/css/style-mobile.css" rel="stylesheet" />
+
+
+<!-- Pulsante "Nuovo Cliente" -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovoCliente()">Nuovo Cliente</button>
+    }
+</div>
+
+<!-- Controlli di filtro generati dinamicamente -->
+<div class="d-flex justify-content-start align-items-center gap-2 mb-2" id="controlliClientiEsterni"></div>
+
+<!-- 📥 Export Utenti CSV/PDF -->
+<div class="d-flex justify-content-end mb-2">
+    <form method="get" id="exportUtentiForm"
+          class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+
+        <button type="submit" formaction="@Url.Action("EsportaClientiCsv", "Utenti")"
+                class="btn btn-outline-success btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+        </button>
+
+        <button type="submit" formaction="@Url.Action("EsportaClientiPdf", "Utenti")"
+                class="btn btn-outline-danger btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+        </button>
+    </form>
+</div>
+
+
+<!-- 🔳 TABELLA: visibile solo su desktop e tablet -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered" id="clientiTable">
+            <thead>
+                <tr>
+                    <th class="w-10">Nome</th>
+                    <th class="w-15">Cognome / Rag. Sociale</th>
+                    <th class="w-15 d-none d-md-table-cell">Email</th>
+                    <th class="w-10 d-none d-md-table-cell">Telefono</th>
+                    <th class="w-5 stato">Stato</th>
+                    <th class="w-15 d-none d-md-table-cell">Assegnato a</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="w-10 text-center">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in Model)
+                {
+                    <tr class="cliente-row"
+                        data-ricerca="@($"{c.Nome} {c.Cognome} {c.RagioneSociale} {c.Email} {c.Telefono} {c.OperatoreVisualizzato}")"
+                        data-stato="@c.Stato">
+                        <td>@c.Nome</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.RagioneSociale) ? c.Cognome : c.RagioneSociale)</td>
+                        <td class="d-none d-md-table-cell">@c.Email</td>
+                        <td class="d-none d-md-table-cell">@c.Telefono</td>
+                        <td class="stato">@c.Stato</td>
+                        <td class="d-none d-md-table-cell">@c.OperatoreVisualizzato</td>
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-nowrap text-center">
+                                <div class="d-flex gap-1 justify-content-start justify-content-md-center">
+                                    @if (c.Stato == "Inattivo")
+                                    {
+                                        <button class="btn btn-success btn-sm" title="Riattiva" onclick="riattivaCliente(@c.ID_Cliente)">
+                                            <i class="fa fa-undo"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        if (c.PuoModificare)
+                                        {
+                                            <button class="btn btn-warning btn-sm" title="Modifica" onclick="apriModificaCliente(@c.ID_Cliente)">
+                                                <i class="fa fa-pencil"></i>
+                                            </button>
+                                        }
+                                        if (c.PuoEliminare)
+                                        {
+                                            <button class="btn btn-danger btn-sm" title="Elimina" onclick="confermaEliminazioneCliente(@c.ID_Cliente)">
+                                                <i class="fa fa-trash"></i>
+                                            </button>
+                                        }
+                                        if (c.PuoModificare)
+                                        {
+                                            <button class="btn btn-primary btn-sm" title="Assegna Professionista" onclick="apriAssegnaProfessionista(@c.ID_Cliente)">
+                                                <i class="fa fa-user-plus"></i>
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW: visibile solo su mobile -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var c in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white position-relative card-cliente"
+             data-nome="@c.Nome"
+             data-cognome="@(string.IsNullOrWhiteSpace(c.RagioneSociale) ? c.Cognome : c.RagioneSociale)"
+             data-email="@c.Email"
+             data-telefono="@c.Telefono"
+             data-stato="@c.Stato"
+             data-assegnato="@c.OperatoreVisualizzato">
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">
+                    @c.Nome @(string.IsNullOrWhiteSpace(c.RagioneSociale) ? c.Cognome : c.RagioneSociale)
+                </span>
+                <span class="badge bg-@(c.Stato == "Attivo" ? "success" : "secondary")">@c.Stato</span>
+            </div>
+
+            <div class="text-muted small">
+                <i class="fas fa-envelope me-1"></i> <strong>Email:</strong> @c.Email
+            </div>
+            <div class="text-muted small">
+                <i class="fas fa-phone me-1"></i> <strong>Telefono:</strong> @c.Telefono
+            </div>
+            <div class="text-muted small mb-2">
+                <i class="fas fa-user-tie me-1"></i> <strong>Assegnato a:</strong> @c.OperatoreVisualizzato
+            </div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("/Views/Clienti/_AzioniCliente.cshtml", c)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+
+<!-- 🔽 Paginazione (visibile su entrambi) -->
+<div class="d-flex justify-content-end align-items-center gap-2 mt-2" id="paginazioneClientiEsterni"></div>
+
+<!-- Modale Nuovo/Modifica Cliente -->
+<div class="modal fade" id="clienteModal" tabindex="-1" aria-labelledby="clienteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form id="clienteForm">
+            <div class="modal-content">
+                <div class="modal-header  text-dark">
+                    <h5 class="modal-title" id="clienteModalLabel">Nuovo Cliente</h5>
+                    <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="container-fluid">
+
+                        <!-- ✅ SWITCH VERSIONI (solo in modifica) -->
+                        <div class="row mb-2 d-none" id="toggleVersioniWrapper">
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="toggleVersioni">
+                                    <label class="form-check-label fw-bold" for="toggleVersioni">Mostra versione precedente</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ✅ FORM ATTUALE -->
+                        <div class="row g-2">
+                            <input type="hidden" name="ID_Cliente" id="idClienteHidden" />
+
+                            <div class="col-md-4">
+                                <label>Nome</label>
+                                <input name="Nome" class="form-control form-control-sm" required />
+                                <small class="text-muted d-none" data-prev="Nome"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Cognome</label>
+                                <input name="Cognome" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Cognome"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Ragione Sociale</label>
+                                <input name="RagioneSociale" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Ragione Sociale"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Email</label>
+                                <input name="Email" type="email" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Email"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Telefono</label>
+                                <input name="Telefono" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Telefono"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Codice Fiscale</label>
+                                <input name="CodiceFiscale" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Codice Fiscale"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>P.IVA</label>
+                                <input name="PIVA" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Partita IVA"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Stato</label>
+                                <select name="Stato" class="form-select form-select-sm">
+                                    <option value="Attivo">Attivo</option>
+                                    <option value="Inattivo">Inattivo</option>
+                                </select>
+                                <small class="text-muted d-none" data-prev="Stato"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Nazione</label>
+                                <select id="Nazione" name="ID_Nazione" class="form-control"></select>
+                                <small class="text-muted d-none" data-prev="Nazione"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Città</label>
+                                <select id="Citta" name="ID_CittaResidenza" class="form-control"></select>
+                                <small class="text-muted d-none" data-prev="Citta"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Indirizzo</label>
+                                <input name="Indirizzo" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Indirizzo"></small>
+                            </div>
+
+                            <!-- Solo Admin: Professionista -->
+                            @if (utenteLoggato != null && utenteLoggato.TipoUtente == "Admin")
+                            {
+                                <div class="col-md-4">
+                                    <label>Assegna a Professionista</label>
+                                    <select name="ID_Operatore" class="form-select form-select-sm" required>
+                                        <option value="">-- Seleziona Professionista --</option>
+                                        @foreach (var p in ViewBag.Professionisti as List<SelectListItem>)
+                                        {
+                                            <option value="@p.Value">@p.Text</option>
+                                        }
+                                    </select>
+                                    <small class="text-muted d-none" data-prev="Operatore Assegnato"></small>
+                                    <input type="hidden" name="TipoOperatore" value="Professionista" />
+                                </div>
+                            }
+                        </div>
+
+                        <!-- NOTE -->
+                        <div class="row mt-2">
+                            <div class="col-md-12">
+                                <label>Note</label>
+                                <textarea name="Note" class="form-control form-control-sm" rows="2"></textarea>
+                                <small class="text-muted d-none" data-prev="Note"></small>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" id="btnSalvaCliente" class="btn btn-success btn-sm">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+
+
+<!-- Modale Eliminazione -->
+<div class="modal fade" id="eliminaClienteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Dissattiva Cliente</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">Confermi l’eliminazione del cliente?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazione">Disattiva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Assegna Professionista -->
+<div class="modal fade" id="assegnaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form id="assegnaForm">
+            <div class="modal-content">
+                <div class="modal-header  text-black">
+                    <h5 class="modal-title">Assegna Professionista</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Cliente" />
+                    <label>Professionista</label>
+                    <select name="ID_Operatore" class="form-select form-select-sm">
+                        @foreach (var p in ViewBag.Professionisti as List<SelectListItem>)
+                        {
+                            <option value="@p.Value">@p.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Assegna</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    let idClienteDaEliminare = 0;
+
+    function apriNuovoCliente() {
+        const form = document.getElementById("clienteForm");
+        form.reset();
+        form.querySelector('[name="ID_Cliente"]').value = 0;
+        document.getElementById("clienteModalLabel").textContent = "Nuovo Cliente";
+
+        // 🔴 Nascondi toggle e storico
+        $("#toggleVersioniWrapper").addClass("d-none");
+        $("#storicoVersioni").addClass("d-none");
+        $("#campiStorico").empty();
+        $("#toggleVersioni").prop("checked", false);
+
+        // 📍 Città e Nazioni
+        fetch('/Utenti/GetCittaENazioni')
+            .then(response => response.json())
+            .then(data => {
+                const selectCitta = document.getElementById('Citta');
+                const selectNazione = document.getElementById('Nazione');
+
+                selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                data.nazioni.forEach(n => {
+                    const opt = document.createElement("option");
+                    opt.value = n.ID_BPCittaDN;
+                    opt.textContent = n.NameNazione;
+                    selectNazione.appendChild(opt);
+
+                    if (n.NameNazione.toLowerCase() === "italia") {
+                        selectNazione.value = n.ID_BPCittaDN;
+                    }
+                });
+
+                data.citta.forEach(c => {
+                    const opt = document.createElement("option");
+                    opt.value = c.ID_BPCitta;
+                    opt.textContent = c.NameLocalita;
+                    selectCitta.appendChild(opt);
+
+                    if (c.NameLocalita.toLowerCase() === "roma") {
+                        selectCitta.value = c.ID_BPCitta;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error("❌ Errore nel caricamento di città e nazioni:", error);
+            });
+
+        // 👤 Se l'utente è Admin → mostra select assegnazione professionista
+        const wrapperAssegna = document.getElementById("wrapperAssegnaProfessionista");
+        if (typeof utenteLoggatoTipo !== "undefined" && utenteLoggatoTipo === "Admin") {
+            wrapperAssegna?.classList.remove("d-none");
+        } else {
+            wrapperAssegna?.classList.add("d-none");
+        }
+
+        // Mostra la modale
+        new bootstrap.Modal(document.getElementById("clienteModal")).show();
+    }
+
+
+    function apriModificaCliente(id) {
+        fetch(`/Utenti/GetClienteEsterno?id=${id}`)
+            .then(res => res.json())
+            .then(c => {
+                if (!c) return toastr.error("Errore caricamento dati.");
+
+                const form = document.getElementById("clienteForm");
+                form.reset();
+
+                for (const [k, v] of Object.entries(c)) {
+                    const input = form.querySelector(`[name="${k}"]`);
+                    if (input) input.value = v ?? '';
+                }
+
+                // 🔵 Mostra toggle
+                $("#toggleVersioniWrapper").removeClass("d-none");
+                $("#toggleVersioni").prop("checked", false);
+                $("#storicoVersioni").addClass("d-none");
+                $("#campiStorico").empty();
+
+                // Città e nazioni
+                fetch('/Utenti/GetCittaENazioni')
+                    .then(r => r.json())
+                    .then(data => {
+                        const selectCitta = form.querySelector('[name="ID_CittaResidenza"]');
+                        const selectNazione = form.querySelector('[name="ID_Nazione"]');
+
+                        selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                        selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                        data.nazioni.forEach(n => {
+                            const opt = document.createElement("option");
+                            opt.value = n.ID_BPCittaDN;
+                            opt.textContent = n.NameNazione;
+                            selectNazione.appendChild(opt);
+                        });
+
+                        data.citta.forEach(citta => {
+                            const opt = document.createElement("option");
+                            opt.value = citta.ID_BPCitta;
+                            opt.textContent = citta.NameLocalita;
+                            selectCitta.appendChild(opt);
+                        });
+
+                        // ✅ Seleziona valori salvati
+                        if (c.ID_Nazione) {
+                            selectNazione.value = c.ID_Nazione;
+                        } else {
+                            const italia = data.nazioni.find(n => n.NameNazione.toLowerCase() === "italia");
+                            if (italia) selectNazione.value = italia.ID_BPCittaDN;
+                        }
+
+                        if (c.ID_CittaResidenza) {
+                            selectCitta.value = c.ID_CittaResidenza;
+                        } else {
+                            const roma = data.citta.find(x => x.NameLocalita.toLowerCase() === "roma");
+                            if (roma) selectCitta.value = roma.ID_BPCitta;
+                        }
+                    });
+
+                // Blocca i campi se non ha permessi
+                const campi = $('#clienteForm input, #clienteForm select, #clienteForm textarea').not('[name="ID_Cliente"]');
+                if (!c.UtenteCorrenteHaPermessi) {
+                    campi.prop('disabled', true);
+                    $('#btnSalvaCliente').hide();
+                } else {
+                    campi.prop('disabled', false);
+                    $('#btnSalvaCliente').show();
+                }
+
+                document.getElementById("clienteModalLabel").innerText = "Modifica Cliente";
+                new bootstrap.Modal(document.getElementById("clienteModal")).show();
+
+                // ✅ Aggancio evento toggle (una sola volta)
+                $("#toggleVersioni").off("change").on("change", function () {
+                    if (this.checked) {
+                        $.get("/Home/GetStoricoCliente", { idCliente: $("#idClienteHidden").val() }, function (res) {
+                            if (res.success) {
+
+                                // Converte la data dal formato /Date(...)/ se serve
+                                let rawDate = res.storico.DataUltimaModifica;
+                                let dataFormattata = "";
+                                try {
+                                    if (rawDate) {
+                                        let match = /Date\((\d+)\)/.exec(rawDate);
+                                        if (match) {
+                                            let dt = new Date(parseInt(match[1]));
+                                            dataFormattata = dt.toLocaleString("it-IT");
+                                        }
+                                    }
+                                } catch (e) {
+                                    dataFormattata = rawDate;
+                                }
+
+                                // Popola i <small> sotto i campi (inclusi Nazione e Città)
+                                for (const key in res.storico.CampiSpecifici) {
+                                    const valorePrec = res.storico.CampiSpecifici[key] || "";
+                                    $(`[data-prev='${key}']`)
+                                        .text(`Precedente: ${valorePrec}`)
+                                        .removeClass("d-none");
+                                }
+
+                                // Mostra info versione
+                                $("#infoStoricoCliente").remove();
+                                $(".modal-body .container-fluid").prepend(`
+                                <div id="infoStoricoCliente" class="alert alert-light border small mb-2">
+                                    Ultima modifica: ${dataFormattata} ·
+                                    Utente: ${res.storico.NomeUtente || "?"} ·
+                                    Versione: ${res.storico.NumeroVersione}
+                                </div>
+                            `);
+                            }
+                        });
+                    } else {
+                        $("[data-prev]").addClass("d-none").text("");
+                        $("#infoStoricoCliente").remove();
+                    }
+                });
+            });
+    }
+
+    // submit
+    $('#clienteForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+        const idCliente = formData.get("ID_Cliente");
+
+        const url = idCliente && parseInt(idCliente) > 0
+            ? '/Utenti/ModificaCliente'
+            : '/Utenti/CreaCliente';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+
+    function confermaEliminazioneCliente(id) {
+        idClienteDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaClienteModal")).show();
+    }
+
+    $('#btnConfermaEliminazione').on('click', function () {
+        fetch('/Utenti/EliminaCliente', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idClienteDaEliminare}`
+        }).then(r => r.json()).then(res => {
+            if (res.success) { toastr.success(res.message); location.reload(); }
+            else toastr.error(res.message);
+        });
+    });
+
+    function apriAssegnaProfessionista(id) {
+        $('#assegnaForm input[name="ID_Cliente"]').val(id);
+        new bootstrap.Modal(document.getElementById("assegnaModal")).show();
+    }
+
+    $('#assegnaForm').on('submit', function (e) {
+        e.preventDefault(); // ✅ Impedisce invio classico
+        const formData = new FormData(this);
+
+        fetch('/Utenti/AssegnaProfessionistaCliente', {
+            method: 'POST',
+            body: formData
+        })
+            .then(async r => {
+                const text = await r.text();
+                try {
+                    const res = JSON.parse(text);
+                    if (res.success) {
+                        toastr.success(res.message);
+                        location.reload();
+                    } else {
+                        toastr.error(res.message);
+                    }
+                } catch (err) {
+                    console.error("❌ Errore parsing JSON:", text);
+                    toastr.error("Errore durante l'elaborazione della risposta.");
+                }
+            })
+            .catch(err => {
+                console.error("❌ Errore nella richiesta:", err);
+                toastr.error("Errore nella richiesta al server.");
+            });
+    });
+
+
+    function riattivaCliente(id) {
+        Swal.fire({
+            title: "Sei sicuro?",
+            text: "Vuoi riattivare questo cliente?",
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "Sì, riattiva",
+            cancelButtonText: "Annulla"
+        }).then(result => {
+            if (result.isConfirmed) {
+                fetch("/Utenti/RiattivaCliente", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: new URLSearchParams({ id: id })
+                }).then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            Swal.fire("Riattivato!", res.message, "success").then(() => location.reload());
+                        } else {
+                            Swal.fire("Errore", res.message, "error");
+                        }
+                    });
+            }
+        });
+    }
+
+
+    // Filtro Ricerca + Stato + Paginazione
+    let currentPage = 1, pageSize = 10;
+    const $rows = $('#clientiTable tbody tr');
+
+    function filtraEImpagina() {
+        const ricerca = $('#ricercaInput').val().toLowerCase();
+        const stato = $('#filtroStato').val().toLowerCase();
+
+        const visibili = $rows.filter(function () {
+            const testo = $(this).data('ricerca').toLowerCase();
+            const statoRiga = ($(this).data('stato') || "").toLowerCase();
+            return (!ricerca || testo.includes(ricerca)) && (!stato || stato === statoRiga);
+        });
+
+        const totalPages = Math.ceil(visibili.length / pageSize);
+        currentPage = Math.min(currentPage, totalPages || 1);
+        const start = (currentPage - 1) * pageSize;
+
+        $rows.hide();
+        visibili.slice(start, start + pageSize).show();
+        aggiornaPaginazione(totalPages);
+    }
+
+    function aggiornaPaginazione(totalPages) {
+        const container = $('#paginationContainer').empty();
+        container.append(`<span class="me-2">Pagina ${currentPage} di ${totalPages || 1}</span>`);
+
+        $('<button class="btn btn-sm me-1">← Indietro</button>')
+            .toggleClass('btn-secondary', currentPage === 1)
+            .toggleClass('btn-outline-primary', currentPage > 1)
+            .prop('disabled', currentPage === 1)
+            .click(() => { currentPage--; filtraEImpagina(); })
+            .appendTo(container);
+
+        $('<button class="btn btn-sm">Prossima →</button>')
+            .toggleClass('btn-secondary', currentPage === totalPages)
+            .toggleClass('btn-outline-primary', currentPage < totalPages)
+            .prop('disabled', currentPage === totalPages)
+            .click(() => { currentPage++; filtraEImpagina(); })
+            .appendTo(container);
+    }
+
+    $('#ricercaInput, #filtroStato').on('input change', function () {
+        currentPage = 1;
+        filtraEImpagina();
+    });
+
+    $('#pageSizeSelect').on('change', function () {
+        pageSize = parseInt(this.value);
+        currentPage = 1;
+        filtraEImpagina();
+    });
+
+    $(document).ready(filtraEImpagina);
+    document.addEventListener("DOMContentLoaded", function () {
+        const rows = Array.from(document.querySelectorAll('#clientiTable tbody tr'));
+        const cards = Array.from(document.querySelectorAll('.card-cliente'));
+
+        const controlliContainer = document.getElementById('controlliClientiEsterni');
+        const paginationContainer = document.getElementById('paginazioneClientiEsterni');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+        const selectStato = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control input-responsive me-2 mb-2';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num}`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select input-responsive me-2 mb-2';
+
+        // ⚙️ Stato
+        ['Tutti', 'Attivo', 'Inattivo'].forEach(stato => {
+            const option = document.createElement('option');
+            option.value = stato;
+            option.textContent = stato;
+            selectStato.appendChild(option);
+        });
+        selectStato.className = 'form-select input-responsive me-2 mb-2';
+
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectStato);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroStato = selectStato.value;
+
+            // 🔍 Filtro su righe
+            const filteredRows = rows.filter(row => {
+                const stato = row.querySelector('.stato')?.innerText.trim() || '';
+                const statoMatch = (filtroStato === 'Tutti' || stato === filtroStato);
+                return row.innerText.toLowerCase().includes(keyword) && statoMatch;
+            });
+
+            // 🔍 Filtro su card
+            const filteredCards = cards.filter(card => {
+                const stato = card.dataset.stato || '';
+                const statoMatch = (filtroStato === 'Tutti' || stato === filtroStato);
+                const text = Object.values(card.dataset).join(' ').toLowerCase();
+                return text.includes(keyword) && statoMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            rows.forEach(r => r.style.display = 'none');
+            cards.forEach(c => c.style.display = 'none');
+
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+            filteredCards.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(c => c.style.display = '');
+
+            // Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectStato.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+</script>
+

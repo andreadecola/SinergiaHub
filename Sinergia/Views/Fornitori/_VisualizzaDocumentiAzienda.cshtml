@@ -1,0 +1,49 @@
+﻿@model List<Sinergia.Model.DocumentiAziende>
+<input type="file" id="inputUploadDocumenti" multiple style="display: none" />
+<button class="btn btn-outline-success btn-sm" onclick="selezionaECaricaDocumenti(@ViewBag.IDAzienda)">
+    📎 Carica Documenti
+</button>
+
+@if (Model == null || !Model.Any())
+{
+    <div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
+        <span>Nessun documento caricato per questa azienda.</span>
+
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>Nome Documento</th>
+                    <th>Tipo Documento</th>
+                    <th>Data Caricamento</th>
+                    <th class="text-center">Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var doc in Model)
+                {
+                    <tr>
+                        <td>@doc.NomeDocumento</td>
+                        <td>@(doc.TipoMime?.Contains("pdf") == true ? "PDF" : "Documento")</td>
+                        <td>@doc.DataCaricamento.ToString("dd/MM/yyyy HH:mm")</td>
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center gap-2">
+                                <a href="@Url.Action("DownloadDocumentoAzienda", "Utenti", new { id = doc.ID_Documento })"
+                                   class="btn btn-outline-primary btn-sm" target="_blank">
+                                    Scarica
+                                </a>
+                                <button class="btn btn-sm btn-danger" onclick="EliminaDocumentoAzienda(@doc.ID_Documento, @ViewBag.IDAzienda)">
+                                    <i class="fa fa-trash"></i> Elimina
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

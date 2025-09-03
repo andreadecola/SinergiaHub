@@ -1,0 +1,40 @@
+﻿@model IEnumerable<dynamic>
+@{
+    var index = 1;
+    string nomeTabella = ViewBag.NomeTabella as string ?? "";
+}
+
+@foreach (var item in Model)
+{
+    DateTime data = DateTime.Now;
+
+    // Supporta entrambi i campi: DataUltimaModifica o Data
+    if (item.GetType().GetProperty("DataUltimaModifica") != null)
+
+    { data = item.DataUltimaModifica; }
+    else if (item.GetType().GetProperty("Data") != null)
+    { data = item.Data; }
+
+    string descrizione = item?.ModificheTestuali as string ?? "";
+    string nomeUtente = item?.NomeUtente as string ?? "";  // <-- usa il nome, non l'ID
+    string versione = item?.NumeroVersione?.ToString() ?? "";
+    string id = item?.ID?.ToString() ?? "";
+
+    // 🔄 Spostata la dichiarazione PRIMA del tag <tr>
+    string testoRicerca = $"{descrizione} {nomeUtente} {versione}";
+
+   <tr data-data="@item.Data.ToString("yyyy-MM-dd")" data-ricerca="@((item.ModificheTestuali + " " + item.TipoModifica + " " + item.NumeroVersione + " " + item.ID_UtenteUltimaModifica).ToLower())">
+       <td>@(index++)</td>
+       <td>@data.ToString("dd/MM/yyyy HH:mm")</td>
+       <td>@nomeUtente</td>
+       <td>@versione</td>
+       <td>@(descrizione.Length > 80 ? descrizione.Substring(0, 80) + "..." : descrizione)</td>
+       <td class="text-center">
+           <button class="btn btn-sm btn-outline-primary" onclick="apriDettaglio('@nomeTabella', '@id')">
+               <i class="fas fa-eye"></i>
+           </button>
+       </td>
+
+       
+   </tr>
+}

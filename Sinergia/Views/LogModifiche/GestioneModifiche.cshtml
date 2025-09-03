@@ -1,0 +1,200 @@
+﻿@{
+    ViewBag.Title = "Gestione Modifiche";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="p-3">
+    <!-- 🔍 FILTRI -->
+    <div class="row mb-3 align-items-end">
+        <div class="col-auto">
+            <label class="mylabel">Tabella</label>
+            <select id="filtroTabella" class="form-select form-select-sm" style="min-width: 180px;">
+                <option value="">-- Seleziona tabella --</option>
+                @{
+                    var tabelle = new[] {
+                        "AnagraficaCostiPratica", "AnagraficaCostiTeam", "AvvisiParcella", "Clienti", "Cluster",
+                        "CompensiPratica", "CostiPersonaliUtente", "CostiPratica", "DatiBancari", "DistribuzioneCostiTeam",
+                        "DocumentiAziende", "DocumentiPratiche", "Economico", "FinanziamentiProfessionisti", "Finanziario",
+                        "Incassi", "MembriTeam", "MovimentiBancari", "OperatoriSinergia", "OrdiniFornitori",
+                        "Permessi", "PermessiDelegatiProfessionista", "PlafondUtente", "Pratiche", "Previsione",
+                        "Professioni", "RelazionePraticheUtenti", "RelazioneUtenti", "RicorrenzeCosti", "RimborsiPratica",
+                        "SettoriFornitori", "TeamProfessionisti", "TemplateIncarichi", "TipologieCosti", "TipoRagioneSociale", "Utenti"
+                    };
+
+                    foreach (var tab in tabelle)
+                    {
+                        <option>@tab</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <div class="col-auto">
+            <label class="mylabel">Modifiche dal</label>
+            <input type="date" id="filtroDataDa" class="form-control form-control-sm" style="min-width: 140px;" />
+        </div>
+
+        <div class="col-auto">
+            <label class="mylabel">Modifiche fino al</label>
+            <input type="date" id="filtroDataA" class="form-control form-control-sm" style="min-width: 140px;" />
+        </div>
+
+        <div class="col-auto">
+            <label class="mylabel">Testo</label>
+            <input type="text" id="filtroTesto" class="form-control form-control-sm" placeholder="Cerca..." style="min-width: 180px;" />
+        </div>
+
+        <div class="col-auto d-flex align-items-end">
+            <div class="d-flex gap-2">
+                <select id="selectPageSizeLog" class="form-select form-select-sm w-auto">
+                    <option>10</option>
+                    <option>25</option>
+                    <option>50</option>
+                </select>
+                <button class="btn btn-sm btn-primary" onclick="caricaLog()">Filtra</button>
+            </div>
+        </div>
+    </div>
+
+
+
+
+    <!-- 📋 TABELLA -->
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover" id="tabellaLog">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Data</th>
+                    <th>Modificato da</th>
+                    <th>Tipo</th>
+                    <th>Versione</th>
+                    <th>Dettaglio</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Dati caricati via JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 🎛️ CONTROLLI DI PAGINAZIONE -->
+<div class="d-flex justify-content-between align-items-center mb-2" id="controlliLog">
+    <div></div>
+    <div id="paginazioneLog" class="d-flex gap-2 align-items-center"></div>
+</div>
+
+<!-- 📦 MODALE DETTAGLIO -->
+<div class="modal fade" id="modaleDettaglioModifica" tabindex="-1" role="dialog" aria-labelledby="titoloModaleDettaglio" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="titoloModaleDettaglio">Dettaglio Modifica</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body" id="contenutoDettaglioModifica">
+                <!-- Il contenuto verrà caricato via JS -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $('#selectPageSizeLog').val('10');
+    });
+
+    function caricaLog() {
+        const tabella = $('#filtroTabella').val();
+        const testo = $('#filtroTesto').val().toLowerCase();
+        const dataDa = $('#filtroDataDa').val();
+        const dataA = $('#filtroDataA').val();
+
+        if (!tabella) {
+            toastr.warning("Seleziona una tabella");
+            return;
+        }
+
+        $.get('/Home/GestioneModificheList', { nomeTabella: tabella }, function (html) {
+            const righe = $('<div>').html(html).find('tr');
+            const rows = [];
+
+            righe.each(function () {
+                const dataAttr = $(this).data('data');
+                const testoRicerca = ($(this).data('ricerca') || '').toLowerCase();
+
+                // Se la riga non ha data, la saltiamo
+                if (!dataAttr) return;
+
+                const dataModifica = new Date(dataAttr);
+
+                const passaTesto = testo === '' || testoRicerca.includes(testo);
+                const passaDataDa = dataDa === '' || dataModifica >= new Date(dataDa);
+                const passaDataA = dataA === '' || dataModifica <= new Date(dataA);
+
+                if (passaTesto && passaDataDa && passaDataA) {
+                    rows.push($(this));
+                }
+            });
+
+            renderTabellaLog(rows);
+        });
+    }
+
+
+    function renderTabellaLog(rows) {
+        const tbody = $('#tabellaLog tbody');
+        const paginationContainer = $('#paginazioneLog');
+        let pageSize = parseInt($('#selectPageSizeLog').val()) || 10;
+        let currentPage = 1;
+
+        function renderPage() {
+            tbody.html('');
+            const totalPages = Math.ceil(rows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages);
+
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+
+            rows.slice(start, end).forEach(r => tbody.append(r));
+
+            // Paginazione
+            paginationContainer.html('');
+            const pageInfo = $('<span>').text(`Pagina ${currentPage} di ${totalPages || 1}`).addClass('me-2');
+            paginationContainer.append(pageInfo);
+
+            const prevBtn = $('<button>')
+                .addClass('btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary'))
+                .text('← Indietro')
+                .prop('disabled', currentPage === 1)
+                .on('click', () => { currentPage--; renderPage(); });
+
+            const nextBtn = $('<button>')
+                .addClass('btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary'))
+                .text('Prossima →')
+                .prop('disabled', currentPage === totalPages)
+                .on('click', () => { currentPage++; renderPage(); });
+
+            paginationContainer.append(prevBtn, nextBtn);
+        }
+
+        $('#selectPageSizeLog').off('change').on('change', function () {
+            pageSize = parseInt($(this).val());
+            currentPage = 1;
+            renderPage();
+        });
+
+        renderPage();
+    }
+
+    function apriDettaglio(nomeTabella, idArchivio) {
+        fetch(`/Home/DettaglioModifica?nomeTabella=${nomeTabella}&idArchivio=${idArchivio}`)
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById("contenutoDettaglioModifica").innerHTML = html;
+                const modale = new bootstrap.Modal(document.getElementById("modaleDettaglioModifica"));
+                modale.show();
+            });
+    }
+</script>

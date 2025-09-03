@@ -1,0 +1,8 @@
+﻿@{
+    var messaggio = ViewBag.MessaggioErrore as string ?? "Errore sconosciuto.";
+}
+
+<div class="alert alert-danger text-center my-3">
+    <i class="fa fa-exclamation-triangle me-2"></i> @messaggio
+</div>
+

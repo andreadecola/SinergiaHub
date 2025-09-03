@@ -1,0 +1,457 @@
+﻿@model List<Sinergia.Models.TeamProfessionistiViewModel>
+@{
+    var puoAggiungere = ViewBag.PuoAggiungere == true;
+    var puoModificare = ViewBag.PuoModificare == true;
+    var puoEliminare = ViewBag.PuoEliminare == true;
+    var listaProfessionisti = ViewBag.Professionisti as List<SelectListItem> ?? new List<SelectListItem>();
+    bool mostraAzioni = puoAggiungere || puoModificare || puoEliminare;
+}
+
+<!-- JS e Toastr -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+<link href="~/Content/css/style-mobile.css" rel="stylesheet" />
+
+<div class="d-flex justify-content-between align-items-center mb-2 controls-team-wrap">
+    <div id="controlliTeam" class="d-flex align-items-center gap-1 flex-nowrap"></div>
+
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"
+                onclick="apriNuovoTeam()">
+            Nuovo Team
+        </button>
+
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered" id="teamTable">
+            <thead>
+                <tr>
+                    <th class="w-20">Nome</th>
+                    <th class="w-55">Descrizione</th>
+                    <th class="w-10">Data creazione</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="w-15 text-center">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var team in Model)
+                {
+                    <tr data-nome="@team.Nome" data-descrizione="@team.Descrizione">
+                        <td>@team.Nome</td>
+                        <td>@team.Descrizione</td>
+                        <td>@team.DataCreazione.ToString("dd/MM/yyyy")</td>
+
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-nowrap text-center">
+                                @Html.Partial("~/Views/Team/_AzioniTeam.cshtml", team)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var team in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-team"
+             data-nome="@team.Nome" data-descrizione="@team.Descrizione">
+
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold text-primary">@team.Nome</span>
+                <small class="text-muted">@team.DataCreazione.ToString("dd/MM/yyyy")</small>
+            </div>
+
+            <div class="small text-muted mb-2">
+                <strong>Descrizione:</strong> @team.Descrizione
+            </div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2">
+                    @Html.Partial("~/Views/Team/_AzioniTeam.cshtml", team)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneTeam" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+<!-- 🔧 MODALE Crea/Modifica Team -->
+<div class="modal fade" id="teamModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form id="teamForm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="teamModalLabel">Nuovo Team</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Team" />
+                    <input type="hidden" name="Attivo" id="campoAttivo" value="false" />
+
+
+                    <div class="mb-2">
+                        <label>Nome</label>
+                        <input name="Nome" type="text" class="form-control form-control-sm" required />
+                    </div>
+
+                    <div class="mb-2">
+                        <label>Descrizione</label>
+                        <textarea name="Descrizione" class="form-control form-control-sm" rows="1"></textarea>
+                    </div>
+
+                    <div class="mb-2">
+                        <label>Membri del Team</label><br />
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="apriModaleMembriTeam()">Aggiungi membri</button>
+                        <div id="riepilogoMembri" class="mt-1 text-muted small"></div>
+                    </div>
+
+                    <input type="hidden" name="MembriSelezionati" id="MembriSelezionati" />
+
+
+                    <!-- Lista membri già associati -->
+                    <div class="mb-2" id="listaMembriEsistenti" style="display: none;">
+                        <label>Membri già assegnati</label>
+                        <ul class="list-group list-group-sm" id="membriEsistentiList">
+                            <!-- JS popolerà qui -->
+                        </ul>
+                        <small class="text-muted">Clicca sull'icona per rimuovere un membro esistente</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ❌ MODALE Eliminazione -->
+<div class="modal fade" id="eliminaTeamModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">Confermi l'eliminazione del team?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneTeam">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ✅ MODALE MEMBRI TEAM CON CHECKBOX -->
+<div class="modal fade" id="membriTeamModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Seleziona Membri del Team</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body" style="max-height: 400px; overflow-y: auto;">
+                <div class="row">
+                    @foreach (var p in listaProfessionisti)
+                    {
+                        <div class="col-sm-6 col-md-4 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input check-membro" type="checkbox"
+                                       value="@p.Value" id="chk_m_@p.Value">
+                                <label class="form-check-label" for="chk_m_@p.Value">@p.Text</label>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <small class="text-muted">Seleziona i professionisti che fanno parte del team.</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-success btn-sm" onclick="salvaMembriTeam()">Conferma</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    let idTeamDaEliminare = 0;
+
+    function apriNuovoTeam() {
+        const form = document.getElementById("teamForm");
+        form.reset();
+        document.getElementById("teamModalLabel").textContent = "Nuovo Team";
+        document.getElementById("listaMembriEsistenti").style.display = "none";
+        new bootstrap.Modal(document.getElementById("teamModal")).show();
+    }
+    function apriModificaTeam(id) {
+        fetch(`/Utenti/GetTeam?id=${id}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) return toastr.error("Errore nel caricamento.");
+
+                const t = res.team;
+                const form = document.getElementById("teamForm");
+                form.reset();
+
+                form.querySelector('[name="ID_Team"]').value = t.ID_Team;
+                form.querySelector('[name="Nome"]').value = t.Nome;
+                form.querySelector('[name="Descrizione"]').value = t.Descrizione;
+
+                // ✅ Imposta i membri selezionati nel campo hidden
+                document.getElementById("MembriSelezionati").value = t.Membri.join(",");
+
+                // ✅ Imposta anche il valore di "Attivo" nel campo nascosto
+                document.getElementById("campoAttivo").value = t.Attivo ? "true" : "false";
+
+                // ✅ Aggiorna riepilogo membri
+                aggiornaRiepilogoMembri();
+
+                // Mostra membri esistenti
+                const lista = document.getElementById("membriEsistentiList");
+                lista.innerHTML = "";
+                t.MembriDettaglio.forEach(m => {
+                    const li = document.createElement("li");
+                    li.className = "list-group-item d-flex justify-content-between align-items-center";
+                    li.innerHTML = `
+                    ${m.Nome}
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="rimuoviMembro(${id}, ${m.ID})">
+                        <i class="fa fa-times"></i>
+                    </button>
+                `;
+                    lista.appendChild(li);
+                });
+
+                document.getElementById("listaMembriEsistenti").style.display = "block";
+                document.getElementById("teamModalLabel").textContent = "Modifica Team";
+                new bootstrap.Modal(document.getElementById("teamModal")).show();
+            });
+    }
+
+
+    function aggiornaRiepilogoMembri() {
+        const ids = document.getElementById("MembriSelezionati").value.split(",").map(x => x.trim()).filter(Boolean);
+        const nomi = [];
+
+        ids.forEach(id => {
+            const label = document.querySelector(`label[for="chk_m_${id}"]`);
+            if (label) nomi.push(label.textContent.trim());
+        });
+
+        document.getElementById("riepilogoMembri").innerHTML = nomi.length
+            ? "Membri selezionati: <br><strong>" + nomi.join("</strong>, <strong>") + "</strong>"
+            : "<em>Nessun membro selezionato</em>";
+    }
+
+    function rimuoviMembro(idTeam, idProfessionista) {
+        fetch(`/Utenti/RimuoviMembroTeam`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idTeam, idProfessionista })
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) return toastr.error(res.message);
+                toastr.success(res.message);
+
+                // ✅ Chiudi e riapri la modale per forzare il refresh
+                const modalEl = document.getElementById("teamModal");
+                const bsModal = bootstrap.Modal.getInstance(modalEl);
+                if (bsModal) bsModal.hide();
+
+                setTimeout(() => {
+                    apriModificaTeam(idTeam);
+                }, 400); // Attendi che la modale si chiuda prima di riaprirla
+            });
+    }
+
+    // submit
+    $('#teamForm').on('submit', function (e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const id = formData.get("ID_Team");
+
+        const url = id && parseInt(id) > 0
+            ? '/Utenti/ModificaTeam'
+            : '/Utenti/CreaTeam';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("teamModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    function confermaEliminazioneTeam(id) {
+        idTeamDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaTeamModal")).show();
+    }
+
+    $('#btnConfermaEliminazioneTeam').on('click', function () {
+        fetch('/Utenti/EliminaTeam', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idTeamDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // gestione modale aggiungi mebri
+    function apriModaleMembriTeam() {
+        const membriSelezionati = document.getElementById("MembriSelezionati").value.split(",").map(id => id.trim());
+
+        // Deseleziona tutti prima
+        document.querySelectorAll('.check-membro').forEach(checkbox => {
+            checkbox.checked = membriSelezionati.includes(checkbox.value);
+        });
+
+        new bootstrap.Modal(document.getElementById("membriTeamModal")).show();
+    }
+    function salvaMembriTeam() {
+        const checked = Array.from(document.querySelectorAll('.check-membro:checked'));
+        const ids = checked.map(c => c.value);
+
+        document.getElementById("MembriSelezionati").value = ids.join(",");
+
+        aggiornaRiepilogoMembri();
+
+        // ✅ Se almeno un membro è selezionato, rendi il team attivo
+        document.getElementById("campoAttivo").value = ids.length > 0 ? "true" : "false";
+
+        bootstrap.Modal.getInstance(document.getElementById("membriTeamModal")).hide();
+    }
+
+
+    // 🔍 Filtro + Paginazione (Team) — stile "clienti", senza filtri extra
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('teamTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const controlliContainer = document.getElementById('controlliTeam');
+        const paginationContainer = document.getElementById('paginazioneTeam');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} `;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+        selectPageSize.value = String(pageSize); // valore predefinito
+
+        // ➕ Monta i controlli
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+
+            // 🔍 Filtra righe tabella desktop
+            const filteredRows = rows.filter(row =>
+                row.innerText.toLowerCase().includes(keyword)
+            );
+
+            // 🔍 Filtra card mobile
+            const cards = Array.from(document.querySelectorAll('.card-team'));
+            const filteredCards = cards.filter(card =>
+                card.innerText.toLowerCase().includes(keyword)
+            );
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // 🖥️ Mostra solo righe desktop della pagina corrente
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
+
+            // 📱 Mostra solo card mobile della pagina corrente
+            cards.forEach(c => c.style.display = 'none');
+            filteredCards
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(c => c.style.display = '');
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // 🎯 Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value, 10);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+</script>
+

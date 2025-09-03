@@ -1,0 +1,31 @@
+﻿@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var ex = ViewBag.Exception as Exception;
+    var controller = ViewBag.Controller;
+    var action = ViewBag.Action;
+}
+
+<h2 class="text-danger">❌ ERRORE DI SISTEMA</h2>
+
+@if (ex != null)
+{
+    <div class="alert alert-danger">
+        <p><strong>🧭 Controller:</strong> @controller</p>
+        <p><strong>🔧 Action:</strong> @action</p>
+        <p><strong>📝 Messaggio:</strong> @ex.Message</p>
+        @if (ex.InnerException != null)
+        {
+            <p><strong>💥 InnerException:</strong> @ex.InnerException.Message</p>
+        }
+        <p><strong>📍 TargetSite:</strong> @ex.TargetSite</p>
+        <p><strong>📁 Source:</strong> @ex.Source</p>
+        <p><strong>📄 Stack Trace:</strong></p>
+        <pre style="white-space: pre-wrap;">@ex.StackTrace</pre>
+    </div>
+}
+else
+{
+    <div class="alert alert-warning">
+        <p>Nessun dettaglio disponibile sull'errore.</p>
+    </div>
+}

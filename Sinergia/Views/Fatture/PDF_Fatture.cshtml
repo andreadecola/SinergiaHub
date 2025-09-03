@@ -1,0 +1,33 @@
+﻿@model List<Sinergia.Models.GiornaleCreditoDebitoViewModel>
+
+<h2>Esportazione Fatture</h2>
+
+<table border="1" cellpadding="5" cellspacing="0" width="100%">
+    <thead>
+        <tr>
+            <th>N.</th>
+            <th>Cliente</th>
+            <th>Tipo Cliente</th>
+            <th>Numero Fattura</th>
+            <th>Data Fattura</th>
+            <th>Importo</th>
+            <th>Aliquota IVA</th>
+            <th>Causale IVA</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var f in Model)
+        {
+            <tr>
+                <td>@f.ID_Operazione</td>
+                <td>@f.NomeCliente</td>
+                <td>@f.TipoCliente</td>
+                <td>@f.NumeroFattura</td>
+                <td>@(f.DataFattura?.ToString("dd/MM/yyyy"))</td>
+                <td>@f.Importo.ToString("C2")</td>
+                <td>@(f.AliquotaIva.HasValue ? f.AliquotaIva + "%" : "-")</td>
+                <td>@(!string.IsNullOrEmpty(f.CausaleIva) ? f.CausaleIva : "-")</td>
+            </tr>
+        }
+    </tbody>
+</table>

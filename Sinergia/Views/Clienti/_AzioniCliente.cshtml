@@ -1,0 +1,29 @@
+﻿@model Sinergia.Models.ClienteEsternoViewModel
+
+@if (Model.Stato == "Inattivo")
+{
+    <button class="btn btn-success btn-sm" title="Riattiva" onclick="riattivaCliente(@Model.ID_Cliente)">
+        <i class="fa fa-undo"></i>
+    </button>
+}
+else
+{
+    if (Model.PuoModificare)
+    {
+        <button class="btn btn-warning btn-sm" title="Modifica" onclick="apriModificaCliente(@Model.ID_Cliente)">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+    if (Model.PuoEliminare)
+    {
+        <button class="btn btn-danger btn-sm" title="Elimina" onclick="confermaEliminazioneCliente(@Model.ID_Cliente)">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+    if (Model.PuoModificare)
+    {
+        <button class="btn btn-primary btn-sm" title="Assegna Professionista" onclick="apriAssegnaProfessionista(@Model.ID_Cliente)">
+            <i class="fa fa-user-plus"></i>
+        </button>
+    }
+}

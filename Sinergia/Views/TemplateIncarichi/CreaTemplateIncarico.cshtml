@@ -1,0 +1,78 @@
+﻿@model Sinergia.Models.TemplateIncaricoViewModel
+@{
+    ViewBag.Title = "Nuovo Template Incarico";
+    var professioni = ViewBag.Professioni as List<SelectListItem>;
+}
+
+<h4>Nuovo Template Incarico</h4>
+<hr />
+
+<form method="post" action="@Url.Action("CreaTemplateIncarico", "Pratiche")" class="needs-validation" novalidate>
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label">Professione</label>
+            <select name="ID_Professione" class="form-select form-select-sm" required>
+                <option value="">-- Seleziona --</option>
+                @foreach (var p in professioni)
+                {
+                    <option value="@p.Value">@p.Text</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Nome Template</label>
+            <input name="NomeTemplate" type="text" class="form-control form-control-sm" required />
+        </div>
+    </div>
+
+    <!-- 🔘 Bottone mostra guida -->
+    <div class="mb-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnGuida">
+            📘 Mostra guida contenuto
+        </button>
+    </div>
+
+    <!-- 🔽 Contenuto guida nascosto inizialmente -->
+    <div id="guidaContenuto" class="border rounded bg-light p-3 mb-3" style="display: none; font-size: 0.9rem;">
+        <h5 class="text-center">INCARICO PROFESSIONALE</h5>
+        <p>
+            Il sottoscritto <strong>[NOME_PROFESSIONISTA]</strong>, nato a <strong>[LUOGO_NASCITA]</strong> il <strong>[DATA_NASCITA]</strong>,<br />
+            con riferimento alla pratica <strong>[TITOLO_PRATICA]</strong> del cliente <strong>[NOME_CLIENTE]</strong>,<br />
+            si impegna a svolgere le seguenti attività:
+        </p>
+        <ul>
+            <li>Descrizione attività 1</li>
+            <li>Descrizione attività 2</li>
+        </ul>
+        <p>
+            Luogo: <strong>[LUOGO]</strong><br />
+            Data: <strong>[DATA]</strong>
+        </p>
+        <p style="margin-top: 40px;">Firma del Professionista: ______________________</p>
+    </div>
+
+    <div class="mb-3">
+        <label>Contenuto HTML</label>
+        <textarea id="contenutoHtml" name="ContenutoHtml" rows="16" class="form-control form-control-sm" required></textarea>
+    </div>
+
+    <div class="d-flex justify-content-between mt-3">
+        <a href="@Url.Action("GestioneIncarichi", "Pratiche")" class="btn btn-secondary btn-sm">Annulla</a>
+        <button type="submit" class="btn btn-success btn-sm">Salva Template</button>
+    </div>
+</form>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const textarea = document.getElementById("contenutoHtml");
+            const btnGuida = document.getElementById("btnGuida");
+            const guida = document.getElementById("guidaContenuto");
+
+            // Mostra/nasconde la guida
+            btnGuida.addEventListener("click", function () {
+                guida.style.display = guida.style.display === "none" ? "block" : "none";
+            });
+        });
+    </script>
+}

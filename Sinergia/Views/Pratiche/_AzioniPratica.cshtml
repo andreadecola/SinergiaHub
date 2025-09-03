@@ -1,0 +1,49 @@
+﻿@model Sinergia.Models.PraticaViewModel
+
+@{
+    bool puoModificare = ViewBag.PuoModificare ?? false;
+    bool puoEliminare = ViewBag.PuoEliminare ?? false;
+}
+
+<div class="btn-group btn-group-sm" role="group" style="gap: 4px;">
+    @if (puoModificare)
+    {
+        <button type="button"
+                class="btn btn-warning"
+                title="Modifica"
+                onclick="apriModificaPratica(@Model.ID_Pratiche)">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+
+    @if (puoEliminare)
+    {
+        <button type="button"
+                class="btn btn-danger"
+                title="Elimina"
+                onclick="eliminaPratica(@Model.ID_Pratiche)">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+
+    @if (Model.ID_DocumentoIncarico.HasValue)
+    {
+        <button type="button"
+                class="btn btn-success"
+                title="Visualizza incarico"
+                onclick="visualizzaPdf(@Model.ID_DocumentoIncarico.Value)">
+            <i class="fa fa-file"></i>
+        </button>
+    }
+    else
+    {
+        <button type="button"
+                class="btn btn-success"
+                title="Crea incarico"
+                onclick="apriAnteprimaIncarico(@Model.ID_Pratiche)">
+            <i class="fa fa-file"></i>
+        </button>
+    }
+</div>
+
+

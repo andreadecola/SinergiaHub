@@ -1,0 +1,360 @@
+﻿@{
+    Layout = null;
+    var utente = Session["User"] as Sinergia.Model.Utenti;
+    var clientiDisponibili = Session["ClientiDisponibili"] as List<SelectListItem>;
+    var idSelezionato = Session["ID_ClienteSelezionato"] as string;
+}
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@ViewBag.Title - Sinergia</title>
+    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logo col PNG.png">
+
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
+
+    <!-- FontAwesome & Flag Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.6/css/flag-icons.min.css" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+
+    @RenderSection("styles", required: false)
+    @RenderSection("pagespecific", required: false)
+
+
+<style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .main-layout {
+            display: flex;
+            flex-direction: row;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 250px;
+            background-color: #343a40;
+            color: white;
+            padding: 1rem;
+            transition: transform 0.3s ease, visibility 0.3s ease;
+            z-index: 1030;
+        }
+
+            .sidebar a,
+            .sidebar a:hover,
+            .sidebar a:visited,
+            .sidebar a:focus,
+            .sidebar .fa,
+            .sidebar .fas,
+            .sidebar .far,
+            .sidebar .fab {
+                color: white !important;
+            }
+
+        #sidebar ul li a {
+            font-size: 14px;
+            padding: 5px 10px;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 100vh;
+        }
+
+        .main-content {
+            padding: 2rem;
+        }
+
+        footer {
+            text-align: right;
+            padding: 1rem 2rem;
+            background-color: #f8f9fa;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* ✅ Stile overlay per mobile */
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 100vw;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 1025;
+        }
+
+            .overlay.active {
+                display: block;
+            }
+
+        /* ✅ Comportamento mobile */
+    @@media (max-width: 768px) {
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100%;
+            transform: translateX(-100%);
+            visibility: hidden;
+        }
+
+            .sidebar.open {
+                transform: translateX(0);
+                visibility: visible;
+            }
+
+        .content-wrapper {
+            padding-left: 0 !important;
+        }
+        /*select spostata in mobile */
+        @@media (max-width: 768px) {
+            .navbar-professionista {
+                margin-left: 10px; /* sposta a sinistra */
+                margin-bottom: 8px; /* stacca dai bottoni */
+                width: calc(100% - 20px); /* evita che tocchi i bordi */
+            }
+
+                .navbar-professionista select {
+                    max-width: 100%;
+                }
+        }
+    }
+</style>
+
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-sm navbar-light px-3 border-bottom " style="background-color: #d6d8db;">
+        <a class="navbar-brand d-flex align-items-center" href="@Url.Action("Cruscotto", "Home")">
+            <img src="~/Content/img/Icons/Logo col PNG.png" alt="Logo" style="height: 28px; margin-right: 10px;">
+            <span class="fw-bold">Sinergia</span>
+        </a>
+
+        <!-- Select dinamica clienti -->
+        @if (utente != null)
+        {
+            <div class="navbar-professionista">
+                <!-- Select dinamica clienti -->
+                @if (utente != null)
+                {
+                    <div class="ms-3">
+                        @if (utente.TipoUtente == "Admin")
+                        {
+                            <select class="form-select form-select-sm border-primary shadow-sm fw-semibold"
+                                    style="max-width: 320px;"
+                                    onchange="selezionaCliente(this.value)">
+                                <option value="">-- Seleziona Professionista --</option>
+                                @if (clientiDisponibili != null)
+                                {
+                                    foreach (var c in clientiDisponibili)
+                                    {
+                                        <option value="@c.Value" @(c.Value == idSelezionato ? "selected" : "")>
+                                            @c.Text (@c.Value)
+                                        </option>
+                                    }
+
+                                }
+                            </select>
+                        }
+                        else if (utente.TipoUtente == "Professionista")
+                        {
+                            var cliente = clientiDisponibili?.FirstOrDefault();
+                            string[] split = cliente?.Text.Split('|');
+                            string nome = split?[0].Trim();
+                            string tipo = split?.Length > 1 ? split[1].Trim() : "";
+
+                            // 🔍 Test GetIDClienteCorrente
+                            var idCorrente = new Sinergia.Controllers.HomeController().GetIDClienteCorrente(utente.ID_Utente);
+                            System.Diagnostics.Debug.WriteLine($"[LAYOUT] Professionista {utente.ID_Utente} → Cliente Corrente: {idCorrente}");
+
+                            <span class="navbar-text fw-bold">@nome</span>
+                            <span class="badge bg-info text-dark ms-2">@tipo</span>
+                        }
+
+                        else if (utente.TipoUtente == "Collaboratore")
+                        {
+                            if (clientiDisponibili != null && clientiDisponibili.Count == 1)
+                            {
+                                var cliente = clientiDisponibili.First();
+                                string[] split = cliente.Text.Split('|');
+                                string nome = split[0].Trim();
+                                string tipo = split.Length > 1 ? split[1].Trim() : "";
+
+                                <span class="navbar-text fw-bold">@nome</span>
+                                <span class="badge bg-info text-dark ms-2">@tipo</span>
+                            }
+                            else if (clientiDisponibili != null && clientiDisponibili.Count > 1)
+                            {
+                                <select class="form-select form-select-sm border-primary shadow-sm fw-semibold"
+                                        style="max-width: 320px;"
+                                        onchange="selezionaCliente(this.value)">
+                                    <option value=""> Seleziona professionista </option>
+                                    @foreach (var c in clientiDisponibili)
+                                    {
+                                        <option value="@c.Value" @(c.Value == idSelezionato ? "selected" : "")>
+                                            @c.Text (@c.Value)
+                                        </option>
+                                    }
+                                </select>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="d-flex align-items-center ms-auto gap-2">
+            <!-- ✅ Visibile sempre -->
+            <button class="btn btn-outline-dark" id="hamburger-btn" title="Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <a class="btn btn-outline-dark p-1" title="Lingua: Italiano">
+                <img src="@Url.Content("~/Content/img/Icons/bandiera-italiana.png")" alt="IT" style="height: 20px;" />
+            </a>
+            <button id="toggleSearch" class="btn btn-outline-dark" title="Cerca">
+                <i class="fas fa-search"></i>
+            </button>
+            <input id="searchInput" class="form-control me-2" type="search" placeholder="Cerca..." style="display:none; max-width:200px;" />
+            <a href="@Url.Action("Logout", "Account")" class="btn btn-outline-dark" title="Logout">
+                <i class="fas fa-sign-out-alt"></i>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Layout principale -->
+    <div class="main-layout">
+        <!-- ✅ Sidebar -->
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-content">
+                @{ Html.RenderPartial("_Menu"); }
+
+                @if (!string.IsNullOrWhiteSpace(utente?.FotoProfiloPath))
+                {
+                    <div class="text-center mt-4 mb-3">
+                        <img src="@Url.Content(utente.FotoProfiloPath)"
+                             alt="Foto Profilo"
+                             class="img-fluid"
+                             style="width: 120px; height: 130px; object-fit: cover; border-radius: 8px; border: 2px solid #fff;" />
+                    </div>
+                }
+            </div>
+        </nav>
+        <!-- 🔹 Overlay per chiusura clic esterno -->
+        <div id="sidebarOverlay" class="overlay"></div>
+
+
+        <div class="content-wrapper">
+            <main class="main-content">
+                @RenderBody()
+            </main>
+            @Html.Partial("_Footer")
+        </div>
+    </div>
+
+
+    <!-- Script -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    @RenderSection("scripts", required: false)
+
+<script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/PWA/sw.js')
+            .then(reg => console.log('✅ Service Worker registrato:', reg.scope))
+            .catch(err => console.warn('❌ Errore Service Worker:', err));
+    }
+
+   document.addEventListener("DOMContentLoaded", function () {
+    const sidebar = document.getElementById("sidebar");
+    const hamburgerBtn = document.getElementById("hamburger-btn");
+    const overlay = document.getElementById("sidebarOverlay");
+    const toggleSearch = document.getElementById("toggleSearch");
+    const searchInput = document.getElementById("searchInput");
+
+    // ✅ Click su hamburger
+    hamburgerBtn.addEventListener("click", function () {
+        if (window.innerWidth <= 768) {
+            // Mobile: toggle sidebar e overlay
+            sidebar.classList.toggle("open");
+            overlay.classList.toggle("active");
+        } else {
+            // Desktop: nasconde/mostra sidebar
+            sidebar.classList.toggle("d-none");
+        }
+    });
+
+    // ✅ Click su overlay chiude sidebar mobile
+    overlay.addEventListener("click", function () {
+        sidebar.classList.remove("open");
+        overlay.classList.remove("active");
+    });
+
+    // ✅ Gestione ricerca input visibilità
+    if (toggleSearch && searchInput) {
+        toggleSearch.addEventListener("click", function () {
+            searchInput.style.display = (searchInput.style.display === "none") ? "block" : "none";
+            searchInput.focus();
+        });
+
+        // ✅ Funzione di ricerca in tabella
+        searchInput.addEventListener("input", function () {
+            const term = searchInput.value.toLowerCase();
+            const rows = document.querySelectorAll("table tbody tr");
+
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(term) ? "" : "none";
+            });
+        });
+    }
+
+    // ✅ Sessione scaduta
+    const sessioneScaduta = '@(Session["User"] == null ? "true" : "false")';
+    if (sessioneScaduta === "true") {
+        const divMessaggio = document.createElement('div');
+        divMessaggio.className = "alert alert-warning text-center";
+        divMessaggio.textContent = "⚠️ Sessione scaduta. Verrai reindirizzato al login...";
+        document.body.prepend(divMessaggio);
+        setTimeout(() => {
+            window.location.href = "/Login";
+        }, 2000);
+    }
+});
+
+
+    function selezionaCliente(id) {
+        if (id && id !== "") {
+            fetch('/Home/SelezionaClientiDisponibili', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'idCliente=' + encodeURIComponent(id)
+            }).then(() => {
+                location.reload();
+            });
+        }
+    }
+</script>
+
+</body>
+</html>

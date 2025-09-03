@@ -1,0 +1,887 @@
+﻿@model List<Sinergia.Models.CostoProfessionistaCompletoViewModel>
+
+@{
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+
+    // ✅ Controllo permessi
+    var puoAggiungere = permessiUtente?.Permessi.Any(p => p.Aggiungi) == true;
+    var puoModificare = permessiUtente?.Permessi.Any(p => p.Modifica) == true;
+    var puoEliminare = permessiUtente?.Permessi.Any(p => p.Elimina) == true;
+
+    // ✅ Mostra azioni se c’è almeno un costo o se l’utente ha permessi
+    bool mostraAzioni = puoAggiungere || puoModificare || puoEliminare || Model.Any(c => c.ID_AnagraficaCostoProfessionista > 0);
+}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+@* toglie freccia su tipo valore nel select  *@
+<style>
+    /* Elimina la freccia stile select */
+    .no-arrow::-webkit-calendar-picker-indicator {
+        display: none !important;
+    }
+
+    .no-arrow {
+        appearance: none;
+        -moz-appearance: none;
+        -webkit-appearance: none;
+        background-image: none !important;
+    }
+</style>
+
+
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliCostiProfessionista" class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovoCostoProfessionista()">Nuovo Costo Professionista</button>
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped table-sm align-middle" id="costiProfessionistaTable">
+            <thead class="table-light">
+                <tr>
+                    <th class="text-nowrap">ID</th>
+                    <th class="text-nowrap">Descrizione</th>
+                    <th class="text-nowrap">Stato Costo</th>
+                    <th class="text-nowrap">Ricorrenza</th>
+                    <th class="text-nowrap text-center">Assegnati</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-center text-nowrap">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var costo in Model)
+                {
+                    <tr data-id="@costo.ID_AnagraficaCostoProfessionista">
+                        <td class="text-nowrap">@costo.ID_CodiceCosto</td>
+                        <td class="text-nowrap">@costo.Descrizione</td>
+                        <td class="text-nowrap">@(costo.Attivo ? "Attivo" : "Inattivo")</td>
+                        <td class="text-nowrap text-center">
+                            @if (costo.StatoRicorrenza == "Attiva")
+                            {
+                                <span class="badge bg-success">Attiva</span>
+                            }
+                            else if (costo.StatoRicorrenza == "Scaduta")
+                            {
+                                <span class="badge bg-secondary">Scaduta</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-muted">Nessuna</span>
+                            }
+                        </td>
+                        <td class="text-center">
+                            @(costo.NumeroAssegnati > 0 ? costo.NumeroAssegnati.ToString() : "-")
+                        </td>
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial("~/Views/CostiProfessionista/_AzioniCostoProfessionista.cshtml", costo)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var costo in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-costo" data-id="@costo.ID_AnagraficaCostoProfessionista">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">@costo.Descrizione</span>
+                <span class="badge stato bg-@(costo.StatoRicorrenza == "Attiva" ? "success" : costo.StatoRicorrenza == "Scaduta" ? "secondary" : "light text-muted")">
+                    @(costo.StatoRicorrenza == "Attiva" ? "Attiva" : costo.StatoRicorrenza == "Scaduta" ? "Scaduta" : "Nessuna")
+                </span>
+            </div>
+
+            <div class="small text-muted"><strong>ID:</strong> @costo.ID_CodiceCosto</div>
+            <div class="small text-muted"><strong>Stato:</strong> @(costo.Attivo ? "Attivo" : "Inattivo")</div>
+            <div class="small text-muted"><strong>Assegnati:</strong> @(costo.NumeroAssegnati > 0 ? costo.NumeroAssegnati.ToString() : "-")</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("~/Views/CostiProfessionista/_AzioniCostoProfessionista.cshtml", costo)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneCostiProfessionista" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+<!-- Modale Nuovo/Modifica Costo Professionista -->
+<div class="modal fade" id="costoProfessionistaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form id="costoProfessionistaForm">
+            <div class="modal-content">
+                <div class="modal-header  text-dark">
+                    <h5 class="modal-title" id="costoProfessionistaModalLabel">Nuovo Costo Professionista</h5>
+                    <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_AnagraficaCostoProfessionista" />
+                    <div class="mb-3">
+                        <label class="form-label">Descrizione</label>
+                        <input type="text" name="Descrizione" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Stato</label>
+                        <select name="Attivo" class="form-select form-select-sm">
+                            <option value="true">Attivo</option>
+                            <option value="false">Inattivo</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- Modale Eliminazione -->
+<div class="modal fade" id="eliminaCostoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Confermi di voler eliminare questo costo?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneCosto">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 🔴 Modale Conferma Eliminazione Assegnazione -->
+<div class="modal fade" id="confermaEliminazioneAssegnazioneModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Vuoi davvero rimuovere questa assegnazione al professionista?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneAssegnazione">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Modale Ricorrenza Costo Professionista -->
+<div class="modal fade" id="ricorrenzaCostoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form id="ricorrenzaCostoForm">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">Gestione Ricorrenza Costo Professionista</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_AnagraficaCosto" />
+                    <input type="hidden" name="ID_Professionista" />
+                    <input type="hidden" name="ID_Professione" />
+                    <input type="hidden" name="ID_Ricorrenza" />
+                    <input type="hidden" name="Categoria" value="Costo Professionista" />
+
+                    <div class="row g-3">
+
+                        <div class="col-md-3">
+                            <label class="form-label">Periodicità</label>
+                            <select name="Periodicita" class="form-select form-select-sm">
+                                <option value="">-- Seleziona --</option>
+                                <option value="Giornaliero">Giornaliero</option>
+                                <option value="Settimanale">Settimanale</option>
+                                <option value="Mensile">Mensile</option>
+                                <option value="Bimestrale">Bimestrale</option>
+                                <option value="Trimestrale">Trimestrale</option>
+                                <option value="Semestrale">Semestrale</option>
+                                <option value="Annuale">Annuale</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Categoria</label>
+                            <input type="text" name="Categoria" class="form-control form-control-sm" value="Costo Professionista" readonly />
+                        </div>
+
+
+                        <div class="col-md-3">
+                            <label class="form-label">Tipo Valore</label>
+                            <input type="text" class="form-control form-control-sm no-arrow" name="TipoValore" value="Fisso" readonly />
+                        </div>
+
+
+
+                        <div class="col-md-3">
+                            <label class="form-label">Valore</label>
+                            <input type="number" name="Valore" step="0.01" min="0" class="form-control form-control-sm" required />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Una Tantum</label>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="checkUnaTantum" />
+                                <label class="form-check-label" for="checkUnaTantum">
+                                    Applica solo una volta (una tantum)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Data Inizio</label>
+                            <input type="date" name="DataInizio" class="form-control form-control-sm" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Data Fine</label>
+                            <input type="date" name="DataFine" class="form-control form-control-sm" />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Note aggiuntive</label>
+                            <textarea name="Note" rows="2" class="form-control form-control-sm" placeholder="Eventuali commenti..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-success btn-sm" onclick="salvaRicorrenzaCosto()">Salva Ricorrenza</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Hidden utili per ricorrenze -->
+<input type="hidden" id="hiddenOwnerProfessionista" value="@ViewBag.IDProfessionistaCorrente" />
+<input type="hidden" id="hiddenProfessione" value="@ViewBag.IDProfessioneCorrente" />
+
+
+
+<!-- Modale Assegna -->
+<div class="modal fade" id="assegnaCostoModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <form id="assegnaCostoForm" method="post">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assegna costo ai professionisti</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_AnagraficaCostoProfessionista" />
+                    <div id="listaProfessionistiContainer">
+                        <!-- checkbox dinamici via JS -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modale Dettaglio -->
+<div class="modal fade" id="dettaglioCostoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title">Dettaglio professionisti assegnati</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="listaProfessionistiAssegnati">
+                    <!-- elenco dinamico via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let idCostoDaEliminare = 0;
+    let idAssegnazioneDaEliminare = 0;
+
+    // apertura modale
+    function apriNuovoCostoProfessionista() {
+        const form = document.getElementById("costoProfessionistaForm");
+        form.reset();
+        form.querySelector('[name="ID_AnagraficaCostoProfessionista"]').value = 0;
+
+        document.getElementById("costoProfessionistaModalLabel").textContent = "Nuovo Costo Professionista";
+        new bootstrap.Modal(document.getElementById("costoProfessionistaModal")).show();
+    }
+    // apertura della modale di modifica
+    function apriModificaCosto(id) {
+        fetch(`/Pratiche/GetCostoProfessionista?id=${id}`)
+            .then(res => res.json())
+            .then(res => {
+                if (!res.success) {
+                    toastr.error("Errore nel caricamento del costo.");
+                    return;
+                }
+
+                const c = res.costo;
+                const form = document.getElementById("costoProfessionistaForm");
+                form.reset();
+
+                form.querySelector('[name="ID_AnagraficaCostoProfessionista"]').value = c.ID_AnagraficaCostoProfessionista;
+                form.querySelector('[name="Descrizione"]').value = c.Descrizione;
+                form.querySelector('[name="Attivo"]').value = c.Attivo.toString();
+
+                document.getElementById("costoProfessionistaModalLabel").textContent = "Modifica Costo Professionista";
+                new bootstrap.Modal(document.getElementById("costoProfessionistaModal")).show();
+            })
+            .catch(() => toastr.error("Errore di comunicazione con il server."));
+    }
+
+
+
+    // salvataggio per crea e modifica
+    $('#costoProfessionistaForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+        const id = formData.get("ID_AnagraficaCostoProfessionista");
+
+        const url = id && parseInt(id) > 0
+            ? '/Pratiche/ModificaAnagraficaCostoProfessionista'
+            : '/Pratiche/CreaAnagraficaCostoProfessionista';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("costoProfessionistaModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+
+    // eliminazione
+    function confermaEliminazioneCosto(id) {
+        idCostoDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaCostoModal")).show();
+    }
+
+    $('#btnConfermaEliminazioneCosto').on('click', function () {
+        fetch('/Pratiche/EliminaCostoProfessionista', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idCostoDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // gestione assegnazione professionisti
+
+    function apriAssegnaProfessionisti(idCosto) {
+        fetch(`/Pratiche/GetListaProfessionistiAssegnabili?idCosto=${idCosto}`) // 🔄 deve esistere
+            .then(r => r.json())
+            .then(res => {
+                const container = document.getElementById("listaProfessionistiContainer");
+                const form = document.getElementById("assegnaCostoForm");
+                form.reset();
+                form.querySelector('[name="ID_AnagraficaCostoProfessionista"]').value = idCosto;
+
+                if (!res.success || !Array.isArray(res.professionisti) || res.professionisti.length === 0) {
+                    container.innerHTML = "<div class='alert alert-warning'>Nessun professionista disponibile.</div>";
+                } else {
+                    container.innerHTML = res.professionisti.map(p => `
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" name="ID_UtentiSelezionati" value="${p.ID}" id="check_${p.ID}">
+                        <label class="form-check-label" for="check_${p.ID}">${p.Nome}</label>
+                    </div>
+                `).join('');
+                }
+
+                new bootstrap.Modal(document.getElementById("assegnaCostoModal")).show();
+            })
+            .catch(err => {
+                console.error("Errore fetch professionisti:", err);
+                toastr.error("Errore durante il caricamento dei professionisti.");
+            });
+    }
+
+    // Submit assegnazione – usa AssegnaCostoProfessionista
+    document.getElementById("assegnaCostoForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const form = this;
+        const formData = new FormData(form);
+
+        const checkboxes = form.querySelectorAll('input[name="ID_UtentiSelezionati"]:checked');
+
+        if (checkboxes.length === 0) {
+            toastr.warning("⚠️ Seleziona almeno un professionista.");
+            return;
+        }
+
+        // ✅ Debug: cosa stai inviando
+        for (var pair of formData.entries()) {
+            console.log(pair[0] + ': ' + pair[1]);
+        }
+
+        fetch("/Pratiche/AssegnaCostoProfessionista", {
+            method: "POST",
+            body: formData
+        })
+            .then(r => r.text()) // 👈 Legge il contenuto come testo
+            .then(res => {
+                console.log("📥 Risposta RAW dal server:", res);
+
+                try {
+                    const json = JSON.parse(res); // 👈 Prova a fare parsing JSON
+
+                    if (json.success) {
+                        toastr.success(json.message || "Assegnazione completata.");
+                        bootstrap.Modal.getInstance(document.getElementById("assegnaCostoModal")).hide();
+                        location.reload();
+                    } else {
+                        toastr.error(json.message || "Errore durante l’assegnazione.");
+                    }
+
+                } catch (err) {
+                    toastr.error("❌ Risposta non valida del server.");
+                    console.error("Errore di parsing JSON:", err);
+                }
+            })
+            .catch(err => {
+                toastr.error("❌ Errore nella richiesta.");
+                console.error("❌ Errore JS fetch:", err);
+            });
+    });
+
+
+    // 🔎 Gestione dettaglio professionisti
+    function apriDettaglioProfessionisti(idCosto) {
+        fetch(`/Pratiche/VisualizzaAssegnazioniCosto?idAnagraficaCosto=${idCosto}`)
+            .then(r => r.json())
+            .then(res => {
+                const container = document.getElementById("listaProfessionistiAssegnati");
+
+                if (!res.success || !Array.isArray(res.assegnazioni) || res.assegnazioni.length === 0) {
+                    container.innerHTML = "<div class='alert alert-info'>Nessun professionista assegnato.</div>";
+                } else {
+                    container.innerHTML = `
+                    <ul class="list-group">
+                        ${res.assegnazioni.map(p => `
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>${p.NomeProfessionista}</strong>
+                                    <small class="text-muted ms-2">(${p.DataAssegnazione})</small>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <span class="badge bg-primary">€ ${p.Importo?.toFixed(2) ?? '0.00'}</span>
+                                    <button class="btn btn-sm btn-danger"
+                                            onclick="confermaEliminazioneAssegnazione(${p.ID_CostoPersonale})"
+                                            title="Rimuovi assegnazione">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                </div>
+                            </li>
+                        `).join('')}
+                    </ul>
+                `;
+                }
+
+                // 📝 Salvo l'ID del costo attivo per usi successivi (es. ricarica)
+                document.getElementById("hiddenIDCostoAttivo")?.remove();
+                const hiddenInput = document.createElement("input");
+                hiddenInput.type = "hidden";
+                hiddenInput.id = "hiddenIDCostoAttivo";
+                hiddenInput.value = idCosto;
+                document.body.appendChild(hiddenInput);
+
+                new bootstrap.Modal(document.getElementById("dettaglioCostoModal")).show();
+            })
+            .catch(err => {
+                console.error("Errore fetch dettaglio:", err);
+                toastr.error("Errore durante il recupero dei dati.");
+            });
+    }
+
+    // 🗑️ Eliminazione costo assegnato al professionista
+    function confermaEliminazioneAssegnazione(idAssegnazione) {
+        idAssegnazioneDaEliminare = idAssegnazione;
+
+        // 👇 Chiudi la modale già aperta prima di aprire quella nuova
+        const modaleDettaglio = bootstrap.Modal.getInstance(document.getElementById("dettaglioCostoModal"));
+        if (modaleDettaglio) modaleDettaglio.hide();
+
+        // 👇 Aspetta un attimo prima di aprire la nuova modale, così non si sovrappongono
+        setTimeout(() => {
+            new bootstrap.Modal(document.getElementById("confermaEliminazioneAssegnazioneModal")).show();
+        }, 400);
+    }
+
+    // 👇 Gestione click sul bottone "Elimina"
+    document.getElementById("btnConfermaEliminazioneAssegnazione").addEventListener("click", function () {
+        if (!idAssegnazioneDaEliminare) return;
+
+        fetch('/Pratiche/EliminaAssegnazioneCosto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `idCostoPersonaleUtente=${idAssegnazioneDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+
+                    // ✅ Chiudi entrambe le modali
+                    bootstrap.Modal.getInstance(document.getElementById("confermaEliminazioneAssegnazioneModal"))?.hide();
+                    bootstrap.Modal.getInstance(document.getElementById("dettaglioCostoModal"))?.hide();
+
+                    // 🔁 Ricarica dopo breve attesa
+                    setTimeout(() => {
+                        const idCosto = document.getElementById("hiddenIDCostoAttivo")?.value;
+                        if (idCosto) {
+                            apriDettaglioProfessionisti(idCosto);
+                        }
+                    }, 500);
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                console.error("Errore eliminazione:", err);
+                toastr.error("Errore durante l’eliminazione dell’assegnazione.");
+            });
+    });
+
+
+    // gestione ricorrenza
+    function apriModaleRicorrenza(idAnagraficaCosto) {
+        const form = document.getElementById("ricorrenzaCostoForm");
+        form.reset();
+
+        // Imposta ID costo e categoria fissa
+        form.querySelector('[name="ID_AnagraficaCosto"]').value = idAnagraficaCosto;
+        form.querySelector('[name="Categoria"]').value = "Costo Professionista";
+        form.querySelector('[name="ID_Ricorrenza"]').value = "";
+
+        const checkboxUnaTantum = document.getElementById("checkUnaTantum");
+
+        fetch(`/Pratiche/GetRicorrenzaCostoProfessionista?idAnagraficaCostoProfessionista=${idAnagraficaCosto}`)
+            .then(r => r.json())
+            .then(res => {
+                if (res.success && res.ricorrenza) {
+                    const r = res.ricorrenza;
+
+                    form.querySelector('[name="ID_Ricorrenza"]').value = r.ID_Ricorrenza || "";
+                    form.querySelector('[name="Periodicita"]').value = r.Periodicita || "";
+                    form.querySelector('[name="TipoValore"]').value = r.TipoValore || "";
+                    form.querySelector('[name="Valore"]').value = r.Valore || "";
+                    form.querySelector('[name="Note"]').value = r.Note || "";
+
+                    if (r.DataInizio)
+                        form.querySelector('[name="DataInizio"]').value = new Date(r.DataInizio).toISOString().slice(0, 10);
+                    if (r.DataFine)
+                        form.querySelector('[name="DataFine"]').value = new Date(r.DataFine).toISOString().slice(0, 10);
+
+                    // ✅ Verifica se è una tantum
+                    const stessaData = r.DataInizio && r.DataFine && r.DataInizio === r.DataFine;
+                    const isUnaTantum = stessaData && r.Periodicita === "Giornaliero";
+
+                    checkboxUnaTantum.checked = isUnaTantum;
+
+                    // Forza l’aggiornamento dello stato campi
+                    checkboxUnaTantum.dispatchEvent(new Event("change"));
+                } else {
+                    toastr.info("⏳ Nessuna ricorrenza trovata, puoi inserirne una nuova.");
+                    checkboxUnaTantum.checked = false;
+                    checkboxUnaTantum.dispatchEvent(new Event("change"));
+                }
+
+                new bootstrap.Modal(document.getElementById("ricorrenzaCostoModal")).show();
+            })
+            .catch(err => {
+                console.error("Errore:", err);
+                toastr.error("❌ Errore durante il caricamento della ricorrenza.");
+            });
+    }
+
+
+    function salvaRicorrenzaCosto() {
+        const form = document.getElementById("ricorrenzaCostoForm");
+        const formData = new FormData(form);
+
+        // ✅ Imposta dinamicamente ID professionista
+        const idProfessionista = document.getElementById("hiddenOwnerProfessionista")?.value;
+        if (idProfessionista) {
+            formData.set("ID_Professionista", idProfessionista);
+        }
+
+        // ✅ Imposta dinamicamente ID professione
+        const idProfessione = document.getElementById("hiddenProfessione")?.value;
+        if (idProfessione) {
+            formData.set("ID_Professione", idProfessione);
+        }
+
+        const checkUnaTantum = document.getElementById("checkUnaTantum");
+        const periodicita = form.querySelector('[name="Periodicita"]');
+        const dataInizio = form.querySelector('[name="DataInizio"]');
+        const dataFine = form.querySelector('[name="DataFine"]');
+
+        // ✅ Forza inserimento anche se i campi sono disabilitati
+        if (checkUnaTantum && checkUnaTantum.checked) {
+            formData.set("Periodicita", "Giornaliero");
+            formData.set("DataInizio", dataInizio.value);
+            formData.set("DataFine", dataInizio.value);
+        } else {
+            formData.set("Periodicita", periodicita.value);
+            formData.set("DataInizio", dataInizio.value);
+            formData.set("DataFine", dataFine.value);
+        }
+
+        // 🔍 Validazione base
+        const idTipoCosto = formData.get("ID_AnagraficaCosto");
+        const tipoValore = formData.get("TipoValore");
+        const valore = formData.get("Valore");
+
+        if (!idTipoCosto || !tipoValore || !valore || !formData.get("DataInizio") || !formData.get("Periodicita")) {
+            toastr.warning("⚠️ Compila tutti i campi obbligatori.");
+            return;
+        }
+
+        fetch('/Pratiche/SalvaRicorrenzaCostoProfessionista', {
+            method: 'POST',
+            body: formData
+        })
+            .then(res => res.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success("✅ Ricorrenza salvata correttamente.");
+                    const modal = bootstrap.Modal.getInstance(document.getElementById("ricorrenzaCostoModal"));
+                    if (modal) modal.hide();
+                } else {
+                    toastr.error("❌ Errore durante il salvataggio: " + res.message);
+                }
+            })
+            .catch(err => {
+                toastr.error("❌ Errore di rete: " + err);
+            });
+    }
+
+
+
+    // ✅ Gestione "Una Tantum" e validazione date
+    document.addEventListener("DOMContentLoaded", function () {
+        const checkbox = document.getElementById("checkUnaTantum");
+        const periodicita = document.querySelector('[name="Periodicita"]');
+        const dataInizio = document.querySelector('[name="DataInizio"]');
+        const dataFine = document.querySelector('[name="DataFine"]');
+
+        if (!checkbox || !periodicita || !dataInizio || !dataFine)
+            return;
+
+        function aggiornaCampiUnaTantum() {
+            const oggi = new Date().toISOString().slice(0, 10);
+
+            if (checkbox.checked) {
+                periodicita.value = "Giornaliero";
+                if (!dataInizio.value) dataInizio.value = oggi;
+                dataFine.value = dataInizio.value;
+
+                // 🔒 Disabilita
+                periodicita.disabled = true;
+                dataInizio.disabled = true;
+                dataFine.disabled = true;
+            } else {
+                // 🔓 Riabilita
+                periodicita.disabled = false;
+                dataInizio.disabled = false;
+                dataFine.disabled = false;
+            }
+        }
+
+        checkbox.addEventListener("change", aggiornaCampiUnaTantum);
+
+        // 🔄 Inizializza all'avvio
+        aggiornaCampiUnaTantum();
+
+        // ⛔ Validazione date coerenti
+        const validateDateRange = () => {
+            const start = new Date(dataInizio.value);
+            const end = new Date(dataFine.value);
+
+            if (dataInizio.value && dataFine.value && end < start) {
+                toastr.warning("⚠️ La Data Fine non può essere precedente alla Data Inizio.");
+                dataFine.value = "";
+            }
+        };
+
+        dataInizio.addEventListener("change", validateDateRange);
+        dataFine.addEventListener("change", validateDateRange);
+    });
+
+
+    // 🔍 Filtro e paginazione - Costi Professionista
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('costiProfessionistaTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = Array.from(document.querySelectorAll('.card-costo')); // per mobile
+
+        const controlliContainer = document.getElementById('controlliCostiProfessionista');
+        const paginationContainer = document.getElementById('paginazioneCostiProfessionista');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+        const selectRicorrenza = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // ⚙️ Ricorrenza
+        const labelRicorrenza = document.createElement('label');
+        labelRicorrenza.textContent = 'Ricorrenza:';
+        labelRicorrenza.className = 'form-label mb-0 me-1';
+
+        ['Tutti', 'Attiva', 'Scaduta', 'Nessuna'].forEach(stato => {
+            const option = document.createElement('option');
+            option.value = stato;
+            option.textContent = stato;
+            selectRicorrenza.appendChild(option);
+        });
+        selectRicorrenza.className = 'form-select form-select-sm w-auto';
+
+        // ➕ Inserisci controlli nella barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(labelRicorrenza);
+        controlliContainer.appendChild(selectRicorrenza);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroStato = selectRicorrenza.value;
+
+            // Filtra righe desktop
+            let filteredRows = rows.filter(row => {
+                const text = row.innerText.toLowerCase();
+                const statoCell = row.querySelector('td:nth-child(4)'); // colonna Ricorrenza
+                const stato = statoCell ? statoCell.innerText.trim() : '';
+                const statoMatch = (filtroStato === 'Tutti' || stato.includes(filtroStato));
+                return text.includes(keyword) && statoMatch;
+            });
+
+            // Filtra card mobile
+            let filteredCards = cards.filter(card => {
+                const text = card.innerText.toLowerCase();
+                const statoEl = card.querySelector('.stato');
+                const stato = statoEl ? statoEl.innerText.trim() : '';
+                const statoMatch = (filtroStato === 'Tutti' || stato.includes(filtroStato));
+                return text.includes(keyword) && statoMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // 🖥️ Mostra/nasconde righe tabella
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+
+            // 📱 Mostra/nasconde card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredCards.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(c => c.style.display = '');
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectRicorrenza.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+</script>

@@ -1,0 +1,311 @@
+﻿@model IEnumerable<Sinergia.Models.OperazioniEconomicheViewModel>
+@{
+    var lista = Model?.ToList() ?? new List<Sinergia.Models.OperazioniEconomicheViewModel>();
+
+    Func<decimal, string> badgeClass = imp => imp >= 0 ? "badge bg-success" : "badge bg-danger";
+    Func<decimal, string> rowClass = imp => imp >= 0 ? "table-success" : "table-danger";
+
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Operazioni Economiche";
+
+    // Calcoli economico (entrate positive, uscite negative)
+    decimal totEntrate = lista.Where(x => x.Importo >= 0).Sum(x => x.Importo);
+    decimal totUscite = lista.Where(x => x.Importo < 0).Sum(x => x.Importo); // già negative
+    decimal utileEcon = totEntrate + totUscite;
+}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<!-- 🏷️ Titolo principale -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+        <i class="fa fa-bar-chart me-2 text-primary"></i> Operazioni Economiche
+    </h4>
+</div>
+
+<div class="d-flex justify-content-between mb-2" id="controlliEconomico">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <input id="searchEcon" type="text" class="form-control form-control-sm w-auto" placeholder="Cerca...">
+
+        <select id="filtroTipoEcon" class="form-select form-select-sm w-auto">
+            <option value="Tutte">Tutte</option>
+            <option value="Entrata">Entrate</option>
+            <option value="Uscita">Uscite</option>
+        </select>
+
+        <select id="pageSizeEcon" class="form-select form-select-sm w-auto">
+            <option value="10">10 per pagina</option>
+            <option value="25">25 per pagina</option>
+            <option value="50">50 per pagina</option>
+        </select>
+    </div>
+</div>
+
+<!-- 📥 Export Operazioni Economiche CSV/PDF -->
+<div class="d-flex justify-content-end mb-3">
+    <form method="get" id="exportEconomicheForm"
+          class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+
+        <input type="date" name="da" class="form-control form-control-sm w-auto"
+               value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
+
+        <input type="date" name="a" class="form-control form-control-sm w-auto"
+               value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+
+        <button type="submit" formaction="@Url.Action("EsportaOperazioniEconomicheCsv", "Home")"
+                class="btn btn-outline-success btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+        </button>
+
+        <button type="submit" formaction="@Url.Action("EsportaOperazioniEconomichePdf", "Home")"
+                class="btn btn-outline-danger btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+        </button>
+    </form>
+</div>
+
+
+@if (!lista.Any())
+{
+    <div class="alert alert-info my-2">Nessuna operazione economica nel periodo selezionato.</div>
+}
+else
+{
+    <!-- 🖥️ Tabella Desktop -->
+    <div class="d-none d-md-block table-responsive">
+        <table class="table table-striped table-bordered table-sm align-middle" id="economicoTable">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:110px;">Data</th>
+                    <th style="width:95px;">Tipo</th>
+                    <th>Descrizione</th>
+                    <th>Pratica</th>
+                    <th class="text-end" style="width:160px;">Importo</th>
+                    <th class="text-center" style="width:80px;">Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in lista)
+                {
+                    var isEntrata = r.Importo >= 0;
+                    <tr class="@rowClass(r.Importo)" data-tipo="@(isEntrata ? "Entrata" : "Uscita")">
+                        <td>@(r.DataOperazione?.ToString("dd/MM/yyyy") ?? "-")</td>
+                        <td><span class="@badgeClass(r.Importo)">@(isEntrata ? "Entrata" : "Uscita")</span></td>
+                        <td>@(string.IsNullOrWhiteSpace(r.Descrizione) ? "—" : r.Descrizione)</td>
+                        <td>@(r.ID_Pratiche?.ToString() ?? "—")</td>
+                        <td class="text-end">@r.Importo.ToString("N2") €</td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-primary btn-sm"
+                                    title="Dettaglio"
+                                    onclick="apriDettaglioEconomico('@(isEntrata ? "Entrata" : "Uscita")', @r.ID_Transazione)">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 📱 Card Mobile -->
+    <div class="d-block d-md-none mt-3">
+        @foreach (var r in lista)
+        {
+            var isEntrata = r.Importo >= 0;
+            <div class="border rounded shadow-sm p-3 mb-3 bg-white card-economico" data-tipo="@(isEntrata ? "Entrata" : "Uscita")">
+                <div class="small text-muted"><strong>Data:</strong> @(r.DataOperazione?.ToString("dd/MM/yyyy") ?? "-")</div>
+                <div><strong>Tipo:</strong> <span class="@badgeClass(r.Importo)">@(isEntrata ? "Entrata" : "Uscita")</span></div>
+                <div><strong>Descrizione:</strong> @(string.IsNullOrWhiteSpace(r.Descrizione) ? "—" : r.Descrizione)</div>
+                <div><strong>Pratica:</strong> @(r.ID_Pratiche?.ToString() ?? "—")</div>
+                <div class="fw-bold @(isEntrata ? "text-success" : "text-danger")">
+                    @r.Importo.ToString("N2") €
+                </div>
+                <div class="mt-2">
+                    <button class="btn btn-outline-primary btn-sm"
+                            title="Dettaglio"
+                            onclick="apriDettaglioEconomico('@(isEntrata ? "Entrata" : "Uscita")', @r.ID_Transazione)">
+                        <i class="fa fa-search"></i> Dettaglio
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- 🔄 Paginazione -->
+    <div class="d-flex justify-content-end align-items-center gap-2 mt-2" id="paginazioneEconomico"></div>
+
+    <!-- Totali -->
+    <div class="d-flex flex-wrap justify-content-end gap-3 mt-2">
+        <div><strong>Totale entrate:</strong> @totEntrate.ToString("N2") €</div>
+        <div><strong>Totale uscite:</strong> @totUscite.ToString("N2") €</div>
+        <div class="@(utileEcon >= 0 ? "text-success" : "text-danger")">
+            <strong>Utile economico:</strong> @utileEcon.ToString("N2") €
+        </div>
+    </div>
+}
+
+@* Modale dettaglio *@
+<div class="modal fade" id="dettaglioEconomicoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header text-black">
+                <h5 class="modal-title">Dettaglio operazione</h5>
+                <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="contenutoDettaglioEcon" class="small">Caricamento...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // === Tabella: filtro + paginazione client-side ===
+    (function () {
+        const table = document.getElementById('economicoTable');
+        const tbody = table ? table.querySelector('tbody') : null;
+        const allRows = tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+
+        // 📱 Card mobile
+        const allCards = Array.from(document.querySelectorAll('.card-economico'));
+
+        const searchInput = document.getElementById('searchEcon');
+        const tipoSelect = document.getElementById('filtroTipoEcon');
+        const pageSizeSelect = document.getElementById('pageSizeEcon');
+        const pagContainer = document.getElementById('paginazioneEconomico');
+
+        let pageSize = parseInt(pageSizeSelect.value || '10');
+        let currentPage = 1;
+
+        function matches(el, term, tipo) {
+            const text = el.innerText.toLowerCase();
+            const okTerm = !term || text.includes(term);
+
+            if (tipo === 'Tutte') return okTerm;
+
+            // Per la tabella: usa classi table-success/table-danger
+            const isEntrata = el.classList.contains('table-success') || el.getAttribute('data-tipo') === 'Entrata';
+            const isUscita = el.classList.contains('table-danger') || el.getAttribute('data-tipo') === 'Uscita';
+
+            const okTipo = (tipo === 'Entrata' && isEntrata) || (tipo === 'Uscita' && isUscita);
+            return okTerm && okTipo;
+        }
+
+        function render() {
+            const term = (searchInput.value || '').toLowerCase();
+            const tipo = tipoSelect.value || 'Tutte';
+
+            // Filtra
+            const filteredRows = allRows.filter(r => matches(r, term, tipo));
+            const filteredCards = allCards.filter(c => matches(c, term, tipo));
+
+            // Calcola pagine
+            const totalItems = window.innerWidth >= 768 ? filteredRows.length : filteredCards.length;
+            const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+            currentPage = Math.min(currentPage, totalPages);
+
+            // 🖥️ Tabella desktop
+            allRows.forEach(r => r.style.display = 'none');
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
+
+            // 📱 Card mobile
+            allCards.forEach(c => c.style.display = 'none');
+            filteredCards
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(c => c.style.display = '');
+
+            // Paginazione
+            pagContainer.innerHTML = '';
+            const info = document.createElement('span');
+            info.textContent = `Pagina ${currentPage} di ${totalPages}`;
+            info.className = 'me-2';
+            pagContainer.appendChild(info);
+
+            const prev = document.createElement('button');
+            prev.textContent = '← Indietro';
+            prev.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prev.disabled = (currentPage === 1);
+            prev.onclick = () => { currentPage--; render(); };
+            pagContainer.appendChild(prev);
+
+            const next = document.createElement('button');
+            next.textContent = 'Prossima →';
+            next.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            next.disabled = (currentPage === totalPages);
+            next.onclick = () => { currentPage++; render(); };
+            pagContainer.appendChild(next);
+        }
+
+        searchInput.addEventListener('input', () => { currentPage = 1; render(); });
+        tipoSelect.addEventListener('change', () => { currentPage = 1; render(); });
+        pageSizeSelect.addEventListener('change', () => { pageSize = parseInt(pageSizeSelect.value); currentPage = 1; render(); });
+
+        render();
+    })();
+
+    // Helper: parsing sicuro date JSON .NET o ISO
+    function formatDate(val) {
+        if (!val) return '-';
+        const m = /Date\((\d+)\)/.exec(val);
+        const d = m ? new Date(parseInt(m[1], 10)) : new Date(val);
+        return isNaN(d) ? '-' : d.toLocaleDateString();
+    }
+
+    // === Modale dettaglio (endpoint economico) ===
+    function apriDettaglioEconomico(tipo, id) {
+        const url = `/Home/GetDettaglioOperazioneEconomica?tipo=${encodeURIComponent(tipo)}&id=${encodeURIComponent(id)}`;
+        const box = document.getElementById('contenutoDettaglioEcon');
+        box.innerHTML = 'Caricamento...';
+
+        fetch(url)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) {
+                    toastr.error(res.message || 'Errore nel caricamento del dettaglio.');
+                    return;
+                }
+
+                if (res.tipo === 'Uscita') {
+                    const d = res.dettaglio;
+                    box.innerHTML = `
+                        <div class="row g-2">
+                            <div class="col-md-6"><strong>Categoria:</strong> ${d.Categoria ?? '-'}</div>
+                            <div class="col-md-6"><strong>Origine:</strong> ${d.Origine ?? '-'}</div>
+                            <div class="col-12"><strong>Descrizione:</strong> ${d.Descrizione ?? '-'}</div>
+                            <div class="col-md-4"><strong>Importo:</strong> ${(d.Importo ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} €</div>
+                            <div class="col-md-4"><strong>Data:</strong> ${formatDate(d.DataRegistrazione)}</div>
+                            <div class="col-md-4"><strong>Stato:</strong> ${d.Stato ?? '-'}</div>
+                            <div class="col-12"><strong>Pratica:</strong> ${d.Pratica ?? '-'}</div>
+                        </div>`;
+                } else { // Entrata (Avviso di Parcella netto)
+                    const d = res.dettaglio;
+                    // d espone: ImportoBase, ContributoIntegrativoPercentuale, ContributoIntegrativoImporto, AliquotaIVA, ImportoIVA, Totale, Netto, MetodoPagamento, Stato, Pratica, Data
+                    box.innerHTML = `
+                        <div class="row g-2">
+                            <div class="col-md-6"><strong>Pratica:</strong> ${d.Pratica ?? '-'}</div>
+                            <div class="col-md-6"><strong>Data avviso:</strong> ${formatDate(d.Data)}</div>
+                            <div class="col-md-4"><strong>Imponibile:</strong> ${(d.ImportoBase ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} €</div>
+                            <div class="col-md-4"><strong>Contributo int.:</strong> ${(d.ContributoIntegrativoImporto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} € ${d.ContributoIntegrativoPercentuale ? `(${d.ContributoIntegrativoPercentuale.toLocaleString()}%)` : ''}</div>
+                            <div class="col-md-4"><strong>IVA:</strong> ${(d.ImportoIVA ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} € ${d.AliquotaIVA ? `(${d.AliquotaIVA.toLocaleString()}%)` : ''}</div>
+                            <div class="col-md-4"><strong>Totale lordo:</strong> ${(d.Totale ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} €</div>
+                            <div class="col-md-4"><strong>Netto (competenza):</strong> ${(d.Netto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} €</div>
+                            <div class="col-md-4"><strong>Metodo pag.:</strong> ${d.MetodoPagamento ?? '-'}</div>
+                            <div class="col-12"><strong>Stato:</strong> ${d.Stato ?? '-'}</div>
+                        </div>`;
+                }
+
+                new bootstrap.Modal(document.getElementById('dettaglioEconomicoModal')).show();
+            })
+            .catch(() => toastr.error('Errore di rete nel caricamento del dettaglio.'));
+    }
+</script>
+

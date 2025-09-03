@@ -1,0 +1,10 @@
+﻿@{
+    ViewBag.Title = "Nessun Professionista Assegnato";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="alert alert-warning mt-5 text-center">
+    <h4 class="mb-3">Nessun Professionista Assegnato</h4>
+    <p>Attualmente non sei associato ad alcun professionista. Contatta un amministratore o il professionista  per ricevere l’accesso.</p>
+    <a href="@Url.Action("Logout", "Account")" class="btn btn-secondary mt-3">Esci</a>
+</div>

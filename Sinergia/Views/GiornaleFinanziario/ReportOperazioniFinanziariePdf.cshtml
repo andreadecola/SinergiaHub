@@ -1,0 +1,71 @@
+﻿@model List<Sinergia.Models.OperaziomoFinanziarieViewModel>
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Operazioni Finanziarie</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 4px 6px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Operazioni Finanziarie</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Pratica</th>
+                <th>Tipo</th>
+                <th>Descrizione</th>
+                <th>Importo</th>
+                <th>Data</th>
+                <th>Categoria</th>
+                <th>Stato</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var op in Model)
+            {
+                <tr>
+                    <td>@op.ID_Operazione</td>
+                    <td>@(string.IsNullOrWhiteSpace(op.NomePratica) ? "-" : op.NomePratica)</td>
+                    <td>@op.TipoOperazione</td>
+                    <td>@(string.IsNullOrWhiteSpace(op.Descrizione) ? "-" : op.Descrizione)</td>
+                    <td>@op.Importo.ToString("N2")</td>
+                    <td>@(op.DataOperazione.HasValue ? op.DataOperazione.Value.ToString("dd/MM/yyyy") : "-")</td>
+                    <td>@(string.IsNullOrWhiteSpace(op.Categoria) ? "-" : op.Categoria)</td>
+                    <td>@op.Stato</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>
+

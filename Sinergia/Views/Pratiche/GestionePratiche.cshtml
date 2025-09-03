@@ -1,0 +1,120 @@
+﻿@{
+    ViewBag.Title = "Gestione Pratiche";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section styles {
+    <style>
+        span[role="status"] {
+            display: none !important;
+        }
+
+        .table > tbody > tr > td {
+            padding: 8px;
+            vertical-align: middle;
+        }
+
+        .mylabel {
+            margin-bottom: 4px;
+            color: #999;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* Per larghezza orizzontale */
+        .table-responsive {
+            overflow-x: auto;
+        }
+    </style>
+}
+
+<div id="content">
+    <div class="row">
+        <div class="col-xs-12 col-sm-7 col-md-7 col-lg-4">
+            <h1 class="page-title txt-color-blueDark">
+                <i class="fa fa-lg fa-fw fa-book"></i> Pratiche
+            </h1>
+        </div>
+    </div>
+
+    <section id="widget-grid">
+        <div class="row">
+            <article class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
+                <div class="jarviswidget" id="wid-id-pratiche" data-widget-editbutton="false" data-widget-deletebutton="false">
+                    <header>
+                        <span class="widget-icon"><i class="fa fa-list"></i></span>
+                        <h2 class="fadeInLeft animated">Lista Pratiche</h2>
+                    </header>
+                    <div>
+                        <div class="widget-body no-padding">
+                            <div id="praticheContainer" class="table-responsive">
+                                @Html.Action("GestionePraticheList", "Pratiche")
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </section>
+</div>
+
+<!-- Modale Visualizza Documenti Pratica -->
+<div class="modal fade" id="documentiPraticaModal" tabindex="-1" aria-labelledby="documentiPraticaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="documentiPraticaModalLabel">Documenti Pratica</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body" id="contenutoDocumentiPratica">
+                <!-- Caricamento documenti dinamico -->
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Caricamento...</span>
+                    </div>
+                    <p>Caricamento documenti...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+    <script>
+    function CaricaDocumentiPratica(idPratica) {
+        fetch('/Pratiche/GetDocumentiPratica?idPratica=' + idPratica)
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById('contenutoDocumentiPratica').innerHTML = html;
+                const modal = new bootstrap.Modal(document.getElementById('documentiPraticaModal'));
+                modal.show();
+            })
+            .catch(err => {
+                toastr.error("Errore durante il caricamento dei documenti.");
+                console.error(err);
+            });
+    }
+
+    function EliminaDocumentoPratica(idDocumento) {
+        if (!confirm('Sei sicuro di voler eliminare questo documento?')) return;
+
+        fetch('/Pratiche/EliminaDocumentoPratica?id=' + idDocumento, {
+            method: 'POST'
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                toastr.error("Errore durante l'eliminazione del documento.");
+                console.error(err);
+            });
+    }
+    </script>
+}
+

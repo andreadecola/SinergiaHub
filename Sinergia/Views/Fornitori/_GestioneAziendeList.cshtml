@@ -1,0 +1,1428 @@
+﻿@model List<Sinergia.Models.AziendaViewModel>
+
+
+
+@{
+    var utenteLoggato = Session["User"] as Sinergia.Model.Utenti;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+
+    bool puòAggiungere = permessiUtente?.PuòAggiungere == true;
+    bool puòModificare = permessiUtente?.PuòModificare == true;
+    bool puòEliminare = permessiUtente?.PuòEliminare == true;
+
+    bool mostraAzioni = puòAggiungere || puòModificare || puòEliminare;
+}
+
+<!-- jQuery prima di tutto -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+
+
+<!-- Toastr (dopo) -->
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<!-- SweetAlert -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<link href="~/Content/css/style-mobile.css" rel="stylesheet" />
+
+
+
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliAziende" class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>
+
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puòAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovaAzienda()">
+            Nuovo Fornitore
+        </button>
+    }
+</div>
+
+<!-- 📥 Export Fornitori CSV/PDF -->
+<div class="d-flex justify-content-end mb-3">
+    <form method="get" id="exportFornitoriForm"
+          class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+
+        <button type="submit" formaction="@Url.Action("EsportaFornitoriCsv", "Utenti")"
+                class="btn btn-outline-success btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+        </button>
+
+        <button type="submit" formaction="@Url.Action("EsportaFornitoriPdf", "Utenti")"
+                class="btn btn-outline-danger btn-sm"
+                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+        </button>
+    </form>
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered" id="aziendeTable">
+            <thead>
+                <tr>
+                    <th class="id w-5">ID</th>
+                    <th class="w-20">Nome</th>
+                    <th class="w-20">Tipo</th>
+                    <th class="w-20 d-none d-md-table-cell">Email</th>
+                    <th class="w-15 d-none d-md-table-cell">P.IVA</th>
+                    <th class="w-10">Stato</th>
+                    <th class="w-10">Ruolo</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="w-10 text-center">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in Model)
+                {
+                    <tr>
+                        <td class="id">@a.ID_Azienda</td>
+                        <td>@a.Nome</td>
+                        <td>@a.TipoRagioneSociale</td>
+                        <td class="d-none d-md-table-cell">@a.Email</td>
+                        <td class="d-none d-md-table-cell">@a.PartitaIVA</td>
+                        <td class="stato">@a.Stato</td>
+                        <td>@a.TipoRuolo</td>
+
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-nowrap text-center">
+                                @Html.Partial(
+                                    "~/Views/Fornitori/_AzioniFornitore.cshtml",
+                                    a,
+                                    new ViewDataDictionary {
+                                        { "PuoModificare", puòModificare },
+                                        { "PuoEliminare",  puòEliminare  }
+                                    }
+                                )
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var a in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-fornitore"
+             data-id="@a.ID_Azienda"
+             data-stato="@a.Stato"
+             data-ruolo="@a.TipoRuolo"
+             data-ricerca="@($"{a.Nome} {a.TipoRagioneSociale} {a.Email} {a.PartitaIVA} {a.Telefono}")">
+
+            <div class="fw-bold text-primary">@a.Nome</div>
+            <div class="small text-muted"><strong>Tipo:</strong> @a.TipoRagioneSociale</div>
+            <div class="small text-muted"><strong>Email:</strong> @a.Email</div>
+            <div class="small text-muted"><strong>P.IVA:</strong> @a.PartitaIVA</div>
+            <div class="small text-muted"><strong>Telefono:</strong> @a.Telefono</div>
+            <div class="small text-muted"><strong>Stato:</strong> @a.Stato</div>
+            <div class="small text-muted"><strong>Ruolo:</strong> @a.TipoRuolo</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial(
+                        "~/Views/Fornitori/_AzioniFornitore.cshtml",
+                        a,
+                        new ViewDataDictionary {
+                            { "PuoModificare", puòModificare },
+                            { "PuoEliminare",  puòEliminare  }
+                        }
+                    )
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneAziende" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+
+<!-- Modale Nuova/Modifica Azienda -->
+<div class="modal fade" id="aziendaModal" tabindex="-1" aria-labelledby="aziendaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="AziendaForm" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="aziendaModalLabel">Gestione Fornitori</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Azienda" />
+
+                    <!-- ✅ TOGGLE MOSTRA VERSIONE PRECEDENTE -->
+                    <div class="row mb-2" id="toggleVersioniWrapperAzienda">
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="toggleVersioniAzienda">
+                                <label class="form-check-label fw-bold" for="toggleVersioniAzienda">
+                                    Mostra versione precedente
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 1 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Nome *</label>
+                            <input type="text" name="Nome" class="form-control form-control-sm" required />
+                            <small class="text-muted d-none" data-prev="Nome"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Tipo Ragione Sociale *</label>
+                            <select name="TipoRagioneSociale" class="form-control form-control-sm" required>
+                                <option value="">Seleziona tipo...</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="TipoRagioneSociale"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Partita IVA</label>
+                            <input type="text" name="PartitaIVA" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="PIVA"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 2 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Codice Fiscale</label>
+                            <input type="text" name="CodiceFiscale" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="CodiceFiscale"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Codice Univoco</label>
+                            <input type="text" name="CodiceUnivoco" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="CodiceUnivoco"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Telefono</label>
+                            <input type="text" name="Telefono" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Telefono"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 3 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Email</label>
+                            <input type="email" name="Email" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="MAIL1"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Sito Web</label>
+                            <input type="text" name="SitoWEB" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="SitoWEB"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Carica Documenti</label>
+                            <input type="file" name="Documenti" multiple class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Documento"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 4 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label>Nazione</label>
+                            <select id="Nazione" name="ID_Nazione" class="form-control form-control-sm"></select>
+                            <small class="text-muted d-none" data-prev="Nazione"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label>Città</label>
+                            <select id="Citta" name="ID_CittaResidenza" class="form-control form-control-sm"></select>
+                            <small class="text-muted d-none" data-prev="Città"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Indirizzo</label>
+                            <input type="text" name="Indirizzo" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Indirizzo"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 5 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Descrizione Attività</label>
+                            <input type="text" name="DescrizioneAttivita" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="DescrizioneAttivita"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Settore Merceologico</label>
+                            <select name="ID_SettoreFornitore" id="ID_SettoreFornitore" class="form-control form-control-sm">
+                                <option value="">Seleziona settore...</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="SettoreFornitore"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Stato Azienda *</label>
+                            <select name="Stato" class="form-control form-control-sm" required>
+                                <option value="Attivo">Attivo</option>
+                                <option value="Inattivo">Inattivo</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="Stato"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 6: NOTE (larghezza piena) -->
+                    <div class="row">
+                        <div class="col-md-12 mb-2">
+                            <label class="form-label">Note</label>
+                            <input type="text" name="Note" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Note"></small>
+                        </div>
+                    </div>
+
+                    <!-- BOTTONI DATI BANCARI -->
+                    <div class="d-flex justify-content-end mb-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="apriModaleDatiBancari()">
+                            Inserisci Dati Bancari
+                            <span id="badgeDatiBancari" class="badge rounded-pill bg-success d-none">✓</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- FOOTER -->
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="chiudiAziendaModal()">Chiudi</button>
+                    <button type="button" id="btnSalvaAzienda" class="btn btn-primary btn-sm" onclick="salvaAzienda()">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Modale Conferma Eliminazione -->
+<div class="modal fade" id="eliminaAziendaModal" tabindex="-1" aria-labelledby="eliminaAziendaModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="eliminaAziendaModalLabel">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questo fornitore?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" id="btnConfermaEliminazione">Disattiva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Gestione Documenti -->
+<div class="modal fade" id="documentiModal" tabindex="-1" aria-labelledby="documentiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title" id="documentiModalLabel">Documenti Fornitori</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body" id="contenutoDocumenti">
+                <!-- I documenti saranno caricati qui dinamicamente -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Assegna Utenti -->
+<div class="modal fade" id="assegnaUtenteModal" tabindex="-1" aria-labelledby="assegnaUtenteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title" id="assegnaUtenteModalLabel">Assegna Utente all'Fornitore</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+
+            <div class="modal-body">
+
+                <!-- Lista utenti -->
+                <div id="listaUtenti">
+                    <!-- Gli utenti verranno caricati qui -->
+                </div>
+
+                <hr>
+
+                <!-- Tipo Relazione -->
+                <div class="mb-3">
+                    <label for="tipoRelazione" class="form-label">Tipo di Relazione</label>
+                    <select id="tipoRelazione" class="form-select">
+                        <option value="Collaborazione">Collaborazione</option>
+                        <option value="Segnalazione">Segnalazione</option>
+                        <option value="Partnership">Partnership</option>
+                    </select>
+                </div>
+
+                <!-- Stato -->
+                <div class="mb-3">
+                    <label for="statoRelazione" class="form-label">Stato della Relazione</label>
+                    <select id="statoRelazione" class="form-select">
+                        <option value="Attivo">Attivo</option>
+                        <option value="Terminato">Terminato</option>
+                    </select>
+                </div>
+
+                <!-- Note -->
+                <div class="mb-3">
+                    <label for="noteRelazione" class="form-label">Note</label>
+                    <textarea id="noteRelazione" class="form-control" rows="2" placeholder="Inserisci note opzionali..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="salvaAssegnazioneUtente()">Salva</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modale Visualizza Utenti Assegnati -->
+<div class="modal fade" id="utentiAssegnatiModal" tabindex="-1" aria-labelledby="utentiAssegnatiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+
+            <div class="modal-header  text-dark">
+                <h5 class="modal-title" id="utentiAssegnatiModalLabel">Utenti Assegnati</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+
+            <div class="modal-body" id="contenutoUtentiAssegnati">
+                <!-- Tabella utenti assegnati -->
+                <div id="tabellaUtentiAssegnati" class="table-responsive"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                <button type="button" class="btn btn-outline-primary" onclick="apriAssegnaUtente(aziendaSelezionataId)">Aggiungi Utenti</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Modale Dati Bancari -->
+<div class="modal fade" id="datiBancariModal" tabindex="-1" aria-labelledby="datiBancariModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="DatiBancariForm">
+                <div class="modal-header  text-black">
+                    <h5 class="modal-title" id="datiBancariModalLabel">Dati Bancari</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Cliente" id="ID_Cliente" />
+                    <input type="hidden" name="TipoCliente" id="TipoCliente" />
+
+                    <div class="mb-2">
+                        <label class="form-label">Istituto Di Credito</label>
+                        <input type="text" name="NomeBanca" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">IBAN</label>
+                        <input type="text" name="IBAN" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Intestatario</label>
+                        <input type="text" name="Intestatario" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">BIC/SWIFT</label>
+                        <input type="text" name="BIC_SWIFT" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Note</label>
+                        <textarea name="Note" rows="2" class="form-control form-control-sm"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="salvaDatiBancari()">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+
+
+<script>
+
+    // lo uso in salva azienda e salva dati bancari
+    let datiBancariTemporanei = null;
+
+    function apriNuovaAzienda() {
+        const form = document.getElementById('AziendaForm');
+        form.reset();
+
+        // ✅ Forza il flag Fornitore di Servizi attivo
+        //document.getElementById("checkFornitore").checked = true;
+        //document.getElementById("checkCliente").checked = false;
+
+        $('#aziendaModalLabel').text('Nuovo Fornitore');
+        caricaTipiRagioneSociale();
+        caricaCittaENazioni();
+        caricaSettoriMerceologiciFornitori();
+
+        // Nascondo toggle versioni
+        $("#toggleVersioniWrapperAzienda").addClass("d-none");
+        $("#infoStoricoAzienda").remove();
+        $("[data-prev]").addClass("d-none").text("");
+
+        const nomeAzienda = form.querySelector('input[name="Nome"]');
+        if (nomeAzienda) {
+            nomeAzienda.addEventListener("blur", () => {
+                nomeAzienda.value = nomeAzienda.value.toUpperCase();
+            });
+        }
+
+        const codiceFiscale = form.querySelector('input[name="CodiceFiscale"]');
+        if (codiceFiscale) {
+            codiceFiscale.addEventListener("input", () => {
+                codiceFiscale.value = codiceFiscale.value.toUpperCase().substring(0, 16);
+            });
+        }
+
+        new bootstrap.Modal(document.getElementById('aziendaModal')).show();
+    }
+
+
+
+    function apriModificaAzienda(id) {
+        fetch(`/Utenti/GetAzienda?id=${id}`)
+            .then(r => r.json())
+            .then(azienda => {
+                if (!azienda) {
+                    toastr.error("Errore caricamento dati azienda");
+                    return;
+                }
+
+                // Reset form
+                $('#AziendaForm')[0].reset();
+                const form = document.getElementById("AziendaForm");
+
+                // Campi base
+                form.querySelector('[name="ID_Azienda"]').value = azienda.ID_Azienda;
+                form.querySelector('[name="Nome"]').value = azienda.Nome || "";
+                form.querySelector('[name="Telefono"]').value = azienda.Telefono || "";
+                form.querySelector('[name="Email"]').value = azienda.Email || "";
+                form.querySelector('[name="SitoWEB"]').value = azienda.SitoWEB || "";
+                form.querySelector('[name="Indirizzo"]').value = azienda.Indirizzo || "";
+                form.querySelector('[name="DescrizioneAttivita"]').value = azienda.DescrizioneAttivita || "";
+                form.querySelector('[name="Note"]').value = azienda.Note || "";
+                form.querySelector('[name="Stato"]').value = azienda.Stato || "";
+                form.querySelector('[name="PartitaIVA"]').value = azienda.PartitaIVA || "";
+                form.querySelector('[name="CodiceFiscale"]').value = azienda.CodiceFiscale || "";
+                form.querySelector('[name="CodiceUnivoco"]').value = azienda.CodiceUnivoco || "";
+
+                // Tipo ragione sociale
+                caricaTipiRagioneSociale();
+                setTimeout(() => {
+                    form.querySelector('[name="TipoRagioneSociale"]').value = azienda.TipoRagioneSociale || "";
+                }, 200);
+
+                // 🌍 Nazione e città
+                fetch('/Utenti/GetCittaENazioni')
+                    .then(r => r.json())
+                    .then(data => {
+                        const selectCitta = form.querySelector('[name="ID_CittaResidenza"]');
+                        const selectNazione = form.querySelector('[name="ID_Nazione"]');
+
+                        selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                        selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                        data.nazioni.forEach(n => {
+                            const opt = document.createElement("option");
+                            opt.value = n.ID_BPCittaDN;
+                            opt.textContent = n.NameNazione;
+                            selectNazione.appendChild(opt);
+                        });
+
+                        data.citta.forEach(c => {
+                            const opt = document.createElement("option");
+                            opt.value = c.ID_BPCitta;
+                            opt.textContent = c.NameLocalita;
+                            selectCitta.appendChild(opt);
+                        });
+
+                        if (azienda.ID_Nazione) {
+                            selectNazione.value = azienda.ID_Nazione;
+                        } else {
+                            const italia = data.nazioni.find(n => n.NameNazione.toLowerCase() === "italia");
+                            if (italia) selectNazione.value = italia.ID_BPCittaDN;
+                        }
+
+                        if (azienda.ID_CittaResidenza) {
+                            selectCitta.value = azienda.ID_CittaResidenza;
+                        } else {
+                            const roma = data.citta.find(c => c.NameLocalita.toLowerCase() === "roma");
+                            if (roma) selectCitta.value = roma.ID_BPCitta;
+                        }
+                    });
+
+                // 🎯 Settori merceologici
+                fetch('/Utenti/GetSettoriFornitori')
+                    .then(r => r.json())
+                    .then(settori => {
+                        const ddlSettori = form.querySelector('[name="ID_SettoreFornitore"]');
+                        ddlSettori.innerHTML = '<option value="">-- Seleziona settore --</option>';
+
+                        settori.forEach(s => {
+                            const option = document.createElement('option');
+                            option.value = s.ID_Settore;
+                            option.textContent = s.Nome;
+                            ddlSettori.appendChild(option);
+                        });
+
+                        if (azienda.ID_SettoreFornitore) {
+                            ddlSettori.value = azienda.ID_SettoreFornitore;
+                        }
+                    });
+
+                // 🏦 Dati bancari
+                $('[name="NomeBanca"]').val(azienda.NomeBanca || '');
+                $('[name="IBAN"]').val(azienda.IBAN || '');
+                $('[name="Intestatario"]').val(azienda.Intestatario || '');
+                $('[name="BIC_SWIFT"]').val(azienda.BIC_SWIFT || '');
+                $('[name="NoteBancarie"]').val(azienda.NoteBancarie || '');
+                $('[name="StatoBancario"]').val(azienda.StatoBancario || 'Attivo');
+
+                // 🔐 Gestione permessi modifica
+                const campiDaBloccare = $('#AziendaForm input, #AziendaForm select, #AziendaForm textarea').not('[name="ID_Azienda"]');
+                if (!azienda.PuòModificare) {
+                    campiDaBloccare.prop('disabled', true);
+                    $('#btnSalvaAzienda').hide();
+                } else {
+                    campiDaBloccare.prop('disabled', false);
+                    $('#btnSalvaAzienda').show();
+                }
+
+                // ✅ Toggle versioni precedenti
+                $("#toggleVersioniAzienda").off("change").on("change", function () {
+                    if (this.checked) {
+                        $.get("/Home/GetStoricoFornitore", { idAzienda: id }, function (res) {
+                            if (res.success && res.storico) {
+                                const storico = res.storico;
+
+                                let dataFormattata = "";
+                                if (storico.DataUltimaModifica) {
+                                    let dt = new Date(storico.DataUltimaModifica);
+                                    if (!isNaN(dt)) {
+                                        dataFormattata = dt.toLocaleString("it-IT");
+                                    }
+                                }
+
+                                for (const key in storico.CampiSpecifici) {
+                                    const valorePrec = storico.CampiSpecifici[key] || "";
+                                    $(`[data-prev='${key}']`)
+                                        .text(`Precedente: ${valorePrec}`)
+                                        .removeClass("d-none");
+                                }
+
+                                $("#infoStoricoAzienda").remove();
+                                $(".modal-body").prepend(`
+                                <div id="infoStoricoAzienda" class="alert alert-light border small mb-2">
+                                    Ultima modifica: ${dataFormattata} ·
+                                    Utente: ${storico.NomeUtente || "?"} ·
+                                    Versione: ${storico.NumeroVersione}
+                                </div>
+                            `);
+                            } else {
+                                toastr.warning(res.message || "Nessuna versione precedente trovata.");
+                            }
+                        });
+                    } else {
+                        $("[data-prev]").addClass("d-none").text("");
+                        $("#infoStoricoAzienda").remove();
+                    }
+                });
+
+                // Mostra modale
+                $('#aziendaModalLabel').text('Modifica Fornitore');
+                new bootstrap.Modal(document.getElementById('aziendaModal')).show();
+            });
+    }
+
+
+
+    function salvaAzienda() {
+        const form = document.getElementById('AziendaForm');
+        const formData = new FormData(form);
+
+        const idAzienda = formData.get('ID_Azienda');
+        const idNazione = formData.get("ID_Nazione");
+        const idCitta = formData.get("ID_CittaResidenza");
+
+
+        // ✅ Controlli obbligatori
+        if (!idNazione || idNazione === "") {
+            toastr.warning("⚠️ Seleziona una nazione.");
+            return;
+        }
+
+        if (!idCitta || idCitta === "") {
+            toastr.warning("⚠️ Seleziona una città.");
+            return;
+        }
+        // gestione cliente e fornitore
+        //const èCliente = document.getElementById("checkCliente").checked;
+        //const èFornitore = document.getElementById("checkFornitore").checked;
+
+        //if (!èCliente && !èFornitore) {
+        //    toastr.warning("⚠️ Seleziona almeno 'È Cliente' o 'È Fornitore'.");
+        //    return;
+        //}
+
+        //formData.set("ÈCliente", èCliente);
+        //formData.set("ÈFornitore", èFornitore);
+
+
+        // 💳 Se è una nuova azienda e ci sono dati bancari temporanei → aggiungili
+        if ((!idAzienda || idAzienda === "0") && datiBancariTemporanei) {
+            formData.append("IBAN", datiBancariTemporanei.IBAN || "");
+            formData.append("Intestatario", datiBancariTemporanei.Intestatario || "");
+            formData.append("NomeBanca", datiBancariTemporanei.NomeBanca || "");
+            formData.append("BIC_SWIFT", datiBancariTemporanei.BIC_SWIFT || "");
+            formData.append("Note", datiBancariTemporanei.Note || "");
+        }
+
+        // 📤 Endpoint corretto: crea o modifica
+        const url = idAzienda && idAzienda !== "0" ? '/Utenti/ModificaAzienda' : '/Utenti/CreaAzienda';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload(); // 🔁 aggiorna la lista
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                console.error("Errore:", err);
+                toastr.error("Errore durante il salvataggio.");
+            });
+    }
+
+
+
+
+    function apriEliminaAzienda(id) {
+        const btnConferma = document.getElementById('btnConfermaEliminazione');
+        btnConferma.onclick = function () {
+            eliminaAzienda(id);
+        };
+        new bootstrap.Modal(document.getElementById('eliminaAziendaModal')).show();
+    }
+
+    function eliminaAzienda(id) {
+        fetch('/Utenti/EliminaAzienda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ id: id })
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    }
+
+    function gestisciDocumenti(idAzienda) {
+        fetch(`/Utenti/GetDocumentiAzienda?idAzienda=${idAzienda}`)
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById('contenutoDocumenti').innerHTML = html;
+                new bootstrap.Modal(document.getElementById('documentiModal')).show();
+            })
+            .catch(err => {
+                toastr.error("Errore caricamento documenti.");
+            });
+    }
+
+
+    function EliminaDocumentoAzienda(idDocumento, idAzienda) {
+        Swal.fire({
+            title: "Elimina Documento",
+            text: "Vuoi davvero eliminare questo documento?",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sì, elimina",
+            cancelButtonText: "Annulla",
+            confirmButtonColor: "#d33"
+        }).then(result => {
+            if (result.isConfirmed) {
+                fetch(`/Utenti/EliminaDocumentoAzienda?id=${idDocumento}`, {
+                    method: "POST"
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            toastr.success(res.message);
+
+                            // ✅ Chiude forzatamente la modale, se è ancora aperta
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('documentiModal'));
+                            if (modal) {
+                                modal.hide();
+                            }
+
+                            // ✅ Rimuove eventuali backdrop rimasti
+                            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                            document.body.classList.remove('modal-open');
+                            document.body.style = "";
+
+                            // ✅ Ricarica i documenti aggiornati
+                            setTimeout(() => gestisciDocumenti(idAzienda), 300); // leggero delay
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Errore:", err);
+                        toastr.error("Errore durante l'eliminazione.");
+                    });
+            }
+        });
+    }
+
+
+    function chiudiAziendaModal() {
+        bootstrap.Modal.getInstance(document.getElementById('aziendaModal')).hide();
+    }
+
+    function caricaTipiRagioneSociale() {
+        const select = document.querySelector('select[name="TipoRagioneSociale"]');
+        select.innerHTML = '<option value="">Seleziona tipo...</option>'; // resetta prima
+
+        fetch('/Utenti/GetTipiRagioneSociale')
+            .then(response => response.json())
+            .then(tipi => {
+                tipi.forEach(tipo => {
+                    const option = document.createElement('option');
+                    option.value = tipo.NomeTipo;
+                    option.textContent = tipo.NomeTipo;
+                    select.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Errore caricamento tipi:', error);
+                toastr.error('Errore durante il caricamento dei tipi di ragione sociale.');
+            });
+    }
+
+    function riattivaAzienda(id) {
+        Swal.fire({
+            title: 'Sei sicuro?',
+            text: "Vuoi riattivare questa azienda?",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745', // Verde
+            cancelButtonColor: '#d33',     // Rosso
+            confirmButtonText: 'Sì, riattiva!',
+            cancelButtonText: 'Annulla'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch('/Utenti/RiattivaAzienda', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ id: id })
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            Swal.fire('Riattivata!', res.message, 'success')
+                                .then(() => location.reload());
+                        } else {
+                            Swal.fire('Errore!', res.message, 'error');
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Errore:", err);
+                        Swal.fire('Errore!', 'Errore durante la riattivazione.', 'error');
+                    });
+            }
+        });
+    }
+
+
+    function caricaSettoriMerceologiciFornitori() {
+        fetch('/Utenti/GetSettoriFornitori')
+            .then(r => r.json())
+            .then(settori => {
+                const select = document.getElementById("ID_SettoreFornitore");
+                select.innerHTML = '<option value="">Seleziona settore...</option>';
+
+                if (Array.isArray(settori)) {
+                    settori.forEach(s => {
+                        const option = document.createElement("option");
+                        option.value = s.ID_Settore;
+                        option.text = s.Nome;
+                        select.appendChild(option);
+                    });
+                }
+            })
+            .catch(err => {
+                console.error("Errore caricamento settori fornitori:", err);
+                toastr.error("Errore nel caricamento dei settori fornitori.");
+            });
+    }
+
+    // 🔍 Filtro e paginazione Aziende (Fornitori)
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('aziendeTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = document.querySelectorAll('.card-fornitore');
+
+        const controlliContainer = document.getElementById('controlliAziende');
+        const paginationContainer = document.getElementById('paginazioneAziende');
+
+        // Elementi filtro
+        const searchInput = document.createElement('input');
+        const selectStato = document.createElement('select');
+        const selectRuolo = document.createElement('select');
+        const selectPageSize = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // ⚙️ Stato
+        ['Tutti', 'Attivo', 'Inattivo'].forEach(stato => {
+            const option = document.createElement('option');
+            option.value = stato;
+            option.textContent = stato;
+            selectStato.appendChild(option);
+        });
+        selectStato.className = 'form-select form-select-sm w-auto';
+
+        // 🧾 Ruolo
+        ['Tutti', 'Cliente', 'Fornitore', 'Cliente / Fornitore', 'N/D'].forEach(ruolo => {
+            const option = document.createElement('option');
+            option.value = ruolo;
+            option.textContent = ruolo;
+            selectRuolo.appendChild(option);
+        });
+        selectRuolo.className = 'form-select form-select-sm w-auto';
+
+        // 📄 Righe per pagina
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // ➕ Aggiungi controlli alla barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectStato);
+        controlliContainer.appendChild(selectRuolo);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroStato = selectStato.value;
+            const filtroRuolo = selectRuolo.value;
+
+            let filteredRows = rows.filter(row => {
+                const stato = (row.querySelector('td.stato')?.innerText.trim()) || '';
+                const ruolo = (row.querySelector('td.ruolo')?.innerText.trim()) || '';
+                const testo = row.innerText.toLowerCase();
+
+                const statoMatch = (filtroStato === 'Tutti' || stato === filtroStato);
+                const ruoloMatch = (filtroRuolo === 'Tutti' || ruolo === filtroRuolo);
+                const ricercaMatch = (!keyword || testo.includes(keyword));
+
+                return statoMatch && ruoloMatch && ricercaMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // 🖥️ Tabella desktop
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
+
+            // 📱 Card mobile (se presenti)
+            if (cards.length) {
+                cards.forEach(c => c.style.display = 'none');
+                filteredRows.forEach(row => {
+                    const id = row.querySelector('td.id')?.innerText.trim(); // usa <td class="id">
+                    if (!id) return;
+                    const card = document.querySelector(`.card-fornitore[data-id="${id}"]`);
+                    if (card) card.style.display = '';
+                });
+            }
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // 🎯 Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectStato.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectRuolo.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+
+
+    let aziendaSelezionataId = null;
+
+    function apriAssegnaUtente(idAzienda) {
+        // Chiudi la modale degli utenti assegnati, se aperta
+        const modalUtenti = bootstrap.Modal.getInstance(document.getElementById('utentiAssegnatiModal'));
+        if (modalUtenti) {
+            modalUtenti.hide();
+        }
+
+        // Dopo una breve attesa per chiusura modale, apri quella di assegnazione
+        setTimeout(() => {
+            aziendaSelezionataId = idAzienda;
+            fetch(`/Utenti/GetUtenti`)
+                .then(response => response.json())
+                .then(utenti => {
+                    const lista = document.getElementById('listaUtenti');
+                    lista.innerHTML = '';
+                    utenti.forEach(utente => {
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.value = utente.ID_Utente;
+                        checkbox.id = `utente_${utente.ID_Utente}`;
+                        checkbox.className = 'form-check-input';
+
+                        const label = document.createElement('label');
+                        label.htmlFor = checkbox.id;
+                        label.className = 'form-check-label ms-2';
+                        label.textContent = utente.NomeCompleto;
+
+                        const div = document.createElement('div');
+                        div.className = 'form-check';
+                        div.appendChild(checkbox);
+                        div.appendChild(label);
+
+                        lista.appendChild(div);
+                    });
+
+                    const modal = new bootstrap.Modal(document.getElementById('assegnaUtenteModal'));
+                    modal.show();
+                });
+        }, 300); // tempo sufficiente per far completare l’animazione della chiusura
+    }
+
+
+    function salvaAssegnazioneUtente() {
+        const utentiSelezionati = Array.from(document.querySelectorAll('#listaUtenti input[type="checkbox"]:checked'))
+            .map(c => parseInt(c.value));
+
+        const tipoRelazione = document.getElementById('tipoRelazione').value;
+        const statoRelazione = document.getElementById('statoRelazione').value;
+        const noteRelazione = document.getElementById('noteRelazione').value.trim();
+
+        if (utentiSelezionati.length === 0) {
+            toastr.error('⚠️ Seleziona almeno un utente.');
+            return;
+        }
+
+        Promise.allSettled(utentiSelezionati.map(idUtente => {
+            return fetch('/Utenti/AssegnaUtentiAzienda', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({
+                    idAzienda: aziendaSelezionataId,
+                    idUtente: idUtente,
+                    tipoRelazione: tipoRelazione,
+                    statoRelazione: statoRelazione,
+                    noteRelazione: noteRelazione
+                })
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error(`Errore HTTP: ${response.status}`);
+                    return response.json();
+                })
+                .then(json => ({ idUtente, json }))
+                .catch(error => ({ idUtente, error }));
+        }))
+            .then(results => {
+                let successi = 0;
+                let fallimenti = 0;
+
+                results.forEach(risultato => {
+                    if (risultato.status === 'fulfilled') {
+                        const { idUtente, json, error } = risultato.value;
+
+                        if (error) {
+                            fallimenti++;
+                            console.warn(`❌ Errore fetch utente ${idUtente}:`, error);
+                        } else if (json && json.success) {
+                            successi++;
+                        } else {
+                            fallimenti++;
+                            console.warn(`❌ Errore salvataggio utente ${idUtente}:`, json.message || "Nessun messaggio dal server");
+                        }
+                    } else {
+                        console.error(`❌ Promise rifiutata per un utente:`, risultato.reason);
+                        fallimenti++;
+                    }
+                });
+
+                if (successi > 0) {
+                    toastr.success(`✅ ${successi} utente/i assegnato/i correttamente.`);
+                    setTimeout(() => location.reload(), 1000); // 👈 qui il reload della tabella
+                }
+
+
+                if (fallimenti > 0) {
+                    toastr.error(`❌ ${fallimenti} utente/i non assegnato/i. Guarda console per dettagli.`);
+                }
+            })
+            .catch(err => {
+                console.error('❌ Errore globale Promise.allSettled:', err);
+                toastr.error('Errore generale durante il salvataggio.');
+            });
+    }
+
+    function visualizzaUtentiAssegnati(idAzienda) {
+        aziendaSelezionataId = idAzienda;
+
+        fetch(`/Utenti/VisualizzaUtentiAzienda?idAzienda=${idAzienda}`)
+            .then(r => r.json())
+            .then(utenti => {
+                const contenitore = document.getElementById('tabellaUtentiAssegnati');
+                contenitore.innerHTML = ''; // 🔄 svuota sempre
+
+                if (!utenti || utenti.length === 0) {
+                    contenitore.innerHTML = `<p class='text-muted'>Nessun utente assegnato.</p>`;
+                } else {
+                    let html = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle w-100">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Relazione</th>
+                                    <th>Note</th>
+                                    <th>Inizio</th>
+                                    <th class="text-center">Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                    utenti.forEach(u => {
+                        html += `
+                        <tr>
+                            <td>${u.Nome} ${u.Cognome}</td>
+                            <td>${u.TipoRelazione}</td>
+                            <td>${u.Note || '-'}</td>
+                            <td>${new Date(u.DataInizio).toLocaleDateString("it-IT")}</td>
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-outline-danger" onclick="rimuoviUtenteDaAzienda(${u.ID_Relazione})">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    });
+
+                    html += `</tbody></table></div>`;
+                    contenitore.innerHTML = html;
+                }
+
+                const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('utentiAssegnatiModal'));
+                modal.show();
+            })
+            .catch(err => {
+                console.error("Errore caricamento utenti assegnati:", err);
+                toastr.error("Errore durante il caricamento degli utenti assegnati.");
+            });
+    }
+
+
+
+    function rimuoviUtenteDaAzienda(idRelazione) {
+        Swal.fire({
+            title: 'Conferma',
+            text: 'Vuoi davvero rimuovere questo utente dalla relazione?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sì, rimuovi',
+            cancelButtonText: 'Annulla'
+        }).then(result => {
+            if (result.isConfirmed) {
+                fetch('/Utenti/RimuoviUtenteAzienda', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ idRelazione: idRelazione })
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            toastr.success(res.message);
+
+                            // ✅ Chiude la modale se vuoi
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('visualizzaUtentiAssegnatiModal'));
+                            if (modal) {
+                                modal.hide();
+                            }
+
+                            // ✅ Rimuove il backdrop rimasto (nel caso non venga eliminato da Bootstrap)
+                            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                            document.body.classList.remove('modal-open');
+                            document.body.style = "";
+
+                            // ✅ Ricarica lista aggiornata
+                            visualizzaUtentiAssegnati(aziendaSelezionataId);
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Errore:", err);
+                        toastr.error("Errore durante la rimozione.");
+                    });
+            }
+        });
+    }
+
+
+    function selezionaECaricaDocumenti(idAzienda) {
+        const input = document.getElementById("inputUploadDocumenti");
+
+        input.onchange = async function () {
+            const files = input.files;
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append("files", files[i]);
+            }
+            formData.append("idAzienda", idAzienda);
+
+            const response = await fetch('/Utenti/CaricaDocumentiDiretti', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                toastr.success(result.message);
+                ricalcolaDocumenti(); // 🔄 aggiorna la lista
+            } else {
+                toastr.error(result.message || "Errore durante il caricamento.");
+            }
+
+            input.value = ""; // reset input
+        };
+
+        input.click(); // 👉 apre selettore file
+    }
+
+    // dati bancari
+    function apriModaleDatiBancari() {
+        const idAzienda = document.querySelector('[name="ID_Azienda"]').value;
+        console.log("📦 ID azienda per caricamento dati bancari:", idAzienda);
+
+        const form = document.getElementById("DatiBancariForm");
+        form.reset();
+
+        // Set campi nascosti
+        document.getElementById("ID_Cliente").value = idAzienda || "";
+        document.getElementById("TipoCliente").value = "Azienda";
+
+        if (!idAzienda || idAzienda === "0") {
+            new bootstrap.Modal(document.getElementById('datiBancariModal')).show();
+            return;
+        }
+
+        // Fetch dedicata alle aziende
+        fetch(`/Utenti/GetDatiBancariAzienda?idAzienda=${idAzienda}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("📥 Dati bancari ricevuti:", data);
+
+                if (!data || data.success === false) {
+                    toastr.warning("Nessun dato bancario trovato.");
+                    return;
+                }
+
+                form.querySelector('[name="NomeBanca"]').value = data.NomeBanca || '';
+                form.querySelector('[name="IBAN"]').value = data.IBAN || '';
+                form.querySelector('[name="Intestatario"]').value = data.IntestatarioConto || '';
+                form.querySelector('[name="BIC_SWIFT"]').value = data.BIC || '';
+                form.querySelector('[name="Note"]').value = data.Note || '';
+            })
+            .catch(err => {
+                console.error("❌ Errore nel recupero dei dati bancari:", err);
+                toastr.error("Errore nel caricamento dei dati bancari.");
+            });
+
+        new bootstrap.Modal(document.getElementById('datiBancariModal')).show();
+    }
+
+
+    function salvaDatiBancari() {
+        const form = document.getElementById("DatiBancariForm");
+        const formData = new FormData(form);
+        const idCliente = formData.get("ID_Cliente");
+
+        if (!idCliente || idCliente === "0") {
+            // Siamo in creazione, salviamo temporaneamente
+            datiBancariTemporanei = {
+                NomeBanca: formData.get("NomeBanca"),
+                IBAN: formData.get("IBAN"),
+                Intestatario: formData.get("Intestatario"),
+                BIC_SWIFT: formData.get("BIC_SWIFT"),
+                Note: formData.get("Note"),
+                TipoCliente: "Azienda"
+            };
+
+            document.getElementById("badgeDatiBancari").classList.remove("d-none");
+            toastr.success("Dati bancari salvati in attesa creazione.");
+            bootstrap.Modal.getInstance(document.getElementById('datiBancariModal')).hide();
+            return;
+        }
+
+        // Siamo in modifica → invio al server
+        fetch('/Utenti/SalvaDatiBancari', {
+            method: 'POST',
+            body: formData
+        })
+            .then(async r => {
+                const contentType = r.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                    return r.json();
+                } else {
+                    const text = await r.text();
+                    throw new Error(text);
+                }
+            })
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById('datiBancariModal')).hide();
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(async err => {
+                // 🐞 Log dettagliato del contenuto dell'errore (anche se è HTML o testo puro)
+                console.error("❌ Errore dettagliato dal server:", err);
+                toastr.error("Errore dettagliato dal server: " + err.message);
+            });
+    }
+
+
+    function caricaCittaENazioni() {
+        fetch('/Utenti/GetCittaENazioni')
+            .then(response => response.json())
+            .then(data => {
+                const selectCitta = document.getElementById('Citta');
+                const selectNazione = document.getElementById('Nazione');
+
+                selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                data.nazioni.forEach(n => {
+                    const opt = document.createElement("option");
+                    opt.value = n.ID_BPCittaDN;
+                    opt.textContent = n.NameNazione;
+                    selectNazione.appendChild(opt);
+
+                    if (n.NameNazione.toLowerCase() === "italia") {
+                        selectNazione.value = n.ID_BPCittaDN;
+                    }
+                });
+
+                data.citta.forEach(c => {
+                    const opt = document.createElement("option");
+                    opt.value = c.ID_BPCitta;
+                    opt.textContent = c.NameLocalita;
+                    selectCitta.appendChild(opt);
+
+                    if (c.NameLocalita.toLowerCase() === "roma") {
+                        selectCitta.value = c.ID_BPCitta;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error("❌ Errore nel caricamento di città e nazioni:", error);
+            });
+    }
+
+    // tooltip
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+            new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+
+
+
+
+</script>
+

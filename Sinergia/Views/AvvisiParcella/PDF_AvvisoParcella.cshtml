@@ -1,0 +1,73 @@
+﻿@model List<Sinergia.Models.AvvisoParcellaViewModel>
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Report Avvisi Parcella</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 4px 6px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h2>Report Avvisi Parcella</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Pratica</th>
+                <th>Data Avviso</th>
+                <th>Importo</th>
+                <th>Contributo Integrativo %</th>
+                <th>IVA %</th>
+                <th>Totale Avviso Parcella</th>
+                <th>Stato</th>
+                <th>Metodo Pagamento</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var a in Model)
+            {
+                <tr>
+                    <td>@a.ID_AvvisoParcelle</td>
+                    <td>@a.NomePratica</td>
+                    <td>@(a.DataAvviso.HasValue ? a.DataAvviso.Value.ToString("dd/MM/yyyy") : "-")</td>
+                    <td>@(a.Importo.HasValue ? a.Importo.Value.ToString("N2") : "0,00")</td>
+                    <td>@(a.ContributoIntegrativoImporto?.ToString("N2") ?? "0")%</td>
+                    <td>@(a.ImportoIVA?.ToString("N2") ?? "0")%</td>
+                    <td>@(a.TotaleAvvisoParcella.HasValue ? a.TotaleAvvisoParcella.Value.ToString("N2") : "0,00")</td>
+                    <td>@a.Stato</td>
+                    <td>@a.MetodoPagamento</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>

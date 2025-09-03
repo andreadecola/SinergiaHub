@@ -1,0 +1,116 @@
+﻿@model List<Sinergia.Models.GiornaleCreditoDebitoViewModel>
+
+@{
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+    bool puoAggiungere = permessiUtente?.PuòAggiungere == true;
+    bool puoModificare = permessiUtente?.PuòModificare == true;
+    bool puoEliminare = permessiUtente?.PuòEliminare == true;
+    bool mostraAzioni = puoAggiungere || puoModificare || puoEliminare;
+}
+
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" onclick="apriNuovaFattura()">
+            Nuova Fattura
+        </button>
+    }
+</div>
+
+<div class="table-responsive">
+    <table class="table table-bordered table-striped">
+        <thead>
+            <tr>
+                <th>Numero</th>
+                <th>Cliente</th>
+                <th>Tipo Cliente</th>
+                <th>Data</th>
+                <th>Importo</th>
+                <th>IVA</th>
+                <th>Causale IVA</th>
+                @if (mostraAzioni)
+                {
+                    <th class="text-center">Azioni</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var fattura in Model)
+            {
+                <tr>
+                    <td>@fattura.NumeroFattura</td>
+                    <td>@fattura.NomeCliente</td>
+                    <td>@fattura.TipoCliente</td>
+                    <td>@fattura.DataFattura?.ToString("dd/MM/yyyy")</td>
+                    <td>@fattura.Importo.ToString("C2")</td>
+                    <td>@fattura.AliquotaIva%</td>
+                    <td>@fattura.CausaleIva</td>
+                    @if (mostraAzioni)
+                    {
+                        <td class="text-center">
+                            <div class="d-flex gap-1 justify-content-center">
+                                @if (puoModificare)
+                                {
+                                    <button class="btn btn-warning btn-sm" onclick="apriModificaFattura(@fattura.ID_Operazione)"><i class="fa fa-pencil"></i></button>
+                                }
+                                @if (puoEliminare)
+                                {
+                                    <button class="btn btn-danger btn-sm" onclick="apriEliminaFattura(@fattura.ID_Operazione)"><i class="fa fa-trash"></i></button>
+                                }
+                                <a href="@Url.Action("DettaglioPratica", "Pratiche", new { id = fattura.ID_Operazione })" class="btn btn-info btn-sm">
+                                    <i class="fa fa-eye"></i>
+                                </a>
+                            </div>
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Modale Nuova/Modifica Fattura -->
+<div class="modal fade" id="fatturaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="FatturaForm">
+                <div class="modal-header">
+                    <h5 class="modal-title">Gestione Fattura</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Operazione" />
+                    <div class="mb-2">
+                        <label>Numero Fattura</label>
+                        <input type="text" name="NumeroFattura" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="mb-2">
+                        <label>Importo</label>
+                        <input type="number" name="Importo" step="0.01" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="mb-2">
+                        <label>Aliquota IVA (%)</label>
+                        <input type="number" name="AliquotaIva" step="0.1" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="mb-2">
+                        <label>Causale IVA</label>
+                        <input type="text" name="CausaleIva" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label>Data Fattura</label>
+                        <input type="date" name="DataFattura" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="mb-2">
+                        <label>Note</label>
+                        <textarea name="NoteFattura" class="form-control form-control-sm"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-primary">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+

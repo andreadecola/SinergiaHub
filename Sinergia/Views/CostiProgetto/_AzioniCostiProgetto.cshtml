@@ -1,0 +1,24 @@
+﻿@model Sinergia.Models.AnagraficaCostiPraticaViewModel
+@{
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+}
+
+<div class="d-flex justify-content-center gap-1">
+    @if (permessiUtente?.Permessi.Any(p => p.Modifica) == true)
+    {
+        <button class="btn btn-warning btn-sm"
+                title="Modifica"
+                onclick="apriModificaCostoProgetto(@Model.ID_AnagraficaCosto)">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+    @if (permessiUtente?.Permessi.Any(p => p.Elimina) == true)
+    {
+        <button class="btn btn-danger btn-sm"
+                title="Elimina"
+                onclick="confermaEliminazioneCostoProgetto(@Model.ID_AnagraficaCosto)">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+</div>
+

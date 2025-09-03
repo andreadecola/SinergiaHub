@@ -1,0 +1,42 @@
+﻿@model Sinergia.Models.PermessiViewModel
+
+<div class="container-fluid">
+    <form id="permessiForm">
+        <input type="hidden" name="ID_Utente" value="@Model.ID_Utente" />
+
+        <div class="row">
+            <div class="col-12">
+                <h5 class="fw-bold">Assegna i permessi per @Model.NomeUtente</h5>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered text-center align-middle">
+                        <thead>
+                            <tr>
+                                <th>Menu</th>
+                                <th>Vedi</th>
+                                <th>Aggiungi</th>
+                                <th>Modifica</th>
+                                <th>Elimina</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var permesso in Model.Permessi)
+                            {
+                                <tr>
+                                    <td>
+                                        @permesso.NomeMenu
+                                        <input type="hidden" class="id-menu" value="@permesso.ID_Menu" />
+                                    </td>
+                                    <td><input type="checkbox" class="vedi" @(permesso.Vedi ? "checked" : "") /></td>
+                                    <td><input type="checkbox" class="aggiungi" @(permesso.Aggiungi ? "checked" : "") /></td>
+                                    <td><input type="checkbox" class="modifica" @(permesso.Modifica ? "checked" : "") /></td>
+                                    <td><input type="checkbox" class="elimina" @(permesso.Elimina ? "checked" : "") /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>

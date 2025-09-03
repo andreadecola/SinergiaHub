@@ -1,0 +1,30 @@
+﻿@model Sinergia.Models.TemplateIncaricoViewModel
+
+<div class="d-flex gap-1 justify-content-center">
+    <!-- 👁️ Visualizza -->
+    <button class="btn btn-info btn-sm"
+            onclick="visualizzaTemplateDaDb(@Model.IDTemplateIncarichi, '@Model.NomeTemplate')"
+            title="Visualizza Template">
+        <i class="fa fa-eye"></i>
+    </button>
+
+    <!-- ✏️ Modifica -->
+    @if (Model.PuoModificare)
+    {
+        <button class="btn btn-warning btn-sm"
+                onclick="apriModificaTemplate(@Model.IDTemplateIncarichi)"
+                title="Modifica Template">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+
+    <!-- 🗑️ Elimina -->
+    @if (Model.PuoEliminare)
+    {
+        <button class="btn btn-danger btn-sm"
+                onclick="confermaEliminazioneTemplate(@Model.IDTemplateIncarichi)"
+                title="Elimina Template">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+</div>

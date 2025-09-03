@@ -1,0 +1,42 @@
+﻿@model Sinergia.Models.UtenteViewModel
+
+<div class="d-flex flex-wrap justify-content-start align-items-center gap-2">
+    @if (Model.PuoModificare)
+    {
+        <button class="btn btn-warning btn-sm fa fa-pencil" title="Modifica"
+                onclick="apriModaleModificaUtente(@Model.ID_Utente)">
+        </button>
+    }
+
+    @if (Model.PuoEliminare)
+    {
+        <button class="btn btn-danger btn-sm fa fa-trash" title="Elimina"
+                onclick="OpenDeleteUtente(@Model.ID_Utente)">
+        </button>
+    }
+
+    @* Solo chi può modificare l'utente vede questi *@
+    @if (Model.PuoModificare)
+    {
+        if (Model.Stato?.ToLower() == "disattivato")
+        {
+            <button class="btn btn-outline-success btn-sm" onclick="ApriPermessi(@Model.ID_Utente)">
+                Attivare
+            </button>
+        }
+        else if (Model.Stato?.ToLower() == "attivo")
+        {
+            <button class="btn btn-outline-secondary btn-sm" onclick="DisattivaPermessi(@Model.ID_Utente)">
+                Disattivare
+            </button>
+        }
+    }
+
+    @if (Model.PuoModificare && Model.Stato?.ToLower() == "attivo")
+    {
+        <button class="btn btn-outline-primary btn-sm" onclick="ApriPermessi(@Model.ID_Utente)">
+            Permessi
+        </button>
+    }
+</div>
+

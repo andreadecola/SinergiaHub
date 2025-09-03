@@ -1,0 +1,100 @@
+﻿@model List<Sinergia.Models.GenerazioneCostiViewModel>
+
+@{
+    Layout = null; // niente layout, PDF standalone
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Report Generazione Costi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            margin: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 4px 6px;
+            text-align: left;
+        }
+
+        th {
+            background: #f2f2f2;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h2>Report Generazione Costi</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Categoria</th>
+                <th>Descrizione</th>
+                <th>Importo</th>
+                <th>Periodicità</th>
+                <th>Data Registrazione</th>
+                <th>Origine</th>
+                <th>Stato</th>
+                <th>Professionista</th>
+                <th>Team</th>
+                <th>Pratica</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model != null && Model.Any())
+            {
+                foreach (var c in Model)
+                {
+                    <tr>
+                        <td class="text-center">@c.ID_GenerazioneCosto</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.Categoria) ? "-" : c.Categoria)</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.Descrizione) ? "-" : c.Descrizione)</td>
+                        <td class="text-center">@(c.Importo.HasValue ? c.Importo.Value.ToString("N2") : "0,00")</td>
+                        <td class="text-center">@(!string.IsNullOrWhiteSpace(c.Periodicita) ? c.Periodicita : "-")</td>
+                        <td class="text-center">@(c.DataRegistrazione.HasValue ? c.DataRegistrazione.Value.ToString("dd/MM/yyyy") : "-")</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.Origine) ? "-" : c.Origine)</td>
+                        <td class="text-center">@c.Stato</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.NomeProfessionista) ? "-" : c.NomeProfessionista)</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.Team) ? "-" : c.Team)</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.TitoloPratica) ? "-" : c.TitoloPratica)</td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="11" class="text-center">Nessun dato disponibile</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>
+

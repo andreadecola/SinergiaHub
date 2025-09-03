@@ -1,0 +1,427 @@
+﻿@model Sinergia.Models.LoginViewModel
+@{
+    Layout = null;
+    
+    ViewBag.Title = "Login - Sinergia";
+}
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <!-- PWA -->
+    <link rel="manifest" href="/PWA/manifest.json" />
+    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logo col PNG.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#003366">
+    <meta charset="utf-8" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewBag.Title</title>
+    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logosinergia 192x192.png" />
+    <link rel="stylesheet" href="~/Content/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+
+
+    <style>
+    .logo-desktop {
+        max-width: 100%;
+        height: auto;
+        max-height: 300px;
+        object-fit: contain;
+    }
+
+    .logo-mobile {
+        max-width: 150px;
+        height: auto;
+        object-fit: contain;
+    }
+
+    @@media (min-width: 768px) {
+        .login-wrapper {
+            min-height: 100vh;
+            background-color: #ffffff;
+        }
+    }
+    </style>
+
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row min-vh-100 d-flex align-items-center justify-content-center login-wrapper">
+
+            <!-- SINISTRA: TESTO DESCRITTIVO -->
+            <div class="col-md-3 text-left p-4 d-none d-md-block">
+                <h5 class="text-primary font-weight-bold">Soluzioni avanzate per Professionisti</h5>
+                <p>Sinergia è la soluzione gestionale per pratiche, clienti, ordini, permessi e finanze.</p>
+                <p>Ideale per collaboratori, partner e professionisti.</p>
+                <p>Accesso veloce, flessibilità, controllo completo.</p>
+            </div>
+
+            <div class="col-md-3 text-center d-none d-md-block">
+                <img src="@Url.Content("~/Content/img/Icons/Logo col PNG.png")" alt="Logo Sinergia" class="logo-desktop" />
+            </div>
+
+            <!-- DESTRA: FORM -->
+            <div class="col-md-3 ">
+                <div class="login-box border rounded shadow-sm p-3 bg-white ">
+                    @using (Html.BeginForm("Index", "Account", FormMethod.Post))
+                    {
+                        <h4 class="mb-4">Accedi a Sinergia</h4>
+                        //messaggio in caso di dati sbagliati
+                        @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+
+
+                        <div class="form-group">
+                            @Html.LabelFor(m => m.Nome, "Utente")
+                            @Html.TextBoxFor(m => m.Nome, new { @class = "form-control", placeholder = "a.rossi", id = "nomeUtente" })
+                            @Html.ValidationMessageFor(m => m.Nome, "", new { @class = "text-danger" })
+                        </div>
+
+                        <div class="alert alert-info p-2 mt-2" role="alert" style="font-size: 0.9rem;">
+                            <strong>Primo accesso?</strong><br />
+                            Inserisci il tuo <strong>nome utente</strong>, clicca su <em>Visualizza Password Temporanea</em>, poi su <em>Inserisci la tua password</em> e <strong>inserisci una nuova password</strong> nella finestra che si apre. Infine clicca su <strong> Salva e Accedi</strong>.
+                        </div>
+
+                        <div class="form-group mt-2">
+                            @Html.LabelFor(m => m.Password)
+                            @Html.PasswordFor(m => m.Password, new { @class = "form-control", placeholder = "Password", id = "passwordLogin" })
+                            @Html.ValidationMessageFor(m => m.Password, "", new { @class = "text-danger" })
+
+                            <!-- Bottone per password temporanea -->
+                            <button id="btnVisualizzaPassword" type="button" class="btn btn-sm mt-2" onclick="visualizzaPasswordTemporanea()">
+                                Visualizza Password Temporanea
+                            </button>
+                        </div>
+                        <div class="form-group mt-3 d-flex flex-column align-items-end">
+                            <button type="button" class="btn btn-link" onclick="avviaRecuperoPassword()">Hai dimenticato la password?</button>
+                            <br />
+                            <button type="submit" class="btn btn-primary btn-small" id="btnAccedi" disabled>Accedi</button>
+                        </div>
+
+
+                    }
+
+                    <!-- LOGO MOBILE SOLO SE VISIBILE -->
+                    <div class="logo-mobile-only text-center mt-4 d-block d-md-none">
+                        <img src="~/Content/img/Icons/Logo col PNG.png" class="logo-mobile" alt="Logo Sinergia" />
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODALE Cambio Password Temporanea -->
+    <div class="modal fade" id="cambioPasswordModal" tabindex="-1" aria-labelledby="cambioPasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="cambioPasswordModalLabel">Imposta Nuova Password</h5>
+                </div>
+                <div class="modal-body">
+                    <input type="password" id="nuovaPasswordInput" class="form-control" placeholder="Nuova Password" required />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm" onclick="salvaNuovaPassword()">Salva e Accedi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALE Recupero Password -->
+    <div class="modal fade" id="recuperoPasswordModal" tabindex="-1" aria-labelledby="recuperoPasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="recuperoPasswordModalLabel">Recupera Password</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="password" id="nuovaPasswordInputRecupero" class="form-control" placeholder="Inserisci nuova password" required />
+                </div>
+                <div class="modal-footer d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-success" onclick="salvaPasswordRecupero()">Salva Password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+
+    <script>
+        let passwordTemporaneaCaricata = false;
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/PWA/sw.js')
+                    .then(function (reg) {
+                        console.log('✅ Service Worker registrato con scope:', reg.scope);
+                    }).catch(function (err) {
+                        console.warn('❌ Registrazione Service Worker fallita:', err);
+                    });
+            });
+        }
+
+        // funzione visualizza password temporanea
+        function visualizzaPasswordTemporanea() {
+            var inputNome = document.getElementById("nomeUtente");
+            var inputPassword = document.getElementById("passwordLogin");
+            var bottoneVisualizza = document.getElementById("btnVisualizzaPassword");
+            var btnAccedi = document.getElementById("btnAccedi");
+
+            if (!inputNome || !inputPassword) {
+                toastr.error("Campi richiesti non trovati.");
+                return;
+            }
+
+            var nomeUtente = inputNome.value.trim();
+            if (nomeUtente === "") {
+                toastr.warning("Inserisci il nome utente.");
+                return;
+            }
+
+            fetch(`/Account/VisualizzaPasswordTemporanea?nome=${encodeURIComponent(nomeUtente)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.password) {
+                        inputPassword.value = data.password;
+                        toastr.success("✅ Password temporanea caricata!");
+
+                        // ✅ Aggiorna bottone visualizza
+                        bottoneVisualizza.disabled = true;
+                        bottoneVisualizza.innerText = "Password caricata";
+                        bottoneVisualizza.classList.add("btn-success");
+
+                        // ✅ Cambia bottone accedi → inserisci password
+                        btnAccedi.innerText = "Inserisci la tua password";
+                        btnAccedi.type = "button"; // evita submit
+                        btnAccedi.onclick = function (e) {
+                            e.preventDefault();
+                            mostraModaleCambioPassword();
+                        };
+                    } else {
+                        toastr.warning(data.message || "Password temporanea non trovata.");
+                        resetBottoneAccedi();
+                    }
+                })
+                .catch(error => {
+                    console.error("Errore fetch:", error);
+                    toastr.error("Errore durante il recupero della password.");
+                    resetBottoneAccedi();
+                });
+        }
+
+
+        document.addEventListener("DOMContentLoaded", function () {
+            var inputNome = document.getElementById("nomeUtente");
+            var bottoneVisualizza = document.getElementById("btnVisualizzaPassword");
+
+            // Disabilita il bottone all'avvio
+            bottoneVisualizza.disabled = true;
+
+            // Rimuove il bordo via JS
+            bottoneVisualizza.style.border = "none";
+            bottoneVisualizza.style.boxShadow = "none";
+
+            inputNome.addEventListener("input", function () {
+                var nomeUtente = inputNome.value.trim();
+                bottoneVisualizza.disabled = nomeUtente === "";
+            });
+        });
+
+
+        // funzione che riattiva il bottone se l'utente cambia nome
+        function resetBottonePassword() {
+            var bottoneVisualizza = document.getElementById("btnVisualizzaPassword");
+            if (bottoneVisualizza) {
+                bottoneVisualizza.disabled = false;
+                bottoneVisualizza.innerText = "Visualizza Password Temporanea";
+                bottoneVisualizza.classList.remove("btn-success");
+            }
+        }
+
+        // evento: ogni volta che scrivo nel nome utente
+        document.addEventListener("DOMContentLoaded", function () {
+            var inputNome = document.getElementById("nomeUtente");
+            if (inputNome) {
+                inputNome.addEventListener("input", resetBottonePassword);
+            }
+        });
+
+
+        // Funzione: Mostra la modale di cambio password
+        function mostraModaleCambioPassword() {
+            var modal = new bootstrap.Modal(document.getElementById('cambioPasswordModal'));
+            modal.show();
+        }
+        function salvaNuovaPassword() {
+            var nuovaPassword = document.getElementById('nuovaPasswordInput').value;
+
+            if (!nuovaPassword || nuovaPassword.length < 6) {
+                toastr.warning('La password deve essere di almeno 6 caratteri.');
+                return;
+            }
+
+            const formData = new URLSearchParams();
+            formData.append('nuovaPassword', nuovaPassword);
+
+            fetch('/Account/ImpostaPassword', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                credentials: 'include', // 👈 garantisce l’invio dei cookie di sessione
+                body: formData.toString()
+            })
+
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = data.redirectUrl;
+                    } else {
+                        toastr.error(data.message || 'Errore durante il cambio password.');
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                    toastr.error('Errore server durante il cambio password.');
+                });
+        }
+
+
+        // Funzione: Salva Password di Recupero
+        function salvaPasswordRecupero() {
+            var nuovaPassword = document.getElementById('nuovaPasswordInputRecupero').value;
+
+            if (!nuovaPassword || nuovaPassword.length < 6) {
+                toastr.warning('La nuova password deve contenere almeno 6 caratteri.');
+                return;
+            }
+
+            fetch('/Account/RecuperaPassword', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'nuovaPassword=' + encodeURIComponent(nuovaPassword)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        toastr.success('✅ Password aggiornata correttamente!');
+                        setTimeout(function () {
+                            window.location.href = data.redirectUrl;
+                        }, 1000);
+                    } else {
+                        toastr.error(data.message || 'Errore durante il cambio password.');
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                    toastr.error('Errore server durante il cambio password.');
+                });
+        }
+
+
+        // Funzione: Avvia Recupero Password
+        var inRecuperoPassword = false; // 👈 variabile globale per bloccare doppio click
+
+        function avviaRecuperoPassword() {
+            if (inRecuperoPassword) return;
+
+            var inputNome = document.getElementById("nomeUtente");
+            if (!inputNome) {
+                toastr.options.positionClass = 'toast-top-right'; // 👈 sempre prima
+                toastr.error("Campo Nome Account non trovato.");
+                return;
+            }
+
+            var nomeAccount = inputNome.value.trim();
+            if (nomeAccount === "") {
+                toastr.options.positionClass = 'toast-top-right'; // 👈 sempre prima
+                toastr.warning("Inserisci il Nome Account prima di recuperare la password.");
+                return;
+            }
+
+            inRecuperoPassword = true;
+
+            fetch('/Account/CreaPasswordTemporanea', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'nomeAccount=' + encodeURIComponent(nomeAccount)
+            })
+                .then(response => {
+                    inRecuperoPassword = false;
+                    if (!response.ok) {
+                        throw new Error('Risposta non valida dal server.');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    toastr.options.positionClass = 'toast-top-right'; // 👈 sempre prima
+                    if (data.success) {
+                        toastr.success('Procedi ora a creare la nuova password!');
+                        mostraModaleRecuperoPassword();
+                    } else {
+                        toastr.warning(data.message || 'Errore nel recupero password.');
+                    }
+                })
+                .catch(error => {
+                    inRecuperoPassword = false;
+                    console.error("Errore fetch:", error);
+                    toastr.options.positionClass = 'toast-top-right'; // 👈 sempre prima
+                    toastr.error('Errore di connessione o server.');
+                });
+        }
+
+        // Funzione: Mostra la modale di Recupero Password
+        function mostraModaleRecuperoPassword() {
+            var modalElement = document.getElementById('recuperoPasswordModal');
+            var modal = new bootstrap.Modal(modalElement);
+
+            // Reset scroll in alto
+            window.scrollTo(0, 0);
+
+            // Aggiungi una piccola pausa per sicurezza e poi mostra
+            setTimeout(() => {
+                modal.show();
+            }, 100);
+        }
+
+        // disabilita il tasto accedi fino alla scrittura sul nome utente
+        document.addEventListener("DOMContentLoaded", function () {
+            const inputUtente = document.getElementById("nomeUtente");
+            const btnAccedi = document.getElementById("btnAccedi");
+
+            function aggiornaStatoBottone() {
+                if (inputUtente.value.trim() === "") {
+                    btnAccedi.disabled = true;
+                } else {
+                    btnAccedi.disabled = false;
+                }
+            }
+
+            inputUtente.addEventListener("input", aggiornaStatoBottone);
+            aggiornaStatoBottone(); // stato iniziale
+        });
+
+
+    </script>
+
+    @if (TempData["PasswordTemporanea"] != null && (bool)TempData["PasswordTemporanea"] == true)
+    {
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                mostraModaleCambioPassword();
+            });
+        </script>
+    }
+
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script> <!-- 👈 aggiungi questo -->
+    <script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.js"></script>
+
+
+
+
+</body>
+</html>

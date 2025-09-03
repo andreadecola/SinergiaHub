@@ -1,0 +1,78 @@
+﻿@model List<Sinergia.Models.ClienteEsternoViewModel>
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Report Clienti</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 4px 6px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Elenco Clienti</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Cognome</th>
+                <th>Ragione Sociale</th>
+                <th>Cod. Fiscale</th>
+                <th>P.IVA</th>
+                <th>Email</th>
+                <th>Telefono</th>
+                <th>Città</th>
+                <th>Nazione</th>
+                <th>Stato</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in Model)
+            {
+                <tr>
+                    <td>@c.ID_Cliente</td>
+                    <td>@c.Nome</td>
+                    <td>@c.Cognome</td>
+                    <td class="text-center">@(string.IsNullOrWhiteSpace(c.RagioneSociale) ? "-" : c.RagioneSociale)</td>
+                    <td>@c.CodiceFiscale</td>
+                    <td>@c.PIVA</td>
+                    <td>@c.Email</td>
+                    <td>@c.Telefono</td>
+                    <td>@c.NomeCitta</td>
+                    <td>@c.NomeNazione</td>
+                    <td>@c.Stato</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>
+

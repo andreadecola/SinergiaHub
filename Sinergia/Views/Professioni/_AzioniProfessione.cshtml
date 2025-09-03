@@ -1,0 +1,23 @@
+﻿@model Sinergia.Models.ProfessioneViewModel
+@{
+    // Prende i permessi o da ViewBag (impostati nel controller) o da ViewData se li passi esplicitamente
+    var puoModificare = (ViewBag.PuoModificare as bool?) == true || (ViewData["PuoModificare"] as bool?) == true;
+    var puoEliminare = (ViewBag.PuoEliminare as bool?) == true || (ViewData["PuoEliminare"] as bool?) == true;
+}
+
+<div class="d-flex flex-wrap justify-content-center align-items-center gap-2">
+    @if (puoModificare)
+    {
+        <button class="btn btn-warning btn-sm fa fa-pencil" title="Modifica"
+                onclick="apriModificaProfessione(@Model.ProfessioniID)">
+        </button>
+    }
+
+    @if (puoEliminare)
+    {
+        <button class="btn btn-danger btn-sm fa fa-trash" title="Elimina"
+                onclick="confermaEliminazioneProfessione(@Model.ProfessioniID)">
+        </button>
+    }
+</div>
+

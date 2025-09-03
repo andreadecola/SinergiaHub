@@ -1,0 +1,32 @@
+﻿@{
+    ViewBag.Title = "Test Impersonificazione";
+}
+
+<div class="container mt-4">
+    <h3>🧪 Test Impersonificazione</h3>
+    <p>Verifica se l'amministratore sta impersonando un altro utente.</p>
+
+    <ul class="list-group">
+        <li class="list-group-item">
+            <strong>Utente loggato:</strong> @ViewBag.NomeLoggato<br />
+            <small class="text-muted">ID = @ViewBag.IDLoggato</small>
+        </li>
+        <li class="list-group-item">
+            <strong>Utente attivo (impersonificato):</strong> @ViewBag.NomeAttivo<br />
+            <small class="text-muted">ID = @ViewBag.IDAttivo</small>
+        </li>
+        <li class="list-group-item">
+            <strong>Session["ID_UtenteImpers"]:</strong> @Session["ID_UtenteImpers"]
+        </li>
+        <li class="list-group-item">
+            <strong>Session["ID_ClienteSelezionato"]:</strong> @Session["ID_ClienteSelezionato"]
+        </li>
+    </ul>
+
+    @if (Session["ID_UtenteImpers"] != null)
+    {
+        <form method="post" action="@Url.Action("TerminaImpersonificazione", "Home")" class="mt-3">
+            <button type="submit" class="btn btn-warning">🔁 Torna ad Admin</button>
+        </form>
+    }
+</div>

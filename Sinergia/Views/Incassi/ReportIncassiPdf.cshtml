@@ -1,0 +1,67 @@
+﻿@model List<Sinergia.Models.IncassoViewModel>
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Report Incassi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            margin: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Report Incassi</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Pratica</th>
+                <th>Data</th>
+                <th>Importo</th>
+                <th>Metodo</th>
+                <th>Plafond</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var i in Model)
+            {
+                <tr>
+                    <td>@i.NomePratica</td>
+                    <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
+                    <td>@i.Importo.ToString("N2") €</td>
+                    <td>@i.MetodoPagamento</td>
+                    <td>@(i.VersaInPlafond == true ? "SI" : "NO")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>

@@ -1,0 +1,639 @@
+﻿@model List<Sinergia.Models.FinanziamentiProfessionistiViewModel>
+@{
+    var puoAggiungere = ViewBag.PuoAggiungere == true;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+    bool mostraAzioni = puoAggiungere || Model.Any();
+    var professionisti = ViewBag.Professionisti as List<SelectListItem> ?? new List<SelectListItem>();
+
+}
+
+
+@section styles {
+    <style>
+        #plafondTable th, #plafondTable td {
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+    </style>
+}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliPlafondTable"
+     class="d-flex flex-wrap align-items-center gap-1 mb-2"
+     data-mostra-pagamenti="@ViewBag.MostraPagamenti">
+</div>
+
+<!-- ℹ️ Legenda -->
+<div class="alert alert-info py-2 px-3 mb-3">
+    <strong>Legenda:</strong>
+    <ul class="mb-0 small">
+        <li><strong>💰 Finanziamento (versamento):</strong> importo versato dal professionista per alimentare il proprio plafond.</li>
+        <li><strong>🧾 Costo Personale (spesa):</strong> spesa sostenuta dal professionista, che verrà scalata dal plafond disponibile.</li>
+    </ul>
+</div>
+
+<!-- ➕ Pulsanti aggiunta -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-success btn-sm mx-2" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"
+                onclick="apriNuovoFinanziamento()"
+                title="Registra un versamento effettuato dal professionista per aumentare il plafond."
+                data-bs-toggle="tooltip">
+            <i class="fa fa-piggy-bank me-1"></i> Finanziamento (versamento)
+        </button>
+
+        <button class="btn btn-outline-danger btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"
+                onclick="apriModaleCostoPersonale()"
+                title="Registra una spesa personale sostenuta dal professionista. Sarà scalata dal plafond disponibile.">
+            <i class="fa fa-receipt me-1"></i> Costo Personale (spesa)
+        </button>
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered" id="plafondTable">
+            <thead>
+                <tr>
+                    <th>Professionista</th>
+                    <th>Tipo Plafond</th>
+                    <th>Importo</th>
+                    <th>Data Versamento</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-center">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Model)
+                {
+                    <tr data-id="@p.ID_Finanziamento">
+                        <td>@p.NomeProfessionista</td>
+                        <td>@p.TipoPlafond</td>
+                        <td>@p.Importo.ToString("N2")</td>
+                        <td width="200px">@(p.DataVersamento?.ToString("yyyy-MM-dd") ?? "")</td>
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial("~/Views/Plafond/_AzioniPlafond.cshtml", p)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var p in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-plafond" data-id="@p.ID_Finanziamento">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">@p.NomeProfessionista</span>
+                <span class="badge bg-secondary">@p.TipoPlafond</span>
+            </div>
+            <div class="small text-muted"><strong>Importo:</strong> @p.Importo.ToString("N2")</div>
+            <div class="small text-muted"><strong>Data:</strong> @(p.DataVersamento?.ToString("dd/MM/yyyy") ?? "-")</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("~/Views/Plafond/_AzioniPlafond.cshtml", p)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazionePlafondTable" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+<!-- 📊 Totale -->
+@{
+    decimal totalePlafond = ViewBag.TotalePlafond ?? 0m;
+    var colore = totalePlafond >= 0 ? "text-success" : "text-danger";
+}
+<div class="d-flex justify-content-end mt-3">
+    <div class="fw-bold text-end @colore">
+        Totale Plafond: @totalePlafond.ToString("N2") €
+    </div>
+</div>
+
+
+@* nel caso vuoi fare filtro professionista per totale plafond ci lavoreremo dopo  *@
+
+<!-- 🔽 Modale Creazione/Modifica Finanziamento -->
+<div class="modal fade" id="finanziamentoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form id="finanziamentoForm">
+            <div class="modal-content">
+                <div class="modal-header text-black">
+                    <h5 class="modal-title" id="finanziamentoModalLabel">Nuovo Finanziamento</h5>
+                    <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Finanziamento" />
+
+                    <div class="mb-3">
+                        <label>Professionista</label>
+                        <select class="form-select form-select-sm" name="ID_Professionista" required>
+                            <option value="">-- Seleziona --</option>
+                            @foreach (var prof in professionisti)
+                            {
+                                <option value="@prof.Value">@prof.Text</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label>Importo</label>
+                        <input type="number" name="Importo" step="0.01" class="form-control form-control-sm" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label>Data Versamento</label>
+                        <input type="date" name="DataVersamento" class="form-control form-control-sm" required />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 🗑️ Modale Conferma Eliminazione Finanziamento -->
+<div class="modal fade" id="eliminaFinanziamentoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questo finanziamento dal plafond?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneFinanziamento">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 🗑️ Modale Conferma Eliminazione Versamento Plafond -->
+<div class="modal fade" id="eliminaVersamentoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questo incasso dal plafond del professionista?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneVersamento">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 🗑️ Modale Conferma Eliminazione Costo Personale -->
+<div class="modal fade" id="eliminaCostoPersonaleModal" tabindex="-1" aria-labelledby="eliminaCostoPersonaleLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="eliminaCostoPersonaleLabel">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questo <strong>costo personale</strong> dal plafond del professionista?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneCostoPersonale">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@* Modale costo personale *@
+<div class="modal fade" id="modalCostoPersonale" tabindex="-1" aria-labelledby="modalCostoPersonaleLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="formCostoPersonale">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalCostoPersonaleLabel">Nuovo Costo Personale</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label>Plafond disponibile (€)</label>
+                        <input type="text" id="plafondDisponibileInput" class="form-control" readonly />
+                    </div>
+                    <div class="mb-2">
+                        <label>Descrizione</label>
+                        <input type="text" name="descrizione" class="form-control" maxlength="200" required />
+                    </div>
+                    <div class="mb-2">
+                        <label>Importo (€)</label>
+                        <input type="number" name="importo" step="0.01" min="0" class="form-control" required />
+                    </div>
+                    <div class="mb-2">
+                        <label>Data del Costo</label>
+                        <input type="date" name="dataCosto" class="form-control" required />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    let idFinanziamentoDaEliminare = 0;
+
+    function apriNuovoFinanziamento() {
+        const form = document.getElementById("finanziamentoForm");
+        form.reset();
+        form.querySelector('[name="ID_Finanziamento"]').value = 0;
+        document.getElementById("finanziamentoModalLabel").textContent = "Nuovo Finanziamento";
+        new bootstrap.Modal(document.getElementById("finanziamentoModal")).show();
+    }
+
+    function apriModificaFinanziamento(id) {
+        fetch(`/Pratiche/GetFinanziamento?id=${id}`)
+            .then(res => res.json())
+            .then(res => {
+                if (!res.success) return toastr.error("Errore nel caricamento.");
+
+                const f = res.finanziamento;
+                const form = document.getElementById("finanziamentoForm");
+                form.reset();
+
+                form.querySelector('[name="ID_Finanziamento"]').value = f.ID_Finanziamento;
+                form.querySelector('[name="ID_Professionista"]').value = f.ID_Professionista;
+                form.querySelector('[name="Importo"]').value = f.Importo;
+                form.querySelector('[name="DataVersamento"]').value = f.DataVersamento;
+
+                document.getElementById("finanziamentoModalLabel").textContent = "Modifica Finanziamento";
+                new bootstrap.Modal(document.getElementById("finanziamentoModal")).show();
+            });
+    }
+
+    document.getElementById("finanziamentoForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const id = formData.get("ID_Finanziamento");
+        const url = id && parseInt(id) > 0
+            ? '/Pratiche/ModificaFinanziamento'
+            : '/Pratiche/CreaFinanziamento';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("finanziamentoModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    function confermaEliminazioneFinanziamento(id) {
+        idFinanziamentoDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaFinanziamentoModal")).show();
+    }
+
+    document.getElementById("btnConfermaEliminazioneFinanziamento").addEventListener("click", function () {
+        fetch('/Pratiche/EliminaFinanziamento', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idFinanziamentoDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    //salvataggio costo personale professionista
+
+
+    function apriModaleCostoPersonale(idProfessionista) {
+        // ⚠️ Puoi passare l'ID del professionista se necessario
+        fetch('/Pratiche/GetPlafondDisponibile') // o con parametro: `?idProfessionista=${idProfessionista}`
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById("plafondDisponibileInput").value = data.plafond + " €";
+                } else {
+                    document.getElementById("plafondDisponibileInput").value = "Errore";
+                }
+
+                // Mostra la modale solo dopo il fetch
+                const modal = new bootstrap.Modal(document.getElementById("modalCostoPersonale"));
+                modal.show();
+            })
+            .catch(() => {
+                document.getElementById("plafondDisponibileInput").value = "Errore";
+                const modal = new bootstrap.Modal(document.getElementById("modalCostoPersonale"));
+                modal.show();
+            });
+    }
+
+    document.getElementById("formCostoPersonale").addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const form = this;
+        const formData = new FormData(form);
+        const importoInserito = parseFloat(formData.get("importo"));
+
+        fetch('/Pratiche/GetPlafondDisponibile')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    toastr.error("Errore nel recupero del plafond disponibile.");
+                    return;
+                }
+
+                // ✅ Parsing sicuro del valore numerico del plafond
+                let rawPlafond = data.plafond
+                    .replace("€", "")        // rimuove il simbolo euro
+                    .trim()
+                    .replace(/\./g, "")     // rimuove i punti separatori delle migliaia
+                    .replace(",", ".");     // converte virgola in punto decimale
+
+                const plafondDisponibile = parseFloat(rawPlafond);
+
+                if (isNaN(plafondDisponibile)) {
+                    toastr.error("Errore nel parsing del plafond disponibile.");
+                    return;
+                }
+
+                if (importoInserito > plafondDisponibile) {
+                    toastr.warning("Il costo supera il plafond disponibile.");
+                    return;
+                }
+
+                fetch('/Pratiche/InserisciCostoPersonale', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            toastr.success(data.message);
+                            const modal = bootstrap.Modal.getInstance(document.getElementById("modalCostoPersonale"));
+                            modal.hide();
+                            form.reset();
+                            location.reload();
+                        } else {
+                            toastr.error(data.message);
+                        }
+                    });
+            })
+            .catch(() => toastr.error("Errore nel recupero del plafond."));
+    });
+
+
+
+
+    let idElementoDaEliminare = null;
+    let tipoEliminazione = null; // "versamento" o "costo"
+
+    function mostraModaleEliminazione(tipo, id) {
+        idElementoDaEliminare = id;
+        tipoEliminazione = tipo;
+
+        let modalId = '';
+        if (tipo === 'versamento') {
+            modalId = 'eliminaVersamentoModal';
+        } else if (tipo === 'costo') {
+            modalId = 'eliminaCostoPersonaleModal';
+        } else if (tipo === 'finanziamento') {
+            modalId = 'eliminaFinanziamentoModal';
+        }
+
+        if (modalId) {
+            const modal = new bootstrap.Modal(document.getElementById(modalId));
+            modal.show();
+        }
+    }
+
+    // Event listener per i bottoni di conferma eliminazione (unico listener)
+    document.querySelectorAll('#btnConfermaEliminazioneVersamento, #btnConfermaEliminazioneCostoPersonale, #btnConfermaEliminazioneFinanziamento')
+        .forEach(btn => {
+            btn.addEventListener('click', function () {
+                if (!idElementoDaEliminare || !tipoEliminazione) return;
+
+                let url = '';
+                switch (tipoEliminazione) {
+                    case 'versamento':
+                        url = '/Pratiche/EliminaVersamentoPlafond';
+                        break;
+                    case 'costo':
+                        url = '/Pratiche/EliminaCostoPersonale';
+                        break;
+                    case 'finanziamento':
+                        url = '/Pratiche/EliminaFinanziamento';
+                        break;
+                }
+
+                if (!url) return;
+
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `id=${idElementoDaEliminare}`
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            location.reload();
+                        } else {
+                            toastr.error(res.message || "Errore durante l'eliminazione.");
+                        }
+                    });
+            });
+        });
+
+    // Usa questa funzione nel listener globale per gestire il click sui bottoni .btn-elimina
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.btn-elimina');
+        if (!btn) return;
+
+        const tipo = btn.getAttribute('data-tipo');
+        const id = btn.getAttribute('data-id');
+
+        if (!tipo || !id) return;
+
+        mostraModaleEliminazione(tipo, id);
+    });
+
+
+    // 🔍 Filtro e paginazione Plafond
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('plafondTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = document.querySelectorAll('.card-plafond');
+
+        const controlliContainer = document.getElementById('controlliPlafondTable');
+        const paginationContainer = document.getElementById('paginazionePlafondTable');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+        const selectTipo = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // ⚙️ Tipo Plafond
+        ['Tutti', 'Finanziamento', 'Costo Personale', 'Pagamento Costi'].forEach(tipo => {
+            const option = document.createElement('option');
+            option.value = tipo;
+            option.textContent = tipo;
+            selectTipo.appendChild(option);
+        });
+        selectTipo.className = 'form-select form-select-sm w-auto';
+
+        // ✅ Checkbox "Mostra pagamenti"
+        const mostraPagamentiCheckbox = document.createElement('input');
+        mostraPagamentiCheckbox.type = 'checkbox';
+        mostraPagamentiCheckbox.className = 'form-check-input me-1';
+        mostraPagamentiCheckbox.id = 'mostraPagamentiCheck';
+
+        const checkboxLabel = document.createElement('label');
+        checkboxLabel.className = 'form-check-label';
+        checkboxLabel.style.cursor = 'pointer';
+        checkboxLabel.htmlFor = 'mostraPagamentiCheck';
+        checkboxLabel.appendChild(mostraPagamentiCheckbox);
+        checkboxLabel.appendChild(document.createTextNode(' Mostra pagamenti'));
+
+        const currentFilterValue = controlliContainer.getAttribute('data-mostra-pagamenti');
+        mostraPagamentiCheckbox.checked = currentFilterValue === 'True' || currentFilterValue === 'true';
+        mostraPagamentiCheckbox.addEventListener('change', function () {
+            const params = new URLSearchParams(window.location.search);
+            if (this.checked) {
+                params.set('mostraPagamenti', 'true');
+            } else {
+                params.delete('mostraPagamenti');
+            }
+            window.location.search = params.toString();
+        });
+
+        // 📌 Aggiungi controlli
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectTipo);
+        controlliContainer.appendChild(selectPageSize);
+        controlliContainer.appendChild(checkboxLabel);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroTipo = selectTipo.value;
+
+            let filteredRows = rows.filter(row => {
+                const text = row.innerText.toLowerCase();
+                const tipoCell = row.querySelector('td:nth-child(2)'); // 2° colonna = Tipo Plafond
+                const tipo = tipoCell ? tipoCell.innerText.trim() : '';
+                const tipoMatch = (filtroTipo === 'Tutti' || tipo === filtroTipo);
+                return text.includes(keyword) && tipoMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // Tabella desktop
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+
+            // Card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredRows.forEach(row => {
+                const id = row.getAttribute('data-id');
+                const card = document.querySelector(`.card-plafond[data-id="${id}"]`);
+                if (card) card.style.display = '';
+            });
+
+            // Paginazione
+            paginationContainer.innerHTML = '';
+            paginationContainer.className = 'd-flex justify-content-end align-items-center gap-2';
+
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectTipo.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+
+</script>

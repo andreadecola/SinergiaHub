@@ -1,0 +1,39 @@
+﻿@model Sinergia.Models.TeamProfessionistiViewModel
+@{
+    // arrivano dal controller
+    var puoModificare = (ViewBag.PuoModificare as bool?) ?? false;
+    var puoEliminare = (ViewBag.PuoEliminare as bool?) ?? false;
+}
+
+@if (!Model.Attivo)
+{
+    <button class="btn btn-success btn-sm" title="Riattiva"
+            onclick="riattivaTeam(@Model.ID_Team)">
+        <i class="fa fa-undo"></i>
+    </button>
+}
+else
+{
+    if (puoModificare)
+    {
+        <button class="btn btn-warning btn-sm" title="Modifica"
+                onclick="apriModificaTeam(@Model.ID_Team)">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+    if (puoEliminare)
+    {
+        <button class="btn btn-danger btn-sm" title="Elimina"
+                onclick="confermaEliminazioneTeam(@Model.ID_Team)">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+    if (puoModificare)
+    {
+        @*<button class="btn btn-primary btn-sm" title="Gestisci membri"
+                onclick="apriMembriTeam(@Model.ID_Team)">
+            <i class="fa fa-user-plus"></i>
+        </button>*@
+    }
+}
+

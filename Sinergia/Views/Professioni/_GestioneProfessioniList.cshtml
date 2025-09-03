@@ -1,0 +1,356 @@
+﻿@model List<Sinergia.Models.ProfessioneViewModel>
+@{
+    var puoAggiungere = ViewBag.PuoAggiungere == true;
+    var puoModificare = ViewBag.PuoModificare == true;
+    var puoEliminare = ViewBag.PuoEliminare == true;
+    bool mostraAzioni = puoAggiungere || puoModificare || puoEliminare;
+}
+
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+<link href="~/Content/css/style-mobile.css" rel="stylesheet" />
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div class="d-flex justify-content-between align-items-center mb-2 controls-professioni-wrap">
+    <div id="controlliProfessioni" class="d-flex align-items-center gap-1 flex-nowrap"></div>
+
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm btn-new-prof" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovaProfessione()">
+            Nuova Professione
+        </button>
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered" id="professioniTable">
+            <thead>
+                <tr>
+                    <th class="w-20">Codice</th>
+                    <th class="w-45">Descrizione</th>
+                    <th class="w-20">Professionista di riferimento</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="w-15 text-center">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var prof in Model)
+                {
+                    <tr data-codice="@prof.Codice"
+                        data-descrizione="@prof.Descrizione"
+                        data-professionista="@prof.NomeProfessionista">
+                        <td>@prof.Codice</td>
+                        <td>@prof.Descrizione</td>
+                        <td>@prof.NomeProfessionista</td>
+
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-nowrap text-center">
+                                @Html.Partial("~/Views/Professioni/_AzioniProfessione.cshtml", prof)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var prof in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-professione"
+             data-codice="@prof.Codice"
+             data-descrizione="@prof.Descrizione"
+             data-professionista="@prof.NomeProfessionista">
+
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold text-primary">@prof.Codice</span>
+                <small class="text-muted text-end">
+                    <strong>Professionista di riferimento:</strong>
+                    @(!string.IsNullOrWhiteSpace(prof.NomeProfessionista) ? prof.NomeProfessionista : "—")
+                </small>
+            </div>
+
+            <div class="small text-muted mb-2">
+                <strong>Descrizione:</strong> @prof.Descrizione
+            </div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2">
+                    @Html.Partial("~/Views/Professioni/_AzioniProfessione.cshtml", prof)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneProfessioni" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+<!-- Include i modali e gli script come nella tua versione precedente -->
+<!-- Modale Crea/Modifica Professione -->
+<div class="modal fade" id="professioneModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form id="professioneForm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="professioneModalLabel">Nuova Professione</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ProfessioniID" />
+
+                    <div class="mb-2">
+                        <label>Codice</label>
+                        <input name="Codice" type="text" class="form-control form-control-sm" required />
+                    </div>
+
+                    <div class="mb-2">
+                        <label>Descrizione</label>
+                        <input name="Descrizione" type="text" class="form-control form-control-sm" required />
+                    </div>
+
+                    <div class="mb-2">
+                        <label>Professionista di riferimento</label>
+                        <select name="ID_ProfessionistaRiferimento" class="form-select form-select-sm" required>
+                            <option value="">-- Seleziona Professionista --</option>
+                            @foreach (var prof in ViewBag.Professionisti as List<SelectListItem>)
+                            {
+                                <option value="@prof.Value">@prof.Text</option>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- ✅ Nuovo campo: Percentuale Contributo Integrativo -->
+                    <div class="mb-2">
+                        <label>Contributo Integrativo (%)</label>
+                        <input name="PercentualeContributoIntegrativo" type="number" step="0.01" min="0" max="100" class="form-control form-control-sm" placeholder="Es: 4 %" />
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modale Conferma Eliminazione -->
+<div class="modal fade" id="eliminaProfessioneModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">Confermi l'eliminazione della professione?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneProfessione">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    let idProfessioneDaEliminare = 0;
+
+    // ➕ Nuova Professione
+    function apriNuovaProfessione() {
+        const form = document.getElementById("professioneForm");
+        form.reset();
+        form.querySelector('[name="ProfessioniID"]').value = 0;
+        document.getElementById("professioneModalLabel").textContent = "Nuova Professione";
+        new bootstrap.Modal(document.getElementById("professioneModal")).show();
+    }
+
+    // ✏️ Modifica Professione
+    function apriModificaProfessione(id) {
+        fetch(`/Utenti/GetProfessione?id=${id}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) return toastr.error("Errore nel caricamento.");
+
+                const p = res.professione;
+                const form = document.getElementById("professioneForm");
+                form.reset();
+
+                form.querySelector('[name="ProfessioniID"]').value = p.ProfessioniID;
+                form.querySelector('[name="Codice"]').value = p.Codice;
+                form.querySelector('[name="Descrizione"]').value = p.Descrizione;
+                form.querySelector('[name="ID_ProfessionistaRiferimento"]').value = p.ID_ProfessionistaRiferimento;
+                form.querySelector('[name="PercentualeContributoIntegrativo"]').value = p.PercentualeContributoIntegrativo ?? '';
+
+                document.getElementById("professioneModalLabel").textContent = "Modifica Professione";
+                new bootstrap.Modal(document.getElementById("professioneModal")).show();
+            });
+    }
+
+    // 💾 Submit
+    $('#professioneForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+        const id = formData.get("ProfessioniID");
+
+        const url = id && parseInt(id) > 0
+            ? '/Utenti/ModificaProfessione'
+            : '/Utenti/CreaProfessione';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("professioneModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // 🗑️ Elimina
+    function confermaEliminazioneProfessione(id) {
+        idProfessioneDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaProfessioneModal")).show();
+    }
+
+    $('#btnConfermaEliminazioneProfessione').on('click', function () {
+        fetch('/Utenti/EliminaProfessione', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idProfessioneDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // 🔍 Filtro + Paginazione (Professioni) — funziona su desktop (tabella) e mobile (card)
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('professioniTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = Array.from(document.querySelectorAll('.card-professione')); // 📱 mobile
+
+        const controlliContainer = document.getElementById('controlliProfessioni');
+        const paginationContainer = document.getElementById('paginazioneProfessioni');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} `;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+        selectPageSize.value = String(pageSize);
+
+        // ➕ Monta i controlli
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.trim().toLowerCase();
+
+            // Filtra usando i data-* presenti sia su <tr> che su .card
+            const filteredRows = rows.filter(row => {
+                const codice = (row.dataset.codice || '').toLowerCase();
+                const descr = (row.dataset.descrizione || '').toLowerCase();
+                const prof = (row.dataset.professionista || '').toLowerCase();
+                return (
+                    !keyword ||
+                    codice.includes(keyword) ||
+                    descr.includes(keyword) ||
+                    prof.includes(keyword)
+                );
+            });
+
+            // Paginazione
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+            const start = (currentPage - 1) * pageSize;
+            const pageRows = filteredRows.slice(start, start + pageSize);
+
+            // Nascondi tutto
+            rows.forEach(r => r.style.display = 'none');
+            cards.forEach(c => c.style.display = 'none');
+
+            // Mostra solo la pagina corrente (tabella)
+            pageRows.forEach(r => { r.style.display = ''; });
+
+            // Mostra solo la pagina corrente (card) — mappo tramite data-codice
+            pageRows.forEach(r => {
+                const codice = r.dataset.codice || '';
+                if (!codice) return;
+                const card = document.querySelector(`.card-professione[data-codice="${CSS.escape(codice)}"]`);
+                if (card) card.style.display = '';
+            });
+
+            // 🔄 Paginazione UI
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // 🎯 Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value, 10);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+</script>

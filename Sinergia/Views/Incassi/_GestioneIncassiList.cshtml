@@ -1,0 +1,571 @@
+﻿@model List<Sinergia.Models.IncassoViewModel>
+@{
+    var puoAggiungere = ViewBag.PuoAggiungere == true;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+    bool mostraAzioni = puoAggiungere || Model.Any(i => i.ID_Incasso > 0);
+    var tipoUtente = Sinergia.App_Helpers.UserManager.GetTipoUtente();
+}
+
+@section styles {
+    <style>
+        #tabellaIncassi th, #tabellaIncassi td {
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+    </style>
+}
+@*<p>Ruolo attivo: @(tipoUtente == "Admin" ? "✅ Admin" : "❌ Non Admin")</p>*@
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliIncassi" class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>
+
+<!-- 📥 Export CSV/PDF -->
+<div class="d-flex justify-content-end mb-3">
+    <form method="get" id="exportForm"
+          class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+
+        <input type="date" name="da" class="form-control form-control-sm w-auto"
+               value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
+
+        <input type="date" name="a" class="form-control form-control-sm w-auto"
+               value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+
+        <button type="submit" formaction="@Url.Action("EsportaIncassiCsv", "Pratiche")"
+                class="btn btn-outline-success btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+        </button>
+
+        <button type="submit" formaction="@Url.Action("EsportaIncassiPdf", "Pratiche")"
+                class="btn btn-outline-danger btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+        </button>
+    </form>
+</div>
+
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovoIncasso()">Nuovo Incasso</button>
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered" id="tabellaIncassi">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Importo Incasso</th>
+                    <th>Utile Pratica</th>
+                    <th>Metodo Pagamento</th>
+                    <th>Plafond</th>
+                    <th>Avviso Parcella</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-center">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var i in Model)
+                {
+                    <tr data-id="@i.ID_Incasso">
+                        <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
+                        <td>@i.Importo.ToString("C")</td>
+                        <td>@i.UtileNetto.ToString("C")</td>
+                        <td>@i.MetodoPagamento</td>
+                        <td>@(i.VersaInPlafond == true ? "Sì" : "No")</td>
+                        <td>@i.NomePratica</td>
+
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial(
+                                    "~/Views/Incassi/_AzioniIncasso.cshtml",
+                                    i,
+                                    new ViewDataDictionary {
+                                        { "PuoModificare", ViewBag.PuoModificare },
+                                        { "PuoEliminare", ViewBag.PuoEliminare },
+                                        { "TipoUtente", ViewBag.TipoUtente }
+                                    }
+                                )
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var i in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-incasso" data-id="@i.ID_Incasso">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">@i.NomePratica</span>
+                <span>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</span>
+            </div>
+
+            <div class="small text-muted"><strong>Importo:</strong> @i.Importo.ToString("C")</div>
+            <div class="small text-muted"><strong>Utile Pratica:</strong> @i.UtileNetto.ToString("C")</div>
+            <div class="small text-muted"><strong>Metodo Pagamento:</strong> @i.MetodoPagamento</div>
+            <div class="small text-muted"><strong>Plafond:</strong> @(i.VersaInPlafond == true ? "Sì" : "No")</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial(
+                        "~/Views/Incassi/_AzioniIncasso.cshtml",
+                        i,
+                        new ViewDataDictionary {
+                            { "PuoModificare", ViewBag.PuoModificare },
+                            { "PuoEliminare", ViewBag.PuoEliminare },
+                            { "TipoUtente", ViewBag.TipoUtente }
+                        }
+                    )
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneIncassi" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+<!-- Modale Nuovo/Modifica Incasso -->
+<div class="modal fade" id="incassoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form id="incassoForm">
+            <div class="modal-content">
+                <div class="modal-header text-black">
+                    <h5 class="modal-title" id="incassoModalLabel">Nuovo Incasso</h5>
+                    <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Incasso" />
+                    <input type="hidden" name="Operazione" value="Inserimento" />
+
+                    <div class="row g-2">
+                        <!-- 🔹 Selezione pratica -->
+                        <div class="col-md-6">
+                            <label>Pratica</label>
+                            <select name="ID_Pratiche" class="form-select form-select-sm" required>
+                                <option value="">-- Seleziona Pratica --</option>
+                                @foreach (var pratica in ViewBag.Pratiche as List<SelectListItem>)
+                                {
+                                    <option value="@pratica.Value">@pratica.Text</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- 🔹 Info Pratica -->
+                        <div class="col-md-6">
+                            <label>Totale Pratica</label>
+                            <input type="text" id="totalePratica" class="form-control form-control-sm" readonly />
+                        </div>
+
+                        <!-- 🔹 Info Avviso Parcella -->
+                        <div class="col-md-6">
+                            <label>Avviso di Parcella</label>
+                            <input type="text" id="avvisoParcella" class="form-control form-control-sm" readonly />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label>Importo senza IVA</label>
+                            <input type="text" id="importoSenzaIVA" class="form-control form-control-sm" readonly />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label>Importo con IVA</label>
+                            <input type="text" id="importoConIVA" class="form-control form-control-sm" readonly />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label>Metodo di Pagamento</label>
+                            <input type="text" id="metodoPagamentoAvviso" name="MetodoPagamento" class="form-control form-control-sm" readonly />
+                        </div>
+
+                        <!-- 🔹 Incasso -->
+                        <div class="col-md-4">
+                            <label>Data Incasso</label>
+                            <input name="DataIncasso" type="date" class="form-control form-control-sm" required />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label>Importo</label>
+                            <input name="Importo" type="number" step="0.01" min="0" class="form-control form-control-sm" required />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label>Vuoi Versare L'utile della Pratica Nel Plafond?</label>
+                            <select name="VersaInPlafond" class="form-select form-select-sm" required>
+                                <option value="true">Sì</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label>Note</label>
+                            <textarea name="Note" rows="2" class="form-control form-control-sm" placeholder="Eventuali commenti..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+
+<!-- Modale Eliminazione Incasso -->
+<div class="modal fade" id="eliminaIncassoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Elimina Incasso</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Confermi l’eliminazione dell'incasso selezionato?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneIncasso">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    // 🔁 VARIABILI GLOBALI
+    let idIncassoDaEliminare = 0;
+
+    // ═══════════════════════════════════════════════════════════════
+    // ➕ APERTURA MODALE NUOVO INCASSO
+    function apriNuovoIncasso() {
+        const form = document.getElementById("incassoForm");
+        form.reset();
+        form.querySelector('[name="ID_Incasso"]').value = 0;
+        document.getElementById("incassoModalLabel").textContent = "Nuovo Incasso";
+        new bootstrap.Modal(document.getElementById("incassoModal")).show();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ✏️ APERTURA MODALE MODIFICA INCASSO
+    function apriModificaIncasso(id) {
+        fetch(`/Pratiche/GetIncasso?id=${id}`)
+            .then(res => res.json())
+            .then(res => {
+                if (!res.success) return toastr.error("Errore nel caricamento.");
+
+                const i = res.incasso;
+                const form = document.getElementById("incassoForm");
+                form.reset();
+
+                console.log("📥 Dati ricevuti:", i);
+
+                // 🔹 Campi base
+                form.querySelector('[name="ID_Incasso"]').value = i.ID_Incasso;
+                form.querySelector('[name="MetodoPagamento"]').value = i.MetodoPagamento || '';
+                form.querySelector('[name="VersaInPlafond"]').value = i.VersaInPlafond === "true" ? "true" : "false";
+                form.querySelector('[name="Note"]').value = i.Note || '';
+
+                // ❌ NON impostiamo l'importo finché non selezioni la pratica
+                form.querySelector('[name="Importo"]').value = '';  // ← lasciato vuoto inizialmente
+
+                // 🔸 DataIncasso (formattata ma inserita solo dopo selezione pratica)
+                let dataIncassoFormattata = null;
+                if (i.DataIncasso) {
+                    const match = /\/Date\((\d+)\)\//.exec(i.DataIncasso);
+                    if (match) {
+                        const timestamp = parseInt(match[1]);
+                        const date = new Date(timestamp);
+                        const tzOffsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                        dataIncassoFormattata = tzOffsetDate.toISOString().split("T")[0];
+                        console.log("📅 DataIncasso corretta:", dataIncassoFormattata);
+                    }
+                }
+
+                // 🔁 Reset selezione pratica
+                const selectPratica = form.querySelector('[name="ID_Pratiche"]');
+                selectPratica.value = "";
+                selectPratica.dispatchEvent(new Event('change'));
+
+                // 🧼 Svuota dati avviso/parcella
+                document.getElementById("totalePratica").value = '';
+                document.getElementById("avvisoParcella").value = '';
+                document.getElementById("importoSenzaIVA").value = '';
+                document.getElementById("importoConIVA").value = '';
+                document.getElementById("metodoPagamentoAvviso").value = '';
+
+                // 💾 Salva la data su variabile globale
+                window.dataIncassoTemporanea = dataIncassoFormattata;
+
+                // ➕ Imposta handler per quando selezioni la pratica
+                selectPratica.addEventListener("change", function handlerPratica() {
+                    if (window.dataIncassoTemporanea) {
+                        form.querySelector('[name="DataIncasso"]').value = window.dataIncassoTemporanea;
+                        console.log("✅ Data impostata dopo selezione pratica:", window.dataIncassoTemporanea);
+                    }
+
+                    // ✅ Solo ora valorizziamo l'importo
+                    form.querySelector('[name="Importo"]').value = i.Importo || '';
+
+                    selectPratica.removeEventListener("change", handlerPratica);
+                });
+
+                // 🎯 Titolo e apertura modale
+                document.getElementById("incassoModalLabel").textContent = "Modifica Incasso";
+                new bootstrap.Modal(document.getElementById("incassoModal")).show();
+            })
+            .catch(() => {
+                toastr.error("Errore nella richiesta dell'incasso.");
+            });
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 💾 SALVATAGGIO NUOVO O MODIFICA
+    $('#incassoForm').on('submit', function (e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const id = formData.get("ID_Incasso");
+
+        const url = id && parseInt(id) > 0
+            ? '/Pratiche/ModificaIncasso'
+            : '/Pratiche/CreaIncasso';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("incassoModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🗑️ CONFERMA ELIMINAZIONE
+    function confermaEliminazioneIncasso(id) {
+        idIncassoDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaIncassoModal")).show();
+    }
+
+    $('#btnConfermaEliminazioneIncasso').on('click', function () {
+        fetch('/Pratiche/EliminaIncasso', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idIncassoDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    //// 🏦 VERSAMENTO UTILE IN PLAFOND
+    //function versaUtileInPlafond(idIncasso) {
+    //    if (!confirm("Confermi il versamento dell’utile netto nel plafond del professionista?")) return;
+
+    //    fetch(`/Pratiche/VersaUtileInPlafond?idIncasso=${idIncasso}`, {
+    //        method: 'POST'
+    //    })
+    //        .then(res => res.json())
+    //        .then(res => {
+    //            if (res.success) {
+    //                toastr.success(res.message);
+    //                location.reload();
+    //            } else {
+    //                toastr.error(res.message);
+    //            }
+    //        })
+    //        .catch(err => toastr.error("Errore durante il versamento: " + err));
+    //}
+
+
+    //--------------------------------------------------
+    // bottone ricavi sinergia
+    function apriRiepilogoRicaviSinergia(idPratica) {
+        fetch(`/Pratiche/RiepilogoTrattenuteESinergia?idPratica=${idPratica}`)
+            .then(res => res.text())
+            .then(html => {
+                const modalContainer = document.createElement('div');
+                modalContainer.innerHTML = html;
+                document.body.appendChild(modalContainer);
+
+                const modalElement = modalContainer.querySelector('.modal');
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+
+                // Pulisce il DOM dopo la chiusura della modale
+                modalElement.addEventListener('hidden.bs.modal', function () {
+                    modalContainer.remove();
+                });
+            })
+            .catch(() => {
+                toastr.error('Errore nel caricamento del riepilogo.');
+            });
+    }
+
+
+
+    // questa mi serve per intercettare l'avviso parcella della pratica selezionata e il totale della pratica
+
+    document.querySelector('select[name="ID_Pratiche"]').addEventListener('change', function () {
+        const idPratica = this.value;
+        if (!idPratica) {
+            document.getElementById('avvisoParcella').value = "";
+            document.getElementById('importoSenzaIVA').value = "";
+            document.getElementById('importoConIVA').value = "";
+            document.getElementById('metodoPagamentoAvviso').value = ""; // ✅ reset
+            document.getElementById('totalePratica').value = "";
+            return;
+        }
+
+        fetch(`/Pratiche/GetDatiAvvisoParcella?idPratica=${idPratica}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('avvisoParcella').value = data.avviso ?? "N/D";
+                    document.getElementById('importoSenzaIVA').value = data.importoSenzaIVA ? data.importoSenzaIVA.toFixed(2) + " €" : "-";
+                    document.getElementById('importoConIVA').value = data.importoConIVA ? data.importoConIVA.toFixed(2) + " €" : "-";
+                    document.getElementById('metodoPagamentoAvviso').value = data.metodoPagamento ?? "-"; // ✅ nuovo campo
+                    document.getElementById('totalePratica').value = data.totalePratica ? data.totalePratica.toFixed(2) + " €" : "-";
+                } else {
+                    document.getElementById('avvisoParcella').value = "Nessun avviso";
+                    document.getElementById('importoSenzaIVA').value = "-";
+                    document.getElementById('importoConIVA').value = "-";
+                    document.getElementById('metodoPagamentoAvviso').value = "-";
+                    document.getElementById('totalePratica').value = "-";
+                }
+            })
+            .catch(() => {
+                document.getElementById('avvisoParcella').value = "Errore caricamento";
+                document.getElementById('importoSenzaIVA').value = "-";
+                document.getElementById('importoConIVA').value = "-";
+                document.getElementById('metodoPagamentoAvviso').value = "-";
+                document.getElementById('totalePratica').value = "-";
+            });
+    });
+
+
+    // 🔍 Filtro e paginazione Incassi
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('tabellaIncassi');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = document.querySelectorAll('.card-incasso');
+
+        const controlliContainer = document.getElementById('controlliIncassi');
+        const paginationContainer = document.getElementById('paginazioneIncassi');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // Aggiungi i controlli alla barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+
+            // 🔍 Filtraggio per parola chiave
+            let filteredRows = rows.filter(row => row.innerText.toLowerCase().includes(keyword));
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // Tabella desktop
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
+
+            // Card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredRows.forEach(row => {
+                const id = row.getAttribute('data-id');
+                const card = document.querySelector(`.card-incasso[data-id="${id}"]`);
+                if (card) card.style.display = '';
+            });
+
+            // Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+
+</script>

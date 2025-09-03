@@ -1,0 +1,1562 @@
+﻿@model List<Sinergia.Models.ProfessionistiViewModel>
+
+@{
+    var utenteLoggato = ViewBag.UtenteCorrente as Sinergia.Model.Utenti;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+
+    bool puòAggiungere = permessiUtente?.Permessi.Any(p => p.Aggiungi) == true;
+    bool puòModificare = permessiUtente?.Permessi.Any(p => p.Modifica) == true;
+    bool puòEliminare = permessiUtente?.Permessi.Any(p => p.Elimina) == true;
+
+    // Mostra azioni se l’utente ha almeno un permesso
+    // oppure se almeno una riga abilita azioni
+    bool mostraAzioni = puòAggiungere || puòModificare || puòEliminare
+                        || Model.Any(m => m.UtenteCorrenteHaPermessi);
+
+    bool isAdmin = (ViewBag.IsAdmin ?? false);
+}
+<!-- jQuery prima di tutto -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+
+
+<!-- Toastr CSS -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+
+<!-- Toastr JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+
+<!-- SweetAlert -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<link href="~/Content/css/style-mobile.css" rel="stylesheet" />
+
+
+
+<div class="d-flex justify-content-end mb-2">
+    @if (puòAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovoProfessionista()">
+            Nuovo Professionista
+        </button>
+    }
+</div>
+
+<style>
+    #professionistaModal .form-label {
+        font-size: 0.85rem;
+        margin-bottom: 2px;
+        white-space: nowrap;
+    }
+</style>
+
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliProfessionisti" class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (ViewBag.PuoAggiungere == true)
+    {
+        <button class="btn btn-success btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#professionistaModal" onclick="addNewProfessionista()">
+            Nuovo Professionista
+        </button>
+    }
+</div>
+
+@if (ViewBag.IsAdmin == true)
+{
+    <!-- 📥 Export Professionisti CSV/PDF -->
+    <div class="d-flex justify-content-end mb-3">
+        <form method="get" id="exportProfessionistiForm"
+              class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+
+            <button type="submit" formaction="@Url.Action("EsportaProfessionistiCsv", "Utenti")"
+                    class="btn btn-outline-success btn-sm"
+                    style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+                <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+            </button>
+
+            <button type="submit" formaction="@Url.Action("EsportaProfessionistiPdf", "Utenti")"
+                    class="btn btn-outline-danger btn-sm"
+                    style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>
+        </form>
+    </div>
+}
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table id="professionistiTable" class="table table-striped table-bordered w-100">
+            <thead>
+                <tr>
+                    <th class="d-none d-md-table-cell">ID</th>
+                    <th>Nome</th>
+                    <th class="d-none d-md-table-cell">Partita IVA</th>
+                    <th class="d-none d-md-table-cell">Codice Fiscale</th>
+                    <th class="d-none d-md-table-cell">Email</th>
+                    <th class="d-none d-md-table-cell">Telefono</th>
+                    <th class="d-none d-md-table-cell">Stato</th>
+                    <th class="d-none d-md-table-cell">Ruolo</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-nowrap text-start" style="width: 270px; white-space: nowrap;">
+                            <span class="fw-bold">Azioni</span>
+                        </th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var prof in Model)
+                {
+                    <tr data-stato="@prof.Stato" data-ruolo="@prof.TipoRuolo" data-nome="@($"{prof.Nome} {prof.Email} {prof.PartitaIVA}")">
+                        <td class="d-none d-md-table-cell">@prof.ID_Professionista</td>
+                        <td>@prof.Nome</td>
+                        <td class="d-none d-md-table-cell">@prof.PartitaIVA</td>
+                        <td class="d-none d-md-table-cell">@prof.CodiceFiscale</td>
+                        <td class="d-none d-md-table-cell">@prof.Email</td>
+                        <td class="d-none d-md-table-cell">@prof.Telefono</td>
+                        <td class="d-none d-md-table-cell stato">@prof.Stato</td>
+                        <td class="d-none d-md-table-cell ruolo">@prof.TipoRuolo</td>
+
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial(
+                                    "~/Views/Professionisti/_AzioniProfessionista.cshtml",
+                                    prof,
+                                    new ViewDataDictionary {
+                                        { "PuoModificare", puòModificare },
+                                        { "PuoEliminare",  puòEliminare  }
+                                    }
+                                )
+                            </td>
+                        }
+
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var prof in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-professionista"
+             data-id="@prof.ID_Professionista"
+             data-stato="@prof.Stato"
+             data-ruolo="@prof.TipoRuolo"
+             data-nome="@($"{prof.Nome} {prof.Email} {prof.PartitaIVA}")">
+
+            <div class="fw-bold text-primary">@prof.Nome</div>
+            <div class="small text-muted"><strong>Email:</strong> @prof.Email</div>
+            <div class="small text-muted"><strong>Partita IVA:</strong> @prof.PartitaIVA</div>
+            <div class="small text-muted"><strong>Telefono:</strong> @prof.Telefono</div>
+            <div class="small text-muted"><strong>Stato:</strong> @prof.Stato</div>
+            <div class="small text-muted"><strong>Ruolo:</strong> @prof.TipoRuolo</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial(
+                        "~/Views/Professionisti/_AzioniProfessionista.cshtml",
+                        prof,
+                        new ViewDataDictionary {
+                            { "PuoModificare", puòModificare },
+                            { "PuoEliminare",  puòEliminare  }
+                        }
+                    )
+                </div>
+            }
+
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneProfessionisti" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+
+<!-- Modale Nuovo / Modifica Professionista -->
+<div class="modal fade" id="professionistaModal" tabindex="-1" aria-labelledby="professionistaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="ProfessionistaForm" enctype="multipart/form-data" autocomplete="off">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="professionistaModalLabel">Nuovo Professionista</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Professionista" />
+
+                    <!-- ✅ TOGGLE MOSTRA VERSIONE PRECEDENTE -->
+                    <div class="row mb-2" id="toggleVersioniWrapperProfessionista">
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="toggleVersioniProfessionista">
+                                <label class="form-check-label fw-bold" for="toggleVersioniProfessionista">
+                                    Mostra versione precedente
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🔐 Permessi -->
+                    <div class="mb-3" id="wrapperPermessiProfessionista">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="PuoGestirePermessi" name="PuoGestirePermessi">
+                            <label class="form-check-label fw-semibold" for="PuoGestirePermessi">
+                                Il professionista può assegnare permessi ai propri utenti
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Nome *</label>
+                            <input type="text" name="Nome" class="form-control form-control-sm" required />
+                            <small class="text-muted d-none" data-prev="Nome"></small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Cognome *</label>
+                            <input type="text" name="Cognome" class="form-control form-control-sm" required />
+                            <small class="text-muted d-none" data-prev="Cognome"></small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Professione *</label>
+                            <div class="input-group">
+                                <select name="ID_Professione" id="selectProfessione" class="form-select form-select-sm" required>
+                                    <option value="">Seleziona professione...</option>
+                                </select>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="apriModaleAggiungiProfessione()">➕</button>
+                            </div>
+                            <small class="text-muted d-none" data-prev="ID_Professione"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Partita IVA</label>
+                            <input type="text" name="PartitaIVA" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Partita IVA"></small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Codice Fiscale</label>
+                            <input type="text" name="CodiceFiscale" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Codice Fiscale"></small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Codice Univoco</label>
+                            <input type="text" name="CodiceUnivoco" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Codice Univoco"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Telefono</label>
+                            <input type="text" name="Telefono" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Telefono"></small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Email 1</label>
+                            <input type="email" name="MAIL1" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Email 1"></small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Email 2</label>
+                            <input type="email" name="MAIL2" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Email 2"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Sito Web</label>
+                            <input type="text" name="SitoWEB" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Sito Web"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Nazione</label>
+                            <select id="Nazione" name="ID_Nazione" class="form-control"></select>
+                            <small class="text-muted d-none" data-prev="Nazione"></small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Città</label>
+                            <select id="Citta" name="ID_CittaResidenza" class="form-control"></select>
+                            <small class="text-muted d-none" data-prev="Città"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Indirizzo</label>
+                            <input type="text" name="Indirizzo" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Indirizzo"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Descrizione Attività</label>
+                            <input type="text" name="DescrizioneAttivita" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Descrizione Attività"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Stato *</label>
+                            <select name="Stato" class="form-control form-control-sm" required>
+                                <option value="Attivo">Attivo</option>
+                                <option value="Inattivo">Inattivo</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="Stato"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Carica Documenti</label>
+                            <input type="file" name="Documenti" multiple class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Documenti"></small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Tipo Professionista *</label>
+                            <select name="TipoProfessionista" class="form-select form-select-sm" required>
+                                <option value="">Seleziona...</option>
+                                <option value="Resident">Resident</option>
+                                <option value="Esterno">Esterno</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="Tipo Professionista"></small>
+                        </div>
+                    </div>
+
+                    <!-- NOTE a larghezza intera -->
+                    <div class="row mt-2">
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Note</label>
+                            <input type="text" name="Note" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Note"></small>
+                        </div>
+                    </div>
+
+                    <!-- Dati Bancari -->
+                    <div class="col-md-12 mt-3 text-end">
+                        <button type="button" class="btn btn-outline-secondary btn-sm position-relative" onclick="apriModaleDatiBancariProfessionista()">
+                            Inserisci Dati Bancari
+                            <span id="badgeDatiBancari" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success d-none">
+                                ✓
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="salvaProfessionista()">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Modale Conferma Eliminazione -->
+<div class="modal fade" id="eliminaProfessionistaModal" tabindex="-1" aria-labelledby="eliminaProfessionistaModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="eliminaProfessionistaModalLabel">Conferma Eliminazione</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questo professionista?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger" id="btnConfermaEliminaProfessionista">Disattiva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Gestione Documenti -->
+<div class="modal fade" id="documentiProfessionistaModal" tabindex="-1" aria-labelledby="documentiProfessionistaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title" id="documentiProfessionistaModalLabel">Documenti Professionista</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body" id="contenutoDocumentiProfessionista">
+                <!-- Caricamento documenti dinamico -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Assegna Utenti -->
+<div class="modal fade" id="assegnaUtenteProfessionistaModal" tabindex="-1" aria-labelledby="assegnaUtenteProfessionistaModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title" id="assegnaUtenteProfessionistaModalLabel">Assegna Utente</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+
+            <div class="modal-body">
+                <div id="listaUtentiProfessionista"></div>
+                <hr />
+                <div class="mb-3">
+                    <label for="tipoRelazione" class="form-label">Tipo di Relazione</label>
+                    <select id="tipoRelazione" class="form-select">
+                        <option value="Collaborazione">Collaborazione</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="statoRelazione" class="form-label">Stato della Relazione</label>
+                    <select id="statoRelazione" class="form-select">
+                        <option value="Attivo">Attivo</option>
+                        <option value="Terminato">Terminato</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="noteRelazione" class="form-label">Note</label>
+                    <textarea id="noteRelazione" class="form-control" rows="2" placeholder="Inserisci note opzionali..."></textarea>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="salvaAssegnazioneUtenteProfessionista()">Salva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Visualizza Utenti Assegnati -->
+<div class="modal fade" id="utentiAssegnatiProfessionistaModal" tabindex="-1" aria-labelledby="utentiAssegnatiProfessionistaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+
+            <div class="modal-header text-dark">
+                <h5 class="modal-title" id="utentiAssegnatiProfessionistaModalLabel">Utenti Assegnati</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+
+            <div class="modal-body" id="contenutoUtentiAssegnatiProfessionista">
+                <!-- Caricamento tabella utenti assegnati -->
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-outline-primary" onclick="apriAssegnaUtenteProfessionista(professionistaSelezionatoId)">Aggiungi Utenti</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Dati Bancari -->
+<div class="modal fade" id="datiBancariModal" tabindex="-1" aria-labelledby="datiBancariModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="DatiBancariForm">
+                <div class="modal-header  text-black">
+                    <h5 class="modal-title" id="datiBancariModalLabel">Dati Bancari</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Cliente" />
+                    <input type="hidden" name="TipoCliente" /> <!-- 👈 AGGIUNTO QUI -->
+
+                    <div class="mb-2">
+                        <label class="form-label">Istituto Di Credito</label>
+                        <input type="text" name="NomeBanca" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">IBAN</label>
+                        <input type="text" name="IBAN" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Intestatario</label>
+                        <input type="text" name="Intestatario" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">BIC/SWIFT</label>
+                        <input type="text" name="BIC_SWIFT" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Note</label>
+                        <textarea name="Note" rows="2" class="form-control form-control-sm"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="salvaDatiBancari()">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ✅ Modale Aggiungi Professione -->
+<div class="modal fade" id="modaleAggiungiProfessione" tabindex="-1" aria-labelledby="modaleAggiungiProfessioneLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header text-black">
+                <h5 class="modal-title" id="modaleAggiungiProfessioneLabel">Aggiungi Nuova Professione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="nuovoCodiceProfessioneInput" class="form-control mb-2" placeholder="Inserisci codice..." />
+                <input type="text" id="nuovaProfessioneInput" class="form-control" placeholder="Inserisci descrizione..." />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="salvaNuovaProfessione()">Salva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+<!-- Modale per Gestione Permessi -->
+<div class="modal fade" id="permessiModal" tabindex="-1" aria-labelledby="permessiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-sm-down">
+        <div class="modal-content">
+            <div class="modal-header text-dark">
+                <h5 class="modal-title" id="permessiModalLabel">Gestione Permessi</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+
+            <div class="modal-body p-2 pb-0" id="permessiContent">
+                <!-- La partial view _Permessi.cshtml sarà caricata qui dinamicamente -->
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Caricamento...</span>
+                    </div>
+                    <p>Caricamento permessi in corso...</p>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-success" onclick="SalvaPermessi()">Salva Permessi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+<script>
+
+    let datiBancariTemporaneiProfessionista = null;
+
+     const isAdmin = @((ViewBag.IsAdmin ?? false).ToString().ToLower());
+
+
+    function apriNuovoProfessionista() {
+        const form = document.getElementById("ProfessionistaForm");
+        form.reset();
+
+        document.getElementById("professionistaModalLabel").innerText = "Nuovo Professionista";
+        caricaProfessioni();
+        caricaCittaENazioni();
+
+        // 🔐 Gestione permessi
+        const wrapperPermessi = document.getElementById("wrapperPermessiProfessionista");
+        if (wrapperPermessi) {
+            if (!isAdmin) {
+                wrapperPermessi.classList.add("d-none");
+            } else {
+                wrapperPermessi.classList.remove("d-none");
+            }
+        }
+
+        // 🚫 Nascondi toggle versioni (solo per nuovo)
+        const toggleWrapper = document.getElementById("toggleVersioniWrapperProfessionista");
+        if (toggleWrapper) toggleWrapper.classList.add("d-none");
+        $("#infoStoricoProfessionista").remove();
+        $("[data-prev]").addClass("d-none").text("");
+
+        // ✍️ Capitalizzazione Nome/Cognome
+        const campiCapitalizzati = form.querySelectorAll('input[name="Nome"], input[name="Cognome"]');
+        campiCapitalizzati.forEach(input => {
+            input.addEventListener("blur", () => {
+                if (input.value) {
+                    input.value = input.value.charAt(0).toUpperCase() + input.value.slice(1).toLowerCase();
+                }
+            });
+        });
+
+        // 🔠 Codice fiscale uppercase (max 16)
+        const cf = form.querySelector('input[name="CodiceFiscale"]');
+        if (cf) {
+            cf.addEventListener("input", () => {
+                cf.value = cf.value.toUpperCase().substring(0, 16);
+            });
+        }
+
+        new bootstrap.Modal(document.getElementById("professionistaModal")).show();
+    }
+
+
+
+    function apriModificaProfessionista(id) {
+        fetch(`/Utenti/GetProfessionista?id=${id}`)
+            .then(res => res.json())
+            .then(p => {
+                if (!p) return toastr.error("Errore caricamento dati.");
+
+                const form = document.getElementById("ProfessionistaForm");
+                form.reset();
+
+                // Popola campi base
+                form.querySelector('[name="ID_Professionista"]').value = p.ID_Professionista;
+                form.querySelector('[name="Nome"]').value = p.Nome || '';
+                form.querySelector('[name="Cognome"]').value = p.Cognome || '';
+                form.querySelector('[name="PartitaIVA"]').value = p.PartitaIVA || '';
+                form.querySelector('[name="CodiceFiscale"]').value = p.CodiceFiscale || '';
+                form.querySelector('[name="CodiceUnivoco"]').value = p.CodiceUnivoco || '';
+                form.querySelector('[name="Telefono"]').value = p.Telefono || '';
+                form.querySelector('[name="MAIL1"]').value = p.MAIL1 || '';
+                form.querySelector('[name="MAIL2"]').value = p.MAIL2 || '';
+                form.querySelector('[name="SitoWEB"]').value = p.SitoWEB || '';
+                form.querySelector('[name="Indirizzo"]').value = p.Indirizzo || '';
+                form.querySelector('[name="DescrizioneAttivita"]').value = p.DescrizioneAttivita || '';
+                form.querySelector('[name="Note"]').value = p.Note || '';
+                form.querySelector('[name="Stato"]').value = p.Stato || '';
+
+                if (form.querySelector('[name="TipoProfessionista"]') && p.TipoProfessionista) {
+                    form.querySelector('[name="TipoProfessionista"]').value = p.TipoProfessionista;
+                }
+
+                // 📥 Professioni
+                fetch('/Utenti/GetProfessioni')
+                    .then(res => res.json())
+                    .then(professioniList => {
+                        const select = document.getElementById("selectProfessione");
+                        select.innerHTML = '<option value="">Seleziona professione...</option>';
+
+                        professioniList.forEach(prof => {
+                            const opt = document.createElement("option");
+                            opt.value = prof.ID_Professione;
+                            opt.textContent = prof.Codice + " - " + prof.Descrizione;
+                            select.appendChild(opt);
+                        });
+
+                        if (p.ID_Professione) {
+                            select.value = p.ID_Professione;
+                        }
+                    });
+
+                // 🌍 Città e Nazioni
+                fetch('/Utenti/GetCittaENazioni')
+                    .then(r => r.json())
+                    .then(data => {
+                        const selectCitta = form.querySelector('[name="ID_CittaResidenza"]');
+                        const selectNazione = form.querySelector('[name="ID_Nazione"]');
+
+                        selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                        selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                        data.nazioni.forEach(n => {
+                            const opt = document.createElement("option");
+                            opt.value = n.ID_BPCittaDN;
+                            opt.textContent = n.NameNazione;
+                            selectNazione.appendChild(opt);
+                        });
+
+                        data.citta.forEach(c => {
+                            const opt = document.createElement("option");
+                            opt.value = c.ID_BPCitta;
+                            opt.textContent = c.NameLocalita;
+                            selectCitta.appendChild(opt);
+                        });
+
+                        if (p.ID_Nazione) {
+                            selectNazione.value = p.ID_Nazione;
+                        }
+                        if (p.ID_CittaResidenza) {
+                            selectCitta.value = p.ID_CittaResidenza;
+                        }
+                    });
+
+                // 🛡️ Permessi
+                const checkboxGestionePermessi = form.querySelector('[name="PuoGestirePermessi"]');
+                if (checkboxGestionePermessi) {
+                    checkboxGestionePermessi.checked = p.PuoGestirePermessi === true;
+                }
+
+                const wrapper = document.getElementById("wrapperPermessiProfessionista");
+                if (wrapper) {
+                    if (typeof isAdmin !== 'undefined' && isAdmin === true) {
+                        wrapper.classList.remove("d-none");
+                    } else {
+                        wrapper.classList.add("d-none");
+                    }
+                }
+
+                // 💳 Dati bancari
+                const bancariForm = document.getElementById("DatiBancariForm");
+                if (bancariForm) {
+                    bancariForm.reset();
+                    bancariForm.querySelector('[name="ID_Cliente"]').value = p.ID_Professionista;
+                    bancariForm.querySelector('[name="TipoCliente"]').value = "Professionista";
+                    bancariForm.querySelector('[name="NomeBanca"]').value = p.NomeBanca || '';
+                    bancariForm.querySelector('[name="IBAN"]').value = p.IBAN || '';
+                    bancariForm.querySelector('[name="Intestatario"]').value = p.Intestatario || '';
+                    bancariForm.querySelector('[name="BIC_SWIFT"]').value = p.BIC_SWIFT || '';
+                    bancariForm.querySelector('[name="Note"]').value = p.NoteBanca || '';
+                }
+
+                // 🔐 Blocca campi se non ha permessi
+                const campiDaBloccare = $('#ProfessionistaForm input, #ProfessionistaForm select, #ProfessionistaForm textarea').not('[name="ID_Professionista"]');
+                if (!p.UtenteCorrenteHaPermessi) {
+                    campiDaBloccare.prop('disabled', true);
+                    $('#btnSalvaProfessionista').hide();
+                } else {
+                    campiDaBloccare.prop('disabled', false);
+                    $('#btnSalvaProfessionista').show();
+                }
+
+                // ✅ Aggancio toggle per storico versioni
+                $("#toggleVersioniProfessionista").off("change").on("change", function () {
+                    if (this.checked) {
+                        $.get("/Home/GetStoricoProfessionista", { idProfessionista: id }, function (res) {
+                            if (res.success && res.storico) {
+                                const storico = res.storico;
+
+                                let dataFormattata = "";
+                                if (storico.DataUltimaModifica) {
+                                    let dt = new Date(storico.DataUltimaModifica);
+                                    if (!isNaN(dt)) {
+                                        dataFormattata = dt.toLocaleString("it-IT");
+                                    }
+                                }
+
+                                for (const key in storico.CampiSpecifici) {
+                                    const valorePrec = storico.CampiSpecifici[key] || "";
+                                    $(`[data-prev='${key}']`)
+                                        .text(`Precedente: ${valorePrec}`)
+                                        .removeClass("d-none");
+                                }
+
+                                $("#infoStoricoProfessionista").remove();
+                                $(".modal-body").prepend(`
+                                <div id="infoStoricoProfessionista" class="alert alert-light border small mb-2">
+                                    Ultima modifica: ${dataFormattata} ·
+                                    Utente: ${storico.NomeUtente || "?"} ·
+                                    Versione: ${storico.NumeroVersione}
+                                </div>
+                            `);
+                            } else {
+                                toastr.warning(res.message || "Nessuna versione precedente trovata.");
+                            }
+                        });
+                    } else {
+                        $("[data-prev]").addClass("d-none").text("");
+                        $("#infoStoricoProfessionista").remove();
+                    }
+                });
+
+                // Mostra modale
+                document.getElementById("professionistaModalLabel").innerText = "Modifica Professionista";
+                new bootstrap.Modal(document.getElementById("professionistaModal")).show();
+            });
+    }
+
+
+
+
+    let ritornaAllaModaleUtente = false;
+
+    function salvaProfessionista() {
+        const form = document.getElementById("ProfessionistaForm");
+        const formData = new FormData(form);
+        const id = formData.get("ID_Professionista");
+
+        //const èCliente = document.getElementById("checkCliente").checked;
+        //const èFornitore = document.getElementById("checkFornitore").checked;
+
+        // Validazione obbligatoria
+        //if (!èCliente && !èFornitore) {
+        //    toastr.warning("⚠️ Seleziona almeno 'È Cliente' o 'È Fornitore'.");
+        //    return;
+        //}
+
+        //formData.set("ÈCliente", èCliente);
+        //formData.set("ÈFornitore", èFornitore);
+
+
+        // 🔁 Prendi la professione selezionata
+        const selectProfessione = document.getElementById("selectProfessione");
+        const idProfessione = form.querySelector('[name="ID_Professione"]')?.value || "";
+        formData.set("ID_Professione", idProfessione);
+
+
+        // ✅ Nuovo campo: TipoProfessionista (Resident / Esterno)
+        const tipoProfessionista = form.querySelector('[name="TipoProfessionista"]')?.value || "";
+        formData.set("TipoProfessionista", tipoProfessionista);
+
+        const puoGestire = form.querySelector('[name="PuoGestirePermessi"]')?.checked ?? false;
+        formData.set("PuoGestirePermessi", puoGestire);
+
+
+        // ✅ Se nuovo e ci sono dati bancari temporanei → li aggiungo
+        if ((!id || id === "0") && datiBancariTemporaneiProfessionista) {
+            formData.append("IBAN", datiBancariTemporaneiProfessionista.IBAN || "");
+            formData.append("Intestatario", datiBancariTemporaneiProfessionista.Intestatario || "");
+            formData.append("NomeBanca", datiBancariTemporaneiProfessionista.NomeBanca || "");
+            formData.append("BIC_SWIFT", datiBancariTemporaneiProfessionista.BIC_SWIFT || "");
+            formData.append("Note", datiBancariTemporaneiProfessionista.Note || "");
+        }
+
+        const url = id && id !== "0" ? "/Utenti/ModificaProfessionista" : "/Utenti/CreaProfessionista";
+
+        fetch(url, {
+            method: "POST",
+            body: formData
+        })
+            .then(res => res.json())  // ✅ Converti la risposta in JSON
+            .then(json => {
+                if (json.success) {
+                    toastr.success(json.message || "✅ Salvataggio completato");
+                    bootstrap.Modal.getInstance(document.getElementById("professionistaModal")).hide();
+
+                    if (ritornaAllaModaleUtente) {
+                        setTimeout(() => {
+                            const utenteModal = new bootstrap.Modal(document.getElementById("utenteModal"));
+                            utenteModal.show();
+                            ritornaAllaModaleUtente = false; // resetta il flag
+                        }, 500);
+                    } else {
+                        location.reload();
+                    }
+                } else {
+                    toastr.error(json.message || "❌ Errore durante il salvataggio");
+                }
+            })
+            .catch(err => {
+                console.error("❌ Errore durante la richiesta:", err);
+                toastr.error("❌ Errore durante il salvataggio.");
+            });
+
+
+    }
+
+
+
+    function apriEliminaProfessionista(id) {
+        const btn = document.getElementById("btnConfermaEliminaProfessionista");
+        btn.onclick = () => eliminaProfessionista(id);
+        new bootstrap.Modal(document.getElementById("eliminaProfessionistaModal")).show();
+    }
+
+    function eliminaProfessionista(id) {
+        fetch("/Utenti/EliminaProfessionista", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ id: id })
+        }).then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    }
+
+    function riattivaProfessionista(id) {
+        Swal.fire({
+            title: "Sei sicuro?",
+            text: "Vuoi riattivare questo professionista?",
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "Sì, riattiva",
+            cancelButtonText: "Annulla"
+        }).then(result => {
+            if (result.isConfirmed) {
+                fetch("/Utenti/RiattivaProfessionista", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: new URLSearchParams({ id: id })
+                }).then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            Swal.fire("Riattivato!", res.message, "success").then(() => location.reload());
+                        } else {
+                            Swal.fire("Errore", res.message, "error");
+                        }
+                    });
+            }
+        });
+    }
+
+    function chiudiProfessionistaModal() {
+        bootstrap.Modal.getInstance(document.getElementById("professionistaModal")).hide();
+    }
+    function caricaProfessioni() {
+        const select = document.querySelector('select[name="ID_Professione"]');
+        const btnAltro = document.getElementById("btnAggiungiCategoria");
+
+        fetch('/Utenti/GetProfessioni')
+            .then(res => res.json())
+            .then(professioni => {
+                select.innerHTML = '<option value="">Seleziona professione...</option>';
+                professioni.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p.ID_Professione;
+                    opt.textContent = `${p.Descrizione}`;
+                    select.appendChild(opt);
+                });
+
+                const altroOpt = document.createElement("option");
+                altroOpt.value = "Altro";
+                altroOpt.textContent = "Altro...";
+                select.appendChild(altroOpt);
+            });
+
+        select.addEventListener("change", function () {
+            btnAltro.classList.toggle("d-none", this.value !== "Altro");
+        });
+    }
+
+
+
+    function gestisciAltroProfessione(selectElement) {
+        if (selectElement.value === "Altro") {
+            setTimeout(() => {
+                selectElement.value = "";
+                apriModaleAggiungiProfessione();
+            }, 100);
+        }
+    }
+
+
+    function apriModaleAggiungiProfessione() {
+        document.getElementById("nuovaProfessioneInput").value = "";
+        new bootstrap.Modal(document.getElementById("modaleAggiungiProfessione")).show();
+    }
+
+    function salvaNuovaProfessione() {
+        const nome = document.getElementById("nuovaProfessioneInput").value.trim();
+        const codice = document.getElementById("nuovoCodiceProfessioneInput").value.trim();
+
+        if (!nome || !codice) {
+            toastr.error("Inserisci codice e descrizione validi.");
+            return;
+        }
+
+        fetch('/Utenti/AggiungiProfessione', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ descrizione: nome, codice: codice })
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("modaleAggiungiProfessione")).hide();
+                    caricaProfessioni();
+                    setTimeout(() => {
+                        const select = document.querySelector('select[name="ID_Professione"]');
+                        select.value = res.id;
+                    }, 300);
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    }
+
+
+    function caricaCittaENazioni() {
+        fetch('/Utenti/GetCittaENazioni')
+            .then(response => response.json())
+            .then(data => {
+                const selectCitta = document.getElementById('Citta');
+                const selectNazione = document.getElementById('Nazione');
+
+                selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                data.nazioni.forEach(n => {
+                    const opt = document.createElement("option");
+                    opt.value = n.ID_BPCittaDN;
+                    opt.textContent = n.NameNazione;
+                    selectNazione.appendChild(opt);
+
+                    if (n.NameNazione.toLowerCase() === "italia") {
+                        selectNazione.value = n.ID_BPCittaDN;
+                    }
+                });
+
+                data.citta.forEach(c => {
+                    const opt = document.createElement("option");
+                    opt.value = c.ID_BPCitta;
+                    opt.textContent = c.NameLocalita;
+                    selectCitta.appendChild(opt);
+
+                    if (c.NameLocalita.toLowerCase() === "roma") {
+                        selectCitta.value = c.ID_BPCitta;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error("❌ Errore nel caricamento di città e nazioni:", error);
+            });
+    }
+
+    function gestisciDocumentiProfessionista(idProfessionista) {
+        fetch(`/Utenti/GetDocumentiProfessionista?idProfessionista=${idProfessionista}`)
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById('contenutoDocumenti').innerHTML = html;
+                new bootstrap.Modal(document.getElementById('documentiModal')).show();
+            })
+            .catch(err => {
+                console.error("Errore caricamento documenti:", err);
+                toastr.error("Errore durante il caricamento dei documenti.");
+            });
+    }
+
+
+    function selezionaECaricaDocumentiProfessionista(idProfessionista) {
+        const input = document.getElementById("inputUploadDocumentiProfessionista");
+
+        input.onchange = async function () {
+            const files = input.files;
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append("files", files[i]);
+            }
+            formData.append("idProfessionista", idProfessionista);
+
+            const response = await fetch('/Utenti/CaricaDocumentiDirettiProfessionista', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                toastr.success(result.message);
+                gestisciDocumentiProfessionista(idProfessionista); // ricarica lista
+            } else {
+                toastr.error(result.message || "Errore durante il caricamento.");
+            }
+
+            input.value = ""; // reset input
+        };
+
+        input.click();
+    }
+
+    let professionistaSelezionatoId = null;
+    function apriAssegnaUtenteProfessionista(idProfessionista) {
+        professionistaSelezionatoId = idProfessionista;
+
+        // Chiudi la modale "Utenti Assegnati" se è aperta
+        const modalUtentiAssegnati = bootstrap.Modal.getInstance(document.getElementById("utentiAssegnatiProfessionistaModal"));
+        if (modalUtentiAssegnati) modalUtentiAssegnati.hide();
+
+        // Dopo aver chiuso, carica la lista utenti da assegnare
+        fetch(`/Utenti/GetUtentiDisponibiliProfessionista?idProfessionista=${idProfessionista}`)
+            .then(r => r.json())
+            .then(utenti => {
+                const lista = document.getElementById("listaUtentiProfessionista");
+                lista.innerHTML = "";
+                utenti.forEach(u => {
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.value = u.ID_Utente;
+                    checkbox.className = "form-check-input";
+                    checkbox.id = `utente_${u.ID_Utente}`;
+
+                    const label = document.createElement("label");
+                    label.className = "form-check-label ms-2";
+                    label.htmlFor = checkbox.id;
+                    label.textContent = u.NomeUtente;
+
+                    const div = document.createElement("div");
+                    div.className = "form-check";
+                    div.appendChild(checkbox);
+                    div.appendChild(label);
+                    lista.appendChild(div);
+                });
+
+                // Ora apri la modale per l'assegnazione
+                new bootstrap.Modal(document.getElementById("assegnaUtenteProfessionistaModal")).show();
+            });
+    }
+
+    function salvaAssegnazioneUtenteProfessionista() {
+        const selezionati = Array.from(document.querySelectorAll("#listaUtentiProfessionista input[type='checkbox']:checked"))
+            .map(c => parseInt(c.value));
+        const tipo = document.getElementById("tipoRelazione").value;
+        const stato = document.getElementById("statoRelazione").value;
+        const note = document.getElementById("noteRelazione").value;
+
+        if (!selezionati.length) {
+            toastr.error("⚠️ Seleziona almeno un utente.");
+            return;
+        }
+
+        Promise.all(selezionati.map(idUtente => {
+            return fetch("/Utenti/AssegnaUtentiProfessionista", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    idProfessionista: professionistaSelezionatoId,
+                    idUtente, tipoRelazione: tipo,
+                    statoRelazione: stato,
+                    noteRelazione: note
+                })
+            }).then(r => r.json());
+        }))
+            .then(results => {
+                const successi = results.filter(r => r.success).length;
+                const fallimenti = results.length - successi;
+
+                if (successi) {
+                    toastr.success(`${successi} utente/i assegnato/i.`);
+                    setTimeout(() => location.reload(), 1000);
+                }
+                if (fallimenti) toastr.error(`${fallimenti} falliti. Vedi console.`);
+            });
+    }
+
+    function visualizzaUtentiAssegnatiProfessionista(idProfessionista) {
+        professionistaSelezionatoId = idProfessionista;
+
+        fetch(`/Utenti/VisualizzaUtentiProfessionista?idProfessionista=${idProfessionista}`)
+            .then(r => r.json())
+            .then(utenti => {
+                const contenitore = document.getElementById("contenutoUtentiAssegnatiProfessionista");
+                if (!utenti.length) {
+                    contenitore.innerHTML = "<p class='text-muted'>Nessun utente assegnato.</p>";
+                    return;
+                }
+
+                let html = `<table class="table table-sm table-bordered">
+                    <thead><tr><th>Nome</th><th>Relazione</th><th>Note</th><th>Inizio</th><th>Azioni</th></tr></thead>
+                    <tbody>`;
+                utenti.forEach(u => {
+                    html += `<tr>
+                        <td>${u.Nome} ${u.Cognome}</td>
+                        <td>${u.TipoRelazione}</td>
+                        <td>${u.Note || "-"}</td>
+                        <td>${new Date(u.DataInizio).toLocaleDateString("it-IT")}</td>
+                        <td class="d-flex gap-1">
+                            <button class="btn btn-sm text-danger" onclick="rimuoviUtenteProfessionista(${u.ID_Relazione})">❌</button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="gestisciPermessiUtente(${u.ID_Utente})">
+                                <i class="fa fa-lock"></i> Gestisci Permessi
+                            </button>
+                        </td>
+                    </tr>`;
+                });
+                html += `</tbody></table>`;
+                contenitore.innerHTML = html;
+
+                new bootstrap.Modal(document.getElementById("utentiAssegnatiProfessionistaModal")).show();
+            });
+    }
+
+    function rimuoviUtenteProfessionista(idRelazione) {
+        Swal.fire({
+            title: "Conferma",
+            text: "Rimuovere l'utente dalla relazione?",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sì, rimuovi",
+            cancelButtonText: "Annulla"
+        }).then(r => {
+            if (r.isConfirmed) {
+                fetch("/Utenti/RimuoviUtenteProfessionista", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: new URLSearchParams({ idRelazione })
+                }).then(res => res.json())
+                    .then(res => {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            visualizzaUtentiAssegnatiProfessionista(professionistaSelezionatoId);
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    });
+            }
+        });
+    }
+
+    function EliminaDocumentoProfessionista(idDocumento) {
+    Swal.fire({
+        title: "Elimina Documento",
+        text: "Vuoi davvero eliminare questo documento?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Sì, elimina",
+        cancelButtonText: "Annulla",
+        confirmButtonColor: "#d33"
+    }).then(result => {
+        if (result.isConfirmed) {
+            fetch(`/Utenti/EliminaDocumentoProfessionista?id=${idDocumento}`, {
+                method: "POST"
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    gestisciDocumentiProfessionista(@ViewBag.IDProfessionista); // Ricarica view
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+        }
+    });
+    }
+
+
+
+    // 🔍 Filtro e paginazione Professionisti
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('professionistiTable');
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = document.querySelectorAll('.card-professionista'); // 📱 mobile card
+
+        const controlliContainer = document.getElementById('controlliProfessionisti');
+        const paginationContainer = document.getElementById('paginazioneProfessionisti');
+
+        // Elementi filtro
+        const searchInput = document.createElement('input');
+        const selectStato = document.createElement('select');
+        const selectRuolo = document.createElement('select');
+        const selectPageSize = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // ⚙️ Stato
+        ['Tutti', 'Attivo', 'Inattivo'].forEach(stato => {
+            const option = document.createElement('option');
+            option.value = stato;
+            option.textContent = stato;
+            selectStato.appendChild(option);
+        });
+        selectStato.className = 'form-select form-select-sm w-auto';
+
+        // 🧾 Ruolo
+        ['Tutti', 'Cliente', 'Fornitore', 'Cliente / Fornitore', 'N/D'].forEach(ruolo => {
+            const option = document.createElement('option');
+            option.value = ruolo;
+            option.textContent = ruolo;
+            selectRuolo.appendChild(option);
+        });
+        selectRuolo.className = 'form-select form-select-sm w-auto';
+
+        // 📄 Righe per pagina
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // ➕ Aggiunta controlli
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectStato);
+        controlliContainer.appendChild(selectRuolo);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroStato = selectStato.value;
+            const filtroRuolo = selectRuolo.value;
+
+            let filteredRows = rows.filter(row => {
+                const stato = (row.querySelector('td.stato')?.innerText.trim()) || '';
+                const ruolo = (row.querySelector('td.ruolo')?.innerText.trim()) || '';
+                const testo = row.innerText.toLowerCase();
+
+                const statoMatch = (filtroStato === 'Tutti' || stato === filtroStato);
+                const ruoloMatch = (filtroRuolo === 'Tutti' || ruolo === filtroRuolo);
+                const ricercaMatch = testo.includes(keyword);
+
+                return statoMatch && ruoloMatch && ricercaMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // 🖥️ Tabella desktop
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
+
+            // 📱 Card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredRows.forEach(row => {
+                const id = row.querySelector('td')?.innerText.trim();
+                const card = document.querySelector(`.card-professionista[data-id="${id}"]`);
+                if (card) card.style.display = '';
+            });
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // 🎯 Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectStato.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectRuolo.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+    // DATI BANCARI
+    function apriModaleDatiBancariProfessionista() {
+        const idProfessionista = document.querySelector('[name="ID_Professionista"]').value;
+
+        // Pulisce i campi della form
+        const form = document.getElementById("DatiBancariForm");
+        form.reset();
+
+        // Imposta i campi nascosti
+        form.querySelector('[name="ID_Cliente"]').value = idProfessionista || "";
+        form.querySelector('[name="TipoCliente"]').value = "Professionista";
+
+        if (!idProfessionista || idProfessionista === "0") {
+            // Se è nuovo, mostra la modale senza fetch
+            new bootstrap.Modal(document.getElementById("datiBancariModal")).show();
+            return;
+        }
+
+        // Se è in modifica, recupera dati bancari esistenti
+        fetch(`/Utenti/GetDatiBancariProfessionista?idProfessionista=${idProfessionista}`)
+            .then(response => response.json())
+            .then(data => {
+                if (!data || data.success === false) {
+                    toastr.warning("Nessun dato bancario trovato.");
+                    return;
+                }
+                form.querySelector('[name="NomeBanca"]').value = data.NomeBanca || "";
+                form.querySelector('[name="IBAN"]').value = data.IBAN || "";
+                form.querySelector('[name="Intestatario"]').value = data.IntestatarioConto || "";
+                form.querySelector('[name="BIC_SWIFT"]').value = data.BIC || "";
+                form.querySelector('[name="Note"]').value = data.Note || "";
+            })
+            .catch(err => {
+                console.error("Errore nel recupero dei dati bancari (prof):", err);
+                toastr.error("Errore nel caricamento dei dati bancari.");
+            });
+
+        new bootstrap.Modal(document.getElementById("datiBancariModal")).show();
+    }
+
+
+
+
+    function salvaDatiBancari() {
+        const form = document.getElementById("DatiBancariForm");
+        const formData = new FormData(form);
+        const idCliente = formData.get("ID_Cliente");
+
+        if (!idCliente) {
+            // ⚠️ siamo in creazione → salva in memoria
+            datiBancariTemporaneiProfessionista = {
+                NomeBanca: formData.get("NomeBanca"),
+                IBAN: formData.get("IBAN"),
+                Intestatario: formData.get("Intestatario"),
+                BIC_SWIFT: formData.get("BIC_SWIFT"),
+                Note: formData.get("Note")
+            };
+
+            toastr.success("Dati bancari salvati temporaneamente.");
+            bootstrap.Modal.getInstance(document.getElementById('datiBancariModal')).hide();
+            return;
+        }
+
+        // ✅ siamo in modifica → invia al server
+        fetch('/Utenti/SalvaDatiBancari', {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById('datiBancariModal')).hide();
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                console.error("Errore:", err);
+                toastr.error("Errore durante il salvataggio dati bancari.");
+            });
+    }
+
+    // fine dati bancari
+
+    function ApriPermessi(idUtente) {
+        console.log("🧪 Chiamo ApriPermessi con ID:", idUtente);
+
+        fetch('/Utenti/GetPermessi?idUtente=' + idUtente)
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById('permessiContent').innerHTML = html;
+                const modal = new bootstrap.Modal(document.getElementById('permessiModal'));
+                modal.show();
+            })
+            .catch(err => {
+                toastr.error("Errore nel caricamento permessi.");
+                console.error(err);
+            });
+    }
+
+    function SalvaPermessi() {
+        const form = document.getElementById('permessiForm');
+        if (!form) return;
+
+        const idUtente = form.querySelector('input[name="ID_Utente"]').value;
+        if (!idUtente) {
+            toastr.error("ID Utente mancante.");
+            return;
+        }
+
+        const rows = form.querySelectorAll('tbody tr');
+        const permessi = [];
+
+        rows.forEach(row => {
+            permessi.push({
+                ID_Menu: row.querySelector('.id-menu').value,
+                Vedi: row.querySelector('.vedi').checked,
+                Aggiungi: row.querySelector('.aggiungi').checked,
+                Modifica: row.querySelector('.modifica').checked,
+                Elimina: row.querySelector('.elimina').checked,
+                Delegabile: row.querySelector('.delegabile')?.checked || false
+            });
+        });
+
+        const body = {
+            ID_Utente: idUtente,
+            Permessi: permessi
+        };
+
+        fetch('/Utenti/AssegnaPermessi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('permessiModal')).hide();
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                toastr.error("Errore durante il salvataggio permessi.");
+                console.error(err);
+            });
+    }
+
+
+
+    function DisattivaPermessi(idUtente) {
+        if (!idUtente || isNaN(idUtente)) {
+            toastr.warning("ID utente non valido.");
+            return;
+        }
+
+        fetch('/Utenti/DisattivaPermessi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ idUtente: idUtente })
+        })
+            .then(response => response.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    setTimeout(() => location.reload(), 500); // Leggero delay per mostrare il toast
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(error => {
+                console.error("Errore durante la disattivazione dei permessi:", error);
+                toastr.error("Errore durante la richiesta al server.");
+            });
+    }
+
+
+    function gestisciPermessiUtente(idUtente) {
+        console.log("→ Chiamata gestione permessi utente:", idUtente);
+
+        // Chiudi la modale "Utenti Assegnati" se è aperta
+        const modalUtentiAssegnati = bootstrap.Modal.getInstance(document.getElementById("utentiAssegnatiProfessionistaModal"));
+        if (modalUtentiAssegnati) {
+            modalUtentiAssegnati.hide();
+        }
+
+        // Poi apri la modale permessi
+        fetch(`/Utenti/GetPermessi?idUtente=${idUtente}`)
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById("permessiContent").innerHTML = html;
+                new bootstrap.Modal(document.getElementById("permessiModal")).show();
+            })
+            .catch(err => {
+                console.error("Errore apertura permessi:", err);
+                toastr.error("Errore apertura gestione permessi.");
+            });
+    }
+
+    // tooltip
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+            new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+
+
+
+</script>

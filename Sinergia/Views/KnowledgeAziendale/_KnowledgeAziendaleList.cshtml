@@ -1,0 +1,562 @@
+﻿@model List<Sinergia.Models.KnowledgeAziendaleViewModel>
+
+@{
+    var puoAggiungere = ViewBag.PuoAggiungere == true;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+    bool mostraAzioni = puoAggiungere || Model.Any(d => d.KnowledgeAziendaleID > 0);
+}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliKnowledgeAziendale" class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"  onclick="apriNuovoKnowledgeAziendale()">Nuovo Documento</button>
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered table-sm align-middle" id="knowledgeAziendaleTable">
+            <thead class="table-light">
+                <tr>
+                    <th class="text-nowrap">ID</th>
+                    <th class="text-nowrap">Titolo</th>
+                    <th class="text-nowrap">Tipo</th>
+                    <th class="text-nowrap">Versione</th>
+                    <th class="text-nowrap">Creato Da</th>
+                    <th class="text-nowrap text-center">Data Documento</th>
+                    <th class="text-nowrap text-center">Allegato</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-center text-nowrap">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in Model)
+                {
+                   <tr data-letto="@(d.Letto ? "true" : "false")">
+                       <td class="text-nowrap">@d.KnowledgeAziendaleID</td>
+                       <td class="text-nowrap">@d.Titolo</td>
+                       <td class="text-nowrap">@d.Tipo</td>
+                       <td class="text-nowrap">@d.Versione</td>
+                       <td class="text-nowrap">@d.CreatoDa</td>
+                       <td class="text-nowrap text-center">@d.DataDocumento.ToString("dd/MM/yyyy")</td>
+                       <td class="text-center">
+                           @if (!string.IsNullOrEmpty(d.AllegatoPercorso))
+                           {
+                               <a href="@Url.Content(d.AllegatoPercorso)" target="_blank" class="btn btn-info btn-sm">
+                                   <i class="fa fa-download"></i>
+                               </a>
+                           }
+                           else
+                           {
+                               <span>-</span>
+                           }
+                       </td>
+                       @if (mostraAzioni)
+                       {
+                           <td class="text-center">
+                               @Html.Partial("~/Views/KnowledgeAziendale/_AzioniKnowledgeAziendale.cshtml", d)
+                           </td>
+                       }
+                   </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var d in Model)
+    {
+       <div class="card-knowledge" data-letto="@(d.Letto ? "true" : "false")">
+
+           <div class="fw-bold text-primary mb-1">@d.Titolo</div>
+           <div class="small text-muted"><strong>ID:</strong> @d.KnowledgeAziendaleID</div>
+           <div class="small text-muted"><strong>Tipo:</strong> @d.Tipo</div>
+           <div class="small text-muted"><strong>Versione:</strong> @d.Versione</div>
+           <div class="small text-muted"><strong>Creato Da:</strong> @d.CreatoDa</div>
+           <div class="small text-muted"><strong>Data Documento:</strong> @d.DataDocumento.ToString("dd/MM/yyyy")</div>
+
+           <div class="mt-2">
+               @if (!string.IsNullOrEmpty(d.AllegatoPercorso))
+               {
+                   <a href="@Url.Content(d.AllegatoPercorso)" target="_blank" class="btn btn-info btn-sm">
+                       <i class="fa fa-download"></i> Apri
+                   </a>
+               }
+               else
+               {
+                   <span class="text-muted small">Nessun allegato</span>
+               }
+           </div>
+
+           @if (mostraAzioni)
+           {
+               <div class="d-flex flex-wrap gap-2 mt-2">
+                   @Html.Partial("~/Views/KnowledgeAziendale/_AzioniKnowledgeAziendale.cshtml", d)
+               </div>
+           }
+       </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneKnowledgeAziendale" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+
+
+<!-- Modale Nuovo / Modifica Documento Knowledge Aziendale -->
+<div class="modal fade" id="knowledgeAziendaleModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <!-- XL per più larghezza -->
+        <form id="knowledgeAziendaleForm" enctype="multipart/form-data">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="knowledgeAziendaleModalLabel">
+                        Aggiungi Nuovo Documento Supporto
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="KnowledgeAziendaleID" />
+
+                    <!-- Riga 1 -->
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo *</label>
+                            <select name="Tipo" class="form-select form-select-sm" required>
+                                <option value="">— Seleziona —</option>
+                                <option value="Procedura">Procedura</option>
+                                <option value="Modulo">Modulo</option>
+                                <option value="Guida">Guida</option>
+                                <option value="Comunicazione">Comunicazione</option>
+                                <option value="Altro">Altro</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-5">
+                            <label class="form-label">Descrizione Breve *</label>
+                            <input type="text" name="Titolo" class="form-control form-control-sm" required />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Data Documento *</label>
+                            <input type="date" name="DataDocumento" class="form-control form-control-sm" required />
+                        </div>
+                    </div>
+
+                    <!-- Riga 2 -->
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-9">
+                            <label class="form-label">Descrizione *</label>
+                            <textarea name="Descrizione" rows="3" class="form-control form-control-sm" required></textarea>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label d-block">Destinatario *</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="Destinatario" value="Professionista" id="destProf">
+                                <label class="form-check-label" for="destProf">Professionista</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="Destinatario" value="Collaboratore" id="destColl">
+                                <label class="form-check-label" for="destColl">Collaboratore</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Riga 3 -->
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-4">
+                            <label class="form-label d-block">Documento Vecchio</label>
+                            <input type="hidden" name="Vecchio" value="false" />
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="chkVecchio" name="Vecchio" value="true">
+                                <label class="form-check-label" for="chkVecchio">NO</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Riga 4 -->
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-9">
+                            <label class="form-label">Documenti Allegati</label>
+                            <input type="file" name="Allegato" id="allegatoInput" class="form-control form-control-sm" multiple />
+                            <small class="text-muted">Puoi selezionare più file (PDF, DOCX, JPG, PNG)</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Nome del file</label>
+                            <input type="text" id="nomeFileAllegato" class="form-control form-control-sm" readonly />
+                        </div>
+                    </div>
+
+                    <!-- Allegati Esistenti -->
+                    <div id="allegatiEsistenti" class="mt-2 d-none">
+                        <label class="form-label">Allegati già presenti</label>
+                        <ul class="list-group list-group-sm" id="listaAllegati"></ul>
+                    </div>
+
+                    <!-- Riga 5 -->
+                    @*<div class="row g-3 mt-3">
+                        <div class="col-md-3">
+                            <label class="form-label d-block">Letto</label>
+                            <input type="hidden" name="Letto" value="false" />
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="chkLetto" name="Letto" value="true">
+                                <label class="form-check-label" for="chkLetto">NO</label>
+                            </div>
+                        </div>
+                    </div>*@
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* Modale Eliminazione Documento Knowledge Aziendale *@
+<div class="modal fade" id="eliminaKnowledgeAziendaleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Elimina Documento</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Confermi l’eliminazione definitiva di questo documento aziendale?</p>
+                <input type="hidden" id="idDocumentoDaEliminare" />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneDocumento">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let idDocumentoDaEliminare = 0;
+
+    // ➕ Nuovo Documento
+    function apriNuovoKnowledgeAziendale() {
+        const form = document.getElementById("knowledgeAziendaleForm");
+        form.reset();
+        form.querySelector('[name="KnowledgeAziendaleID"]').value = 0;
+        document.getElementById("knowledgeAziendaleModalLabel").textContent = "Nuovo Documento";
+        document.getElementById("allegatiEsistenti").classList.add("d-none");
+        new bootstrap.Modal(document.getElementById("knowledgeAziendaleModal")).show();
+    }
+
+    // ✏️ Modifica Documento
+    function apriModificaKnowledgeAziendale(id) {
+        fetch(`/Documenti/GetKnowledgeAziendale?id=${encodeURIComponent(id)}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success || !res.documento) {
+                    toastr.error(res.message || "Errore nel recupero del documento.");
+                    return;
+                }
+
+                const d = res.documento;
+                const form = document.getElementById("knowledgeAziendaleForm");
+                form.reset();
+
+                form.querySelector('[name="KnowledgeAziendaleID"]').value = d.KnowledgeAziendaleID;
+                form.querySelector('[name="Tipo"]').value = d.Tipo || "";
+                form.querySelector('[name="Titolo"]').value = d.Titolo || "";
+                form.querySelector('[name="DataDocumento"]').value = d.DataDocumento || "";
+                form.querySelector('[name="Descrizione"]').value = d.Descrizione || "";
+
+                // Destinatari (se salvi CSV tipo "Professionista,Collaboratore")
+                const destStr = (d.Destinatario || "").toLowerCase();
+                document.getElementById("destProf").checked = destStr.includes("professionista");
+                document.getElementById("destColl").checked = destStr.includes("collaboratore");
+
+                // Vecchio/Letto (se li hai nel modello)
+                const chkVecchio = document.getElementById("chkVecchio");
+                if (chkVecchio) {
+                    chkVecchio.checked = !!d.Vecchio;
+                    chkVecchio.nextElementSibling.textContent = d.Vecchio ? "SÌ" : "NO";
+                }
+
+                // Allegati esistenti
+                const lista = document.getElementById("listaAllegati");
+                const box = document.getElementById("allegatiEsistenti");
+                lista.innerHTML = "";
+                if (d.Allegati && d.Allegati.length) {
+                    d.Allegati.forEach(a => {
+                        const li = document.createElement("li");
+                        li.className = "list-group-item py-1";
+                        li.innerHTML = `<a href="${a.Percorso}" target="_blank">${a.Nome}</a>`;
+                        lista.appendChild(li);
+                    });
+                    box.classList.remove("d-none");
+                } else {
+                    box.classList.add("d-none");
+                }
+
+                // Titolo modale e show
+                const titleEl = document.querySelector("#knowledgeAziendaleModal .modal-title");
+                if (titleEl) titleEl.textContent = "Modifica Documento Supporto";
+                new bootstrap.Modal(document.getElementById("knowledgeAziendaleModal")).show();
+            })
+            .catch(() => toastr.error("Errore di comunicazione col server."));
+    }
+
+
+    // 💾 Salvataggio Documento
+    $('#knowledgeAziendaleForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+        const id = formData.get("KnowledgeAziendaleID");
+
+        const url = id && parseInt(id) > 0
+            ? '/Documenti/ModificaKnowledgeAziendale'
+            : '/Documenti/CreaKnowledgeAziendale';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("knowledgeAziendaleModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // 🗑️ Conferma Eliminazione
+    function confermaEliminazioneKnowledgeAziendale(id) {
+        idDocumentoDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaKnowledgeAziendaleModal")).show();
+    }
+
+    $('#btnConfermaEliminazioneDocumento').on('click', function () {
+        fetch('/Documenti/EliminaKnowledgeAziendale', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idDocumentoDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message || "Documento eliminato con successo!");
+
+                    // Attendi 1 secondo così l'utente vede il messaggio
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    toastr.error(res.message || "Errore durante l'eliminazione del documento.");
+                }
+            })
+            .catch(() => {
+                toastr.error("Errore di comunicazione col server.");
+            });
+    });
+
+    // segna messaggio letto
+
+    function segnaDocumentoComeLetto(id, btn) {
+        fetch('/Documenti/SegnaComeLetto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'id=' + encodeURIComponent(id)
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message || "Segnato come letto");
+                    btn.remove(); // Rimuove il pulsante
+                } else {
+                    toastr.error(res.message || "Errore durante l'operazione");
+                }
+            })
+            .catch(() => toastr.error("Errore di comunicazione col server"));
+    }
+
+    // aggiorna label switch NO/YES
+    const vecchio = document.getElementById('chkVecchio');
+    if (vecchio) vecchio.addEventListener('change', () => {
+        vecchio.nextElementSibling.textContent = vecchio.checked ? 'SÌ' : 'NO';
+    });
+    const letto = document.getElementById('chkLetto');
+    if (letto) letto.addEventListener('change', () => {
+        letto.nextElementSibling.textContent = letto.checked ? 'SÌ' : 'NO';
+    });
+
+    // mostra nome/i dei file selezionati
+    const allegatoInput = document.getElementById('allegatoInput');
+    const nomeFile = document.getElementById('nomeFileAllegato');
+    if (allegatoInput && nomeFile) {
+        allegatoInput.addEventListener('change', () => {
+            if (!allegatoInput.files || allegatoInput.files.length === 0) {
+                nomeFile.value = '';
+                return;
+            }
+            const names = Array.from(allegatoInput.files).map(f => f.name);
+            nomeFile.value = names.join(', ');
+        });
+    }
+
+    // 🔍 Filtro e paginazione - Knowledge Aziendale
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('knowledgeAziendaleTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = Array.from(document.querySelectorAll('.card-knowledge')); // per mobile
+
+        const controlliContainer = document.getElementById('controlliKnowledgeAziendale');
+        const paginationContainer = document.getElementById('paginazioneKnowledgeAziendale');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+        const selectLetto = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // 📌 Filtro Letto/Non Letto
+        [
+            { value: "", label: "Tutti" },
+            { value: "letto", label: "Letto" },
+            { value: "nonletto", label: "Non Letto" }
+        ].forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            selectLetto.appendChild(option);
+        });
+        selectLetto.className = 'form-select form-select-sm w-auto';
+
+        // ➕ Inserisci controlli nella barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectLetto);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const lettoFilter = selectLetto.value; // "letto" | "nonletto" | ""
+
+            // Filtra righe desktop
+            let filteredRows = rows.filter(row => {
+                const text = row.innerText.toLowerCase();
+
+                let matchesKeyword = text.includes(keyword);
+                let matchesLetto = true;
+
+                if (lettoFilter === "letto") {
+                    matchesLetto = row.dataset.letto === "true";
+                } else if (lettoFilter === "nonletto") {
+                    matchesLetto = row.dataset.letto === "false";
+                } else {
+                    matchesLetto = true; // ✅ Mostra tutto
+                }
+
+                return matchesKeyword && matchesLetto;
+            });
+
+            // Filtra card mobile
+            let filteredCards = cards.filter(card => {
+                const text = card.innerText.toLowerCase();
+
+                let matchesKeyword = text.includes(keyword);
+                let matchesLetto = true;
+
+                if (lettoFilter === "letto") {
+                    matchesLetto = card.dataset.letto === "true";
+                } else if (lettoFilter === "nonletto") {
+                    matchesLetto = card.dataset.letto === "false";
+                } else {
+                    matchesLetto = true; // ✅ Mostra tutto
+                }
+
+                return matchesKeyword && matchesLetto;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // 🖥️ Mostra/nasconde righe tabella
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+
+            // 📱 Mostra/nasconde card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredCards.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(c => c.style.display = '');
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+
+        // Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+        selectLetto.addEventListener('change', () => {
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+
+</script>

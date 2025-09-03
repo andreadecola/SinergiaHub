@@ -1,0 +1,63 @@
+﻿@media (max-width: 768px) {
+    html, body {
+        width: 100%;
+        max-width: 100vw;
+        overflow-x: hidden !important;
+    }
+
+    .main-layout {
+        flex-direction: column !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+    }
+
+    .sidebar.offcanvas {
+        width: 250px;
+        background-color: #343a40;
+        color: white;
+    }
+
+    .sidebar .offcanvas-body {
+        padding: 1rem;
+    }
+
+    .content-wrapper {
+        width: 100% !important;
+        max-width: 100vw !important;
+        padding: 0 !important;
+        overflow-x: hidden !important;
+    }
+
+    .main-content {
+        padding: 1rem !important;
+    }
+
+    .card {
+        width: 100% !important;
+        max-width: 100vw;
+        margin: 0 0 1rem 0;
+        box-sizing: border-box;
+    }
+
+    .container, .container-fluid, .row {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+    }
+
+    .input-responsive {
+        width: 100%; /* Mobile: piena larghezza */
+        max-width: 100%;
+    }
+}
+
+/* ✅ Desktop: separata */
+@media (min-width: 768px) {
+    .input-responsive {
+        width: auto;
+        max-width: 120px;
+    }
+}

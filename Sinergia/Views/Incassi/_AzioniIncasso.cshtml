@@ -1,0 +1,35 @@
+﻿@model Sinergia.Models.IncassoViewModel
+
+@{
+    bool puoModificare = ViewData["PuoModificare"] as bool? ?? false;
+    bool puoEliminare = ViewData["PuoEliminare"] as bool? ?? false;
+    string tipoUtente = ViewData["TipoUtente"] as string ?? "";
+}
+
+<div class="d-flex gap-1 justify-content-center">
+    @if (puoModificare)
+    {
+        <button class="btn btn-warning btn-sm" onclick="apriModificaIncasso(@Model.ID_Incasso)">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+
+    @if (puoEliminare)
+    {
+        <button class="btn btn-danger btn-sm" onclick="confermaEliminazioneIncasso(@Model.ID_Incasso)">
+            <i class="fa fa-trash"></i>
+        </button>
+    }
+
+    <a class="btn btn-info btn-sm" title="Vai alla pratica"
+       href="@Url.Action("DettaglioPratica", "Pratiche", new { id = Model.ID_Pratiche })">
+        <i class="fa fa-folder-open"></i>
+    </a>
+
+    @if (tipoUtente == "Admin")
+    {
+        <button class="btn btn-primary btn-sm" onclick="apriRiepilogoRicaviSinergia(@Model.ID_Pratiche)">
+            <i class="fa fa-chart-bar"></i>
+        </button>
+    }
+</div>

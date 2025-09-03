@@ -1,0 +1,755 @@
+﻿@{
+    ViewBag.Title = "Gestione Utenti";
+
+}
+
+@section styles {
+    <style>
+        span[role="status"] {
+            display: none !important;
+        }
+
+        .table > tbody > tr > td {
+            padding: 5px;
+        }
+
+        .mylabel {
+            margin-bottom: 4px;
+            color: #999;
+            font-size: 12px;
+            font-weight: 500;
+        }
+    </style>
+}
+
+<div id="content">
+    <div class="row">
+        <div class="col-xs-12 col-sm-7 col-md-7 col-lg-4">
+            <h1 class="page-title txt-color-blueDark">
+                <i class="fa fa-users fa-fw"></i> Gestione Utenti
+            </h1>
+        </div>
+    </div>
+
+    <section id="widget-grid">
+        <div class="row">
+            <article class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
+                <div class="jarviswidget" id="wid-id-utenti" data-widget-editbutton="false" data-widget-deletebutton="false">
+                    <header>
+                        <span class="widget-icon"><i class="fa fa-list"></i></span>
+                        <h2 class="fadeInLeft animated">Lista Utenti</h2>
+                    </header>
+                    <div>
+                        <div class="widget-body no-padding">
+                            <div id="utentiContainer">
+                                @Html.Action("GestioneUtentiList", "Utenti")
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </section>
+</div>
+
+
+<!-- Modale Nuovo Utente -->
+<div class="modal fade" id="utenteModal" tabindex="-1" aria-labelledby="utenteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form id="UtenteForm" enctype="multipart/form-data" autocomplete="off">
+            <div class="modal-content">
+                <div class="modal-header text-dark">
+                    <h5 class="modal-title" id="utenteModalLabel">Nuovo Utente</h5>
+                    <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="container-fluid">
+                        <div class="row g-2">
+                            <input type="hidden" name="ID_Utente" />
+
+                            <div class="col-md-4">
+                                <label>Nome *</label>
+                                <input type="text" name="Nome" class="form-control form-control-sm" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label>Cognome *</label>
+                                <input type="text" name="Cognome" class="form-control form-control-sm" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label>Cellulare 1 *</label>
+                                <input type="text" name="Cellulare1" class="form-control form-control-sm" required />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Cellulare 2</label>
+                                <input type="text" name="Cellulare2" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label>Codice Fiscale</label>
+                                <input type="text" name="CodiceFiscale" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label>Email *</label>
+                                <input type="email" name="MAIL1" class="form-control form-control-sm" required />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Telefono</label>
+                                <input type="text" name="Telefono" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label>Email 2</label>
+                                <input type="email" name="MAIL2" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label>Descrizione Attività</label>
+                                <textarea name="DescrizioneAttivita" class="form-control form-control-sm" rows="1"></textarea>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Tipo Utente *</label>
+                                <select name="TipoUtente" class="form-select form-select-sm" required>
+                                    <option value="" disabled selected>Seleziona un tipo utente</option>
+                                    <option value="Admin">Admin</option>
+                                    <option value="Collaboratore">Collaboratore</option>
+                                    <option value="Professionista">Professionista</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Stato Utente *</label>
+                                <select name="Stato" class="form-select form-select-sm" required>
+                                    <option value="Attivo">Attivo</option>
+                                    <option value="Disattivato">Disattivato</option>
+                                    <option value="Sospeso">Sospeso</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Indirizzo</label>
+                                <input type="text" name="Indirizzo" class="form-control form-control-sm" />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Nazione</label>
+                                <select id="Nazione" name="ID_Nazione" class="form-select form-select-sm"></select>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Città</label>
+                                <select id="Citta" name="ID_CittaResidenza" class="form-select form-select-sm"></select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label>Documento</label>
+                                <div id="documentiContainer">
+                                    <div class="input-group input-group-sm mb-1">
+                                        <input type="file" name="DOCUMENTO" class="form-control form-control-sm" />
+                                        <button type="button" class="btn btn-outline-primary btn-sm mx-1" onclick="aggiungiCampoDocumento()">+</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label>Foto Profilo</label>
+                                <input type="file" name="FotoProfilo" id="FotoProfiloUpload" accept="image/*" class="form-control form-control-sm" onchange="validaFotoProfilo(this)" />
+                            </div>
+
+                            <div class="col-md-12 mt-2">
+                                <label>Note</label>
+                                <textarea name="Note" class="form-control form-control-sm" rows="2"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-success btn-sm" onclick="saveUtente()">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<script>
+    // Rimuove spazi dal cognome al termine della digitazione
+    document.addEventListener('DOMContentLoaded', function () {
+        const cognomeInput = document.querySelector('input[name="Cognome"]');
+        if (cognomeInput) {
+            cognomeInput.addEventListener('blur', function () {
+                this.value = this.value.replace(/\s+/g, '');
+            });
+        }
+    });
+</script>
+
+
+<!-- Modale Modifica Utente -->
+<div class="modal fade" id="modificaUtenteModal" tabindex="-1" aria-labelledby="modificaUtenteLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form id="ModificaUtenteForm" enctype="multipart/form-data" autocomplete="off">
+            <div class="modal-content">
+                <div class="modal-header  text-dark">
+                    <h5 class="modal-title" id="modificaUtenteLabel">Modifica Utente</h5>
+                    <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="container-fluid">
+
+                        <!-- ✅ SWITCH VERSIONI -->
+                        <div class="row mb-2" id="toggleVersioniWrapperUtente">
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="toggleVersioniUtente">
+                                    <label class="form-check-label fw-bold" for="toggleVersioniUtente">Mostra versione precedente</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-2">
+                            <input type="hidden" name="ID_Utente" id="modifica_ID_Utente" />
+
+                            <div class="col-md-4">
+                                <label>Nome *</label>
+                                <input type="text" name="Nome" class="form-control form-control-sm" required />
+                                <small class="text-muted d-none" data-prev="Nome"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Cognome *</label>
+                                <input type="text" name="Cognome" class="form-control form-control-sm" required />
+                                <small class="text-muted d-none" data-prev="Cognome"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Cellulare 1 *</label>
+                                <input type="text" name="Cellulare1" class="form-control form-control-sm" required />
+                                <small class="text-muted d-none" data-prev="Cellulare 1"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Cellulare 2</label>
+                                <input type="text" name="Cellulare2" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Cellulare 2"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Codice Fiscale</label>
+                                <input type="text" name="CodiceFiscale" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Codice Fiscale"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Email *</label>
+                                <input type="email" name="MAIL1" class="form-control form-control-sm" required />
+                                <small class="text-muted d-none" data-prev="Email 1"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Telefono</label>
+                                <input type="text" name="Telefono" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Telefono"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Email 2</label>
+                                <input type="email" name="MAIL2" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Email 2"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Descrizione Attività</label>
+                                <textarea name="DescrizioneAttivita" class="form-control form-control-sm" rows="1"></textarea>
+                                <small class="text-muted d-none" data-prev="Descrizione Attività"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Nazione</label>
+                                <select id="Nazione" name="ID_Nazione" class="form-select form-select-sm"></select>
+                                <small class="text-muted d-none" data-prev="Nazione"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Città</label>
+                                <select id="Citta" name="ID_CittaResidenza" class="form-select form-select-sm"></select>
+                                <small class="text-muted d-none" data-prev="Citta"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Indirizzo</label>
+                                <input type="text" name="Indirizzo" class="form-control form-control-sm" />
+                                <small class="text-muted d-none" data-prev="Indirizzo"></small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Tipo Utente *</label>
+                                <select name="TipoUtente" class="form-select form-select-sm" required>
+                                    <option value="" disabled selected>Seleziona un tipo utente</option>
+                                    <option value="Admin">Admin</option>
+                                    <option value="Collaboratore">Collaboratore</option>
+                                    <option value="Professionista">Professionista</option>
+                                </select>
+                                <small class="text-muted d-none" data-prev="TipoUtente"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Stato Utente *</label>
+                                <select name="Stato" class="form-select form-select-sm" required>
+                                    <option value="Attivo">Attivo</option>
+                                    <option value="Disattivato">Disattivato</option>
+                                    <option value="Sospeso">Sospeso</option>
+                                </select>
+                                <small class="text-muted d-none" data-prev="Stato"></small>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label>Documento</label>
+                                <div id="documentiContainer">
+                                    <div class="input-group input-group-sm mb-1">
+                                        <input type="file" name="DOCUMENTO" class="form-control form-control-sm" />
+                                        <button type="button" class="btn btn-outline-primary btn-sm mx-1" onclick="aggiungiCampoDocumento()">+</button>
+                                    </div>
+                                </div>
+                                <small class="text-muted d-none" data-prev="Documento"></small>
+                            </div>
+                            <div class="col-md-6">
+                                <label>Foto Profilo</label>
+                                <input type="file" name="FotoProfilo" id="FotoProfiloUpload" accept="image/*" class="form-control form-control-sm" onchange="validaFotoProfilo(this)" />
+                                <small id="nomeFotoAttuale" class="form-text text-muted d-none"></small>
+                                <small class="text-muted d-none" data-prev="Foto Profilo"></small>
+                            </div>
+
+                            <div class="col-md-12 mt-2">
+                                <label>Note</label>
+                                <textarea name="Note" class="form-control form-control-sm" rows="2"></textarea>
+                                <small class="text-muted d-none" data-prev="Note"></small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="salvaModificaUtente()">Salva modifiche</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const utenteModal = document.getElementById('utenteModal');
+        if (utenteModal) {
+            utenteModal.addEventListener('hidden.bs.modal', () => {
+                document.getElementById('UtenteForm').reset();
+            });
+        }
+    });
+
+    function addNewUtente() {
+        console.log("Apertura Modale per NUOVO Utente");
+
+        const form = document.getElementById("UtenteForm");
+        form.reset();
+
+        document.getElementById("utenteModalLabel").textContent = "Nuovo Utente";
+
+        // 🔹 Nascondi toggle e storico
+        $("#toggleVersioniWrapperUtente").addClass("d-none");
+        $("[data-prev]").addClass("d-none").text("");
+        $("#infoStoricoUtente").remove();
+        $("#toggleVersioniUtente").prop("checked", false);
+
+        // Reset città e nazioni
+        document.getElementById('Citta').innerHTML = '<option value="">Seleziona una città</option>';
+        document.getElementById('Nazione').innerHTML = '<option value="">Seleziona una nazione</option>';
+        caricaCittaENazioni();
+
+        // Capitalizzazione nome
+        const nomeInput = document.querySelector('#utenteModal input[name="Nome"]');
+        if (nomeInput) {
+            nomeInput.addEventListener("blur", () => {
+                nomeInput.value = nomeInput.value.charAt(0).toUpperCase() + nomeInput.value.slice(1).toLowerCase();
+            });
+        }
+
+        // Mostra modale
+        const modalEl = document.getElementById('utenteModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        // ✅ Solo X chiusura → reload
+        const closeBtn = modalEl.querySelector(".btn-close");
+        if (closeBtn) {
+            closeBtn.addEventListener("click", function onCloseX() {
+                location.reload();
+                closeBtn.removeEventListener("click", onCloseX);
+            });
+        }
+
+        // Validazione foto profilo
+        const fotoInput = document.getElementById("FotoProfiloUpload");
+        if (fotoInput) {
+            fotoInput.addEventListener("change", function () {
+                validaFotoProfilo(this);
+            });
+        }
+    }
+
+
+    function saveUtente() {
+        console.log("📝 Funzione saveUtente chiamata");
+
+        const form = document.getElementById('UtenteForm');
+        const formData = new FormData(form);
+
+        fetch('/Utenti/Crea', {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    $('#utenteModal').modal('hide');
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(error => {
+                console.error("Errore nel salvataggio utente:", error);
+                toastr.error("Errore durante la richiesta al server.");
+            });
+    }
+
+
+    function apriModaleModificaUtente(idUtente) {
+        fetch(`/Utenti/GetUtente?id=${idUtente}`)
+            .then(response => response.json())
+            .then(utente => {
+                if (utente) {
+                    const form = document.getElementById('ModificaUtenteForm');
+
+                    // Reset
+                    form.reset();
+                    $("[data-prev]").addClass("d-none").text("");
+                    $("#infoStoricoUtente").remove();
+                    $("#toggleVersioniUtente").prop("checked", false);
+
+                    // Popola valori attuali
+                    form.querySelector('[name="ID_Utente"]').value = utente.ID_Utente || '';
+                    form.querySelector('[name="Nome"]').value = utente.Nome || '';
+                    form.querySelector('[name="Cognome"]').value = utente.Cognome || '';
+                    form.querySelector('[name="Cellulare1"]').value = utente.Cellulare1 || '';
+                    form.querySelector('[name="Cellulare2"]').value = utente.Cellulare2 || '';
+                    form.querySelector('[name="CodiceFiscale"]').value = utente.CodiceFiscale || '';
+                    form.querySelector('[name="Telefono"]').value = utente.Telefono || '';
+                    form.querySelector('[name="MAIL1"]').value = utente.MAIL1 || '';
+                    form.querySelector('[name="MAIL2"]').value = utente.MAIL2 || '';
+                    form.querySelector('[name="DescrizioneAttivita"]').value = utente.DescrizioneAttivita || '';
+                    form.querySelector('[name="Note"]').value = utente.Note || '';
+                    form.querySelector('[name="TipoUtente"]').value = utente.TipoUtente || '';
+                    form.querySelector('[name="Indirizzo"]').value = utente.Indirizzo || '';
+                    form.querySelector('[name="Stato"]').value = utente.Stato || '';
+
+                    // Foto profilo
+                    const inputFoto = form.querySelector('#FotoProfiloUpload');
+                    if (inputFoto) {
+                        inputFoto.value = "";
+                        inputFoto.removeEventListener("change", validaFotoProfilo);
+                        inputFoto.addEventListener("change", function () {
+                            validaFotoProfilo(this);
+                        });
+                    }
+                    const fotoAttualeLabel = document.getElementById('nomeFotoAttuale');
+                    if (fotoAttualeLabel) {
+                        if (utente.FotoPresente && utente.NomeFileFotoProfilo) {
+                            fotoAttualeLabel.textContent = "File attuale: " + utente.NomeFileFotoProfilo;
+                            fotoAttualeLabel.style.display = "block";
+                        } else {
+                            fotoAttualeLabel.textContent = "";
+                            fotoAttualeLabel.style.display = "none";
+                        }
+                    }
+
+                    // Carica Città e Nazione
+                    fetch('/Utenti/GetCittaENazioni')
+                        .then(r => r.json())
+                        .then(data => {
+                            const selectCitta = form.querySelector('[name="ID_CittaResidenza"]');
+                            const selectNazione = form.querySelector('[name="ID_Nazione"]');
+
+                            // reset
+                            selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                            selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                            // Popola nazioni
+                            data.nazioni.forEach(n => {
+                                const opt = document.createElement("option");
+                                opt.value = n.ID_BPCittaDN;
+                                opt.textContent = n.NameNazione;
+                                selectNazione.appendChild(opt);
+                            });
+
+                            // Popola città
+                            data.citta.forEach(c => {
+                                const opt = document.createElement("option");
+                                opt.value = c.ID_BPCitta;
+                                opt.textContent = c.NameLocalita;
+                                selectCitta.appendChild(opt);
+                            });
+
+                            // ✅ Seleziona DOPO aver popolato
+                            if (utente.ID_Nazione) {
+                                selectNazione.value = utente.ID_Nazione;
+                            }
+                            if (utente.ID_CittaResidenza) {
+                                selectCitta.value = utente.ID_CittaResidenza;
+                            }
+                        });
+
+
+                    // ✅ Aggancio toggle per mostrare versione precedente
+                    $("#toggleVersioniUtente").off("change").on("change", function () {
+                        if (this.checked) {
+                            $.get("/Home/GetStoricoUtente", { idUtente: idUtente }, function (res) {
+                                // Prima resetto tutti i campi prev a "Precedente: "
+                                $("[data-prev]").each(function () {
+                                    $(this).text("Precedente: ").removeClass("d-none");
+                                });
+
+                                if (res.success && res.storico) {
+                                    const storico = res.storico;
+
+                                    // Formatto la data
+                                    let dataFormattata = "";
+                                    if (storico.DataUltimaModifica) {
+                                        let dt = new Date(storico.DataUltimaModifica);
+                                        if (!isNaN(dt)) {
+                                            dataFormattata = dt.toLocaleString("it-IT");
+                                        }
+                                    }
+
+                                    // Popola i <small data-prev="..."> con i valori effettivi trovati
+                                    for (const key in storico.CampiSpecifici) {
+                                        const valorePrec = storico.CampiSpecifici[key] || "";
+                                        $(`[data-prev='${key}']`).text(`Precedente: ${valorePrec}`);
+                                    }
+
+                                    // Info versione
+                                    $("#infoStoricoUtente").remove();
+                                    $(".modal-body").prepend(`
+                                    <div id="infoStoricoUtente" class="alert alert-light border small mb-2">
+                                        Ultima modifica: ${dataFormattata} ·
+                                        Utente: ${storico.NomeUtente || "?"} ·
+                                        Versione: ${storico.NumeroVersione}
+                                    </div>
+                                `);
+                                } else {
+                                    // Nessuna versione trovata → tengo comunque i "Precedente:" vuoti
+                                    $("#infoStoricoUtente").remove();
+                                    $(".modal-body").prepend(`
+                                    <div id="infoStoricoUtente" class="alert alert-warning small mb-2">
+                                        Nessuna versione precedente trovata.
+                                    </div>
+                                `);
+                                }
+                            });
+                        } else {
+                            // Reset quando disattivo il toggle
+                            $("[data-prev]").addClass("d-none").text("");
+                            $("#infoStoricoUtente").remove();
+                        }
+                    });
+
+                    // Mostra modale
+                    const modal = new bootstrap.Modal(document.getElementById('modificaUtenteModal'));
+                    modal.show();
+
+                } else {
+                    toastr.error("Utente non trovato.");
+                }
+            })
+            .catch(err => {
+                toastr.error("Errore nel caricamento dei dati dell'utente.");
+                console.error(err);
+            });
+    }
+
+
+
+
+    function salvaModificaUtente() {
+        const form = document.getElementById('ModificaUtenteForm');
+        const inputFoto = form.querySelector('#FotoProfiloModifica');
+
+        if (inputFoto && inputFoto.files.length > 0) {
+            const file = inputFoto.files[0];
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(file);
+
+            img.onload = function () {
+                inviaFormModificaUtente(form);
+                URL.revokeObjectURL(objectUrl);
+            };
+
+            img.onerror = function () {
+                toastr.error("Impossibile leggere l'immagine.");
+                inputFoto.value = ""; // pulisci se errore
+                URL.revokeObjectURL(objectUrl);
+            };
+
+            img.src = objectUrl;
+        } else {
+            inviaFormModificaUtente(form);
+        }
+    }
+
+
+    function inviaFormModificaUtente(form) {
+        const formData = new FormData(form);
+
+        fetch('/Utenti/Modifica', {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('modificaUtenteModal')).hide();
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                toastr.error("Errore durante la richiesta.");
+                console.error(err);
+            });
+    }
+
+    function OpenDeleteUtente(id) {
+        const deleteBtn = document.getElementById('confirmDeleteBtn');
+        if (deleteBtn) {
+            deleteBtn.dataset.id = id;
+            const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            modal.show();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const deleteBtn = document.getElementById('confirmDeleteBtn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                const id = deleteBtn.dataset.id;
+                if (!id) return;
+
+                fetch('/Utenti/Elimina', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ id: id })
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+                            toastr.success(res.message);
+                            location.reload();
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Errore eliminazione:", error);
+                        toastr.error("Errore durante la richiesta.");
+                    });
+            });
+        }
+    });
+
+    function caricaCittaENazioni() {
+        fetch('/Utenti/GetCittaENazioni')
+            .then(response => response.json())
+            .then(data => {
+                const selectCitta = document.getElementById('Citta');
+                const selectNazione = document.getElementById('Nazione');
+
+                selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                data.nazioni.forEach(n => {
+                    const opt = document.createElement("option");
+                    opt.value = n.ID_BPCittaDN;
+                    opt.textContent = n.NameNazione;
+                    selectNazione.appendChild(opt);
+
+                    if (n.NameNazione.toLowerCase() === "italia") {
+                        selectNazione.value = n.ID_BPCittaDN;
+                    }
+                });
+
+                data.citta.forEach(c => {
+                    const opt = document.createElement("option");
+                    opt.value = c.ID_BPCitta;
+                    opt.textContent = c.NameLocalita;
+                    selectCitta.appendChild(opt);
+
+                    if (c.NameLocalita.toLowerCase() === "roma") {
+                        selectCitta.value = c.ID_BPCitta;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error("❌ Errore nel caricamento di città e nazioni:", error);
+            });
+    }
+
+    function chiudiModaleUtente() {
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('utenteModal'));
+        modal.hide();
+        setTimeout(() => {
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style = "";
+        }, 300);
+    }
+
+    function validaFotoProfilo(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const estensioniValide = ['image/jpeg', 'image/png'];
+
+            if (!estensioniValide.includes(file.type)) {
+                toastr.error("❌ Formato immagine non valido. Usa JPG o PNG.");
+                input.value = "";
+            }
+        }
+    }
+
+
+    // aggiungi altro documento dopo il primo gia aggiunto
+    function aggiungiCampoDocumento() {
+        const container = document.getElementById("documentiContainer");
+
+        const nuovoInput = document.createElement("div");
+        nuovoInput.classList.add("input-group", "mb-1");
+
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.name = "DOCUMENTO";
+        fileInput.classList.add("form-control");
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.classList.add("btn", "btn-outline-danger");
+        removeBtn.textContent = "–";
+        removeBtn.onclick = function () {
+            container.removeChild(nuovoInput);
+        };
+
+        nuovoInput.appendChild(fileInput);
+        nuovoInput.appendChild(removeBtn);
+        container.appendChild(nuovoInput);
+    }
+</script>
+
+
+
+

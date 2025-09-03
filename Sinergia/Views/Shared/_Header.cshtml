@@ -1,0 +1,29 @@
+﻿<style type="text/css">
+    #logo img {
+        width: auto !important;
+        height: 32px !important;
+        padding-left: 3px;
+    }
+</style>
+
+<!-- HEADER -->
+<header id="header">
+    <div id="logo-group">
+        <!-- Logo Sinergia -->
+        <span id="logo">
+            <img src="@Url.Content("~/Content/img/Icons/Logosinergia 192x192.png")" alt="Sinergia" style="height: 32px;" />
+        </span>
+    </div>
+
+    <!-- Sezione Top Right -->
+    <section id="top-right">
+        <div class="pull-right">
+            @if (User.Identity.IsAuthenticated)
+            {
+                <!-- Qui possiamo visualizzare informazioni sull'utente, selezione azienda, etc. -->
+                @Html.Partial("_TopRight") <!-- Mostra la parte che include il nome dell'utente e il logout -->
+            }
+        </div>
+    </section>
+</header>
+<!-- END HEADER -->

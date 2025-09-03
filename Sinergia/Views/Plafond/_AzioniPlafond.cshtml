@@ -1,0 +1,66 @@
+﻿@model Sinergia.Models.FinanziamentiProfessionistiViewModel
+@{
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+
+    bool isFinanziamento = Model.ID_Finanziamento > 0;
+    bool isCostoPersonale = Model.TipoPlafond == "Costo Personale";
+    bool isPagamentoCosti = Model.TipoPlafond != null && Model.TipoPlafond.StartsWith("Pagamento Costo");
+    bool isDaIncasso = Model.ID_Plafond.HasValue && Model.ID_Finanziamento == 0 && !isCostoPersonale && !isPagamentoCosti;
+}
+
+<div class="d-flex gap-1 justify-content-center align-items-center">
+
+    @* ✏️ Modifica finanziamento *@
+    @if (permessiUtente?.Permessi.Any(p => p.Modifica) == true && isFinanziamento)
+    {
+        <button class="btn btn-warning btn-sm"
+                onclick="apriModificaFinanziamento(@Model.ID_Finanziamento)"
+                title="Modifica finanziamento">
+            <i class="fa fa-pencil"></i>
+        </button>
+    }
+
+    @* 🗑️ Elimina *@
+    @if (permessiUtente?.Permessi.Any(p => p.Elimina) == true)
+    {
+        if (isFinanziamento)
+        {
+            <button class="btn btn-danger btn-sm btn-elimina"
+                    data-tipo="finanziamento"
+                    data-id="@Model.ID_Finanziamento"
+                    title="Elimina finanziamento">
+                <i class="fa fa-trash"></i>
+            </button>
+        }
+        else if (isDaIncasso)
+        {
+            <button class="btn btn-outline-danger btn-sm btn-elimina"
+                    data-tipo="versamento"
+                    data-id="@Model.ID_Plafond"
+                    title="Elimina versamento da incasso">
+                <i class="fa fa-trash-alt"></i>
+            </button>
+        }
+        else if (isCostoPersonale)
+        {
+            <button class="btn btn-outline-danger btn-sm btn-elimina"
+                    data-tipo="costo"
+                    data-id="@Model.ID_CostoPersonale"
+                    title="Elimina costo personale">
+                <i class="fa fa-trash-alt"></i>
+            </button>
+        }
+        @* Se in futuro si vuole gestire anche l'eliminazione dei pagamenti costi:
+            else if (isPagamentoCosti)
+            {
+                <button class="btn btn-outline-danger btn-sm btn-elimina"
+                        data-tipo="pagamento"
+                        data-id="@Model.ID_Plafond"
+                        title="Elimina pagamento costo">
+                    <i class="fa fa-trash-alt"></i>
+                </button>
+            }
+        *@
+    }
+</div>
+

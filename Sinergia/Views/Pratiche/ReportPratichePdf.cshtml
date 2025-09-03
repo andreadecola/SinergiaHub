@@ -1,0 +1,67 @@
+﻿@model List<Sinergia.Models.PraticaViewModel>
+@{ Layout = null; }
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Report Pratiche</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            margin: 30px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Report Pratiche</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Titolo</th>
+                <th>Cliente</th>
+                <th>Owner</th>
+                <th>Data Creazione</th>
+                <th>Stato</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in Model)
+            {
+                <tr>
+                    <td>@p.ID_Pratiche</td>
+                    <td>@p.Titolo</td>
+                    <td>@p.NomeCliente</td>
+                    <td>@p.NomeOwner</td>
+                    <td>@(p.DataCreazione.HasValue ? p.DataCreazione.Value.ToString("dd/MM/yyyy") : "-")</td>
+                    <td>@p.Stato</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>
+

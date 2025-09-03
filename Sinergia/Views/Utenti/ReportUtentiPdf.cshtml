@@ -1,0 +1,76 @@
+﻿@model List<Sinergia.Models.UtenteViewModel>
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Report Utenti</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            margin: 30px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Report Utenti</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Cognome</th>
+                <th>Tipo Utente</th>
+                <th>Codice Fiscale</th>
+                <th>P.IVA</th>
+                <th>Email</th>
+                <th>Telefono</th>
+                <th>Stato</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var u in Model)
+            {
+                <tr>
+                    <td>@u.ID_Utente</td>
+                    <td>@u.Nome</td>
+                    <td>@u.Cognome</td>
+                    <td>@u.TipoUtente</td>
+                    <td>@(string.IsNullOrWhiteSpace(u.CodiceFiscale) ? "-" : u.CodiceFiscale)</td>
+                    <td>@(string.IsNullOrWhiteSpace(u.PIVA) ? "-" : u.PIVA)</td>
+                    <td>@(string.IsNullOrWhiteSpace(u.MAIL1) ? "-" : u.MAIL1)</td>
+                    <td>@(string.IsNullOrWhiteSpace(u.Telefono) ? "-" : u.Telefono)</td>
+                    <td>@u.Stato</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>
+

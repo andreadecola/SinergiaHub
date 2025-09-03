@@ -1,0 +1,896 @@
+﻿
+@model List<Sinergia.Models.CostoTeamViewModel>
+@{
+    var puoAggiungere = ViewBag.PuoAggiungere == true;
+    var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+    bool mostraAzioni = puoAggiungere || Model.Any(c => c.ID_AnagraficaCostoTeam > 0);
+}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<style>
+    /* Elimina la freccia stile select */
+    .no-arrow::-webkit-calendar-picker-indicator {
+        display: none !important;
+    }
+
+    .no-arrow {
+        appearance: none;
+        -moz-appearance: none;
+        -webkit-appearance: none;
+        background-image: none !important;
+    }
+</style>
+
+<!-- 🔍 Controlli filtro/paginazione -->
+<div id="controlliCostiTeam" class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>
+
+<!-- ➕ Pulsante nuovo -->
+<div class="d-flex justify-content-end mb-2">
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovoCostoTeam()">Nuovo Costo Team</button>
+    }
+</div>
+
+<!-- 🖥️ TABELLA DESKTOP -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered table-sm align-middle" id="costiTeamTable">
+            <thead class="table-light">
+                <tr>
+                    <th class="text-nowrap">ID</th>
+                    <th class="text-nowrap">Descrizione</th>
+                    <th class="text-nowrap">Stato Costo</th>
+                    <th class="text-nowrap">Ricorrenza</th>
+                    <th class="text-nowrap text-center">Ultima Modifica</th>
+                    @if (mostraAzioni)
+                    {
+                        <th class="text-center text-nowrap">Azioni</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in Model)
+                {
+                    <tr data-id="@c.ID_AnagraficaCostoTeam">
+                        <td class="text-nowrap">@c.CodiceIdentificativo</td>
+                        <td class="text-nowrap">@c.Descrizione</td>
+                        <td class="text-nowrap">@c.Stato</td>
+                        <td class="text-nowrap text-center">
+                            @if (c.RicorrenzaAttiva)
+                            {
+                                <span class="badge bg-success">Attiva</span>
+                            }
+                            else if (c.DataInizioRicorrenza != null)
+                            {
+                                <span class="badge bg-secondary">Scaduta</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-muted">Nessuna</span>
+                            }
+                        </td>
+                        <td class="text-center">@(!c.DataUltimaModifica.HasValue ? "-" : c.DataUltimaModifica.Value.ToString("dd/MM/yyyy"))</td>
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial("~/Views/CostiTeam/_AzioniCostoTeam.cshtml", c)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 📱 CARD VIEW MOBILE -->
+<div class="d-block d-md-none mt-3 px-2">
+    @foreach (var c in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-costo" data-id="@c.ID_AnagraficaCostoTeam">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">@c.Descrizione</span>
+                <span class="badge stato bg-@(c.RicorrenzaAttiva ? "success" : c.DataInizioRicorrenza != null ? "secondary" : "light text-muted")">
+                    @(c.RicorrenzaAttiva ? "Attiva" : c.DataInizioRicorrenza != null ? "Scaduta" : "Nessuna")
+                </span>
+            </div>
+
+            <div class="small text-muted"><strong>ID:</strong> @c.CodiceIdentificativo</div>
+            <div class="small text-muted"><strong>Stato:</strong> @c.Stato</div>
+            <div class="small text-muted"><strong>Ultima Modifica:</strong> @(!c.DataUltimaModifica.HasValue ? "-" : c.DataUltimaModifica.Value.ToString("dd/MM/yyyy"))</div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("~/Views/CostiTeam/_AzioniCostoTeam.cshtml", c)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- 🔄 Paginazione -->
+<div id="paginazioneCostiTeam" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+@* 🟡 Modale Crea/Modifica *@
+<div class="modal fade" id="costoTeamModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form id="costoTeamForm">
+            <div class="modal-content">
+                <div class="modal-header text-black">
+                    <h5 class="modal-title" id="costoTeamModalLabel">Nuovo Costo Team</h5>
+                    <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="ID_AnagraficaCostoTeam" id="ID_AnagraficaCostoTeam" />
+                    <input type="hidden" name="Frequenza" value="" />
+
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Descrizione</label>
+                            <input name="Descrizione" type="text" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Stato</label>
+                            <select name="Stato" class="form-select form-select-sm">
+                                <option value="Attivo">Attivo</option>
+                                <option value="Inattivo">Inattivo</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <label class="form-label">Note</label>
+                            <textarea name="Note" rows="1" class="form-control form-control-sm"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* 🗑️ Modale Eliminazione *@
+<div class="modal fade" id="eliminaCostoTeamModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Elimina Costo Team</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">Confermi l’eliminazione di questo costo team?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneCostoTeam">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Modale Ricorrenza Costo Team -->
+<div class="modal fade" id="ricorrenzaCostoTeamModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form id="ricorrenzaCostoTeamForm">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">Gestione Ricorrenza Costo Team</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Hidden fields -->
+                    <input type="hidden" name="ID_AnagraficaCosto" />
+                    <input type="hidden" name="ID_Ricorrenza" />
+                    <input type="hidden" name="Categoria" value="Costo Team" />
+                    <input type="hidden" name="ID_Professionista" id="hiddenIDProfessionistaCostoTeam" />
+                    <input type="hidden" name="ID_Team" />
+
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Periodicità</label>
+                            <select name="Periodicita" class="form-select form-select-sm">
+                                <option value="">-- Seleziona --</option>
+                                <option value="Giornaliero">Giornaliero</option>
+                                <option value="Settimanale">Settimanale</option>
+                                <option value="Mensile">Mensile</option>
+                                <option value="Bimestrale">Bimestrale</option>
+                                <option value="Trimestrale">Trimestrale</option>
+                                <option value="Semestrale">Semestrale</option>
+                                <option value="Annuale">Annuale</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Categoria</label>
+                            <input type="text" name="Categoria" class="form-control form-control-sm" value="Costo Team" readonly />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Tipo Valore</label>
+                            <input type="text" class="form-control form-control-sm no-arrow" name="TipoValore" value="Fisso" readonly />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Valore</label>
+                            <input type="number" name="Valore" step="0.01" min="0" class="form-control form-control-sm" required />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Una Tantum</label>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="checkUnaTantumTeam" />
+                                <label class="form-check-label" for="checkUnaTantumTeam">
+                                    Applica solo una volta (una tantum)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Data Inizio</label>
+                            <input type="date" name="DataInizio" class="form-control form-control-sm" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Data Fine</label>
+                            <input type="date" name="DataFine" class="form-control form-control-sm" />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Note aggiuntive</label>
+                            <textarea name="Note" rows="2" class="form-control form-control-sm" placeholder="Eventuali commenti..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-success btn-sm" onclick="salvaRicorrenzaCostoTeam()">Salva Ricorrenza</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<input type="hidden" id="hiddenOwnerProfessionista" value="@ViewBag.IDProfessionistaCorrente" />
+
+<!-- Modale Assegna Costo a Team -->
+<div class="modal fade" id="assegnaCostoTeamModal" tabindex="-1">
+    <div class="modal-dialog modal-md">
+        <form id="assegnaCostoTeamForm" method="post">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assegna costo ai Team</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="ID_AnagraficaCostoTeam" />
+
+                    <div class="alert alert-info py-2 px-3">
+                        Seleziona uno o più team e indica la percentuale di condivisione per ciascuno.
+                        La somma deve essere pari al 100%.
+                    </div>
+
+                    <div id="listaTeamContainer">
+                        <!-- ✅ checkbox + input percentuale generati via JS -->
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success btn-sm">Salva Assegnazioni</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modale Dettaglio Costo Team -->
+<div class="modal fade" id="dettaglioCostoTeamModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title">Dettaglio team assegnati</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="listaTeamAssegnati">
+                    <!-- Elenco team assegnati con percentuali, generato via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale conferma eliminazione assegnazione Team -->
+<div class="modal fade" id="confermaEliminazioneAssegnazioneTeamModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Conferma eliminazione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sei sicuro di voler eliminare questa assegnazione al team?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneAssegnazioneTeam">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+    let idCostoTeamDaEliminare = 0;
+    let idAssegnazioneTeamDaEliminare = 0;
+
+    function apriNuovoCostoTeam() {
+        const form = document.getElementById("costoTeamForm");
+        form.reset();
+        form.querySelector('[name="ID_AnagraficaCostoTeam"]').value = 0;  // ✅ GIUSTO
+        document.getElementById("costoTeamModalLabel").textContent = "Nuovo Costo Team";
+        new bootstrap.Modal(document.getElementById("costoTeamModal")).show();
+    }
+
+    function apriModificaCostoTeam(id) {
+        fetch(`/Pratiche/GetCostoTeam?id=${id}`)
+            .then(res => res.json())
+            .then(res => {
+                if (!res.success) return toastr.error("Errore nel caricamento del costo team.");
+
+                const c = res.costo;
+                const form = document.getElementById("costoTeamForm");
+
+                form.querySelector('[name="ID_AnagraficaCostoTeam"]').value = c.ID_AnagraficaCostoTeam;
+
+                form.querySelector('[name="Descrizione"]').value = c.Descrizione;
+                form.querySelector('[name="Stato"]').value = c.Stato;
+                form.querySelector('[name="Note"]').value = c.Note || "";
+
+                document.getElementById("costoTeamModalLabel").textContent = "Modifica Costo Team";
+                new bootstrap.Modal(document.getElementById("costoTeamModal")).show();
+            });
+    }
+
+    // Submit
+    $('#costoTeamForm').on('submit', function (e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const id = formData.get("ID_AnagraficaCostoTeam"); // ✅ nome corretto
+
+        const url = id && parseInt(id) > 0
+            ? '/Pratiche/ModificaAnagraficaCostoTeam'
+            : '/Pratiche/CreaAnagraficaCostoTeam';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById("costoTeamModal")).hide();
+                    location.reload();
+                } else {
+                    toastr.error(res.message || "Errore durante il salvataggio.");
+                }
+            })
+            .catch(err => toastr.error("Errore di rete: " + err));
+    });
+
+
+
+    function confermaEliminazioneCostoTeam(id) {
+        idCostoTeamDaEliminare = id;
+        new bootstrap.Modal(document.getElementById("eliminaCostoTeamModal")).show();
+    }
+
+    $('#btnConfermaEliminazioneCostoTeam').on('click', function () {
+        fetch('/Pratiche/EliminaCostoTeam', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${idCostoTeamDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+
+    // GESTIONE ASSEGNAZIONE
+
+    function apriAssegnaCostoTeam(idCostoTeam) {
+        fetch(`/Pratiche/GetListaTeamAssegnabili?idCostoTeam=${idCostoTeam}`)
+            .then(r => r.json())
+            .then(res => {
+                const container = document.getElementById("listaTeamContainer");
+                const form = document.getElementById("assegnaCostoTeamForm");
+                form.reset();
+                form.querySelector('[name="ID_AnagraficaCostoTeam"]').value = idCostoTeam;
+
+                if (!res.success || !Array.isArray(res.team) || res.team.length === 0) {
+                    container.innerHTML = "<div class='alert alert-warning'>Nessun team disponibile.</div>";
+                } else {
+                    container.innerHTML = res.team.map(t => `
+                    <div class="form-check d-flex align-items-center mb-2">
+                        <input class="form-check-input me-2" type="checkbox" name="ID_TeamSelezionati" value="${t.ID}" id="team_${t.ID}" />
+                        <label class="form-check-label me-2" for="team_${t.ID}" style="min-width:150px">${t.Nome}</label>
+                        <input type="number" class="form-control form-control-sm" name="Percentuale_${t.ID}" value="" min="0" max="100" placeholder="%" style="width:80px" disabled />
+                    </div>
+                `).join('');
+
+                    container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                        cb.addEventListener('change', function () {
+                            const inputPerc = this.closest('.form-check').querySelector('input[type="number"]');
+                            inputPerc.disabled = !this.checked;
+                            if (!this.checked) inputPerc.value = '';
+                        });
+                    });
+                }
+
+                new bootstrap.Modal(document.getElementById("assegnaCostoTeamModal")).show();
+            })
+            .catch(err => {
+                console.error("Errore fetch team:", err);
+                toastr.error("Errore durante il caricamento dei team.");
+            });
+    }
+
+
+    // Submit assegnazione team – controller: Pratiche/AssegnaCostoTeam
+    document.getElementById("assegnaCostoTeamForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const form = this;
+        const formData = new FormData(form);
+        const checkboxes = [...form.querySelectorAll('input[name="ID_TeamSelezionati"]:checked')];
+
+        if (checkboxes.length === 0) {
+            toastr.warning("⚠️ Seleziona almeno un team.");
+            return;
+        }
+
+        let sommaPercentuali = 0;
+        let valid = true;
+
+        checkboxes.forEach(cb => {
+            const id = cb.value;
+            const input = form.querySelector(`input[name="Percentuale_${id}"]`);
+            const val = parseFloat(input?.value?.replace(",", "."));
+
+            if (isNaN(val) || val <= 0 || val > 100) {
+                valid = false;
+                input?.classList.add("is-invalid");
+            } else {
+                input?.classList.remove("is-invalid");
+                sommaPercentuali += val;
+            }
+        });
+
+        if (!valid) {
+            toastr.error("❌ Controlla i valori delle percentuali.");
+            return;
+        }
+
+        if (Math.round(sommaPercentuali) !== 100) {
+            toastr.error(`❌ La somma delle percentuali deve essere 100%. Attuale: ${sommaPercentuali.toFixed(2)}%`);
+            return;
+        }
+
+        fetch("/Pratiche/AssegnaCostoTeam", {
+            method: "POST",
+            body: formData
+            // 🔒 Nessun header antiforgery usato, come richiesto
+        })
+            .then(response => response.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message || "✅ Assegnazione ai team completata.");
+                    const modal = bootstrap.Modal.getInstance(document.getElementById("assegnaCostoTeamModal"));
+                    modal?.hide();
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    toastr.error(res.message || "❌ Errore durante l’assegnazione.");
+                }
+            })
+            .catch(err => {
+                console.error("Errore JS durante invio assegnazione:", err);
+                toastr.error("❌ Errore imprevisto durante l’assegnazione.");
+            });
+    });
+
+
+
+    function apriDettaglioTeam(idCostoTeam) {
+        fetch(`/Pratiche/VisualizzaAssegnazioniCostoTeam?idAnagraficaCostoTeam=${idCostoTeam}`)
+            .then(r => r.json())
+            .then(res => {
+                const container = document.getElementById("listaTeamAssegnati");
+
+                if (!res.success || !Array.isArray(res.assegnazioni) || res.assegnazioni.length === 0) {
+                    container.innerHTML = "<div class='alert alert-info'>Nessun team assegnato.</div>";
+                } else {
+                    container.innerHTML = `
+                <ul class="list-group">
+                    ${res.assegnazioni.map(t => `
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${t.NomeTeam}</strong>
+                                <small class="text-muted ms-2">(${t.DataAssegnazione})</small>
+                            </div>
+                            <div class="d-flex gap-2 align-items-center">
+                                <span class="badge bg-primary">${t.Percentuale}%</span>
+                                <button class="btn btn-sm btn-danger"
+                                        onclick="confermaEliminazioneAssegnazioneTeam(${t.ID_Distribuzione})"
+                                        title="Rimuovi assegnazione">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+                        </li>
+                    `).join('')}
+                </ul>
+                `;
+                }
+
+                // 📝 Salvo l'ID del costo attivo per usi successivi
+                document.getElementById("hiddenIDCostoTeamAttivo")?.remove();
+                const hiddenInput = document.createElement("input");
+                hiddenInput.type = "hidden";
+                hiddenInput.id = "hiddenIDCostoTeamAttivo";
+                hiddenInput.value = idCostoTeam;
+                document.body.appendChild(hiddenInput);
+
+                new bootstrap.Modal(document.getElementById("dettaglioCostoTeamModal")).show();
+            })
+            .catch(err => {
+                console.error("Errore fetch dettaglio:", err);
+                toastr.error("Errore durante il recupero dei dati.");
+            });
+    }
+    //eliminazione
+    function confermaEliminazioneAssegnazioneTeam(idDistribuzione) {
+        idAssegnazioneTeamDaEliminare = idDistribuzione;
+
+        const modaleDettaglio = bootstrap.Modal.getInstance(document.getElementById("dettaglioCostoTeamModal"));
+        if (modaleDettaglio) modaleDettaglio.hide();
+
+        setTimeout(() => {
+            new bootstrap.Modal(document.getElementById("confermaEliminazioneAssegnazioneTeamModal")).show();
+        }, 400);
+    }
+
+    document.getElementById("btnConfermaEliminazioneAssegnazioneTeam").addEventListener("click", function () {
+        if (!idAssegnazioneTeamDaEliminare) return;
+
+        fetch('/Pratiche/EliminaAssegnazioneCostoTeam', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `idDistribuzione=${idAssegnazioneTeamDaEliminare}`
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+
+                    bootstrap.Modal.getInstance(document.getElementById("confermaEliminazioneAssegnazioneTeamModal"))?.hide();
+                    bootstrap.Modal.getInstance(document.getElementById("dettaglioCostoTeamModal"))?.hide();
+
+                    setTimeout(() => {
+                        const idCosto = document.getElementById("hiddenIDCostoTeamAttivo")?.value;
+                        if (idCosto) {
+                            apriDettaglioTeam(idCosto);
+                        }
+                    }, 500);
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                console.error("Errore eliminazione:", err);
+                toastr.error("Errore durante l’eliminazione dell’assegnazione.");
+            });
+    });
+    //  gestione ricorrenza
+
+    // 🟦 Apertura modale ricorrenza per Costo Team
+    function apriModaleRicorrenzaTeam(idAnagraficaCostoTeam) {
+        const form = document.getElementById("ricorrenzaCostoTeamForm");
+        form.reset();
+
+        // Imposta ID costo e categoria
+        form.querySelector('[name="ID_AnagraficaCosto"]').value = idAnagraficaCostoTeam;
+        form.querySelector('[name="Categoria"]').value = "Costo Team";
+        form.querySelector('[name="ID_Ricorrenza"]').value = "";
+
+        const checkboxUnaTantum = document.getElementById("checkUnaTantumTeam");
+
+        fetch(`/Pratiche/GetRicorrenzaCostoTeam?idAnagraficaCostoTeam=${idAnagraficaCostoTeam}`)
+            .then(r => r.json())
+            .then(res => {
+                if (res.success && res.ricorrenza) {
+                    const r = res.ricorrenza;
+
+                    form.querySelector('[name="ID_Ricorrenza"]').value = r.ID_Ricorrenza || "";
+                    form.querySelector('[name="Periodicita"]').value = r.Periodicita || "";
+                    form.querySelector('[name="TipoValore"]').value = r.TipoValore || "";
+                    form.querySelector('[name="Valore"]').value = r.Valore || "";
+                    form.querySelector('[name="Note"]').value = r.Note || "";
+
+                    if (r.DataInizio)
+                        form.querySelector('[name="DataInizio"]').value = new Date(r.DataInizio).toISOString().slice(0, 10);
+                    if (r.DataFine)
+                        form.querySelector('[name="DataFine"]').value = new Date(r.DataFine).toISOString().slice(0, 10);
+
+                    // ✅ Verifica se è una tantum (stessa data + Giornaliero)
+                    const stessaData = r.DataInizio && r.DataFine && r.DataInizio === r.DataFine;
+                    const isUnaTantum = stessaData && r.Periodicita === "Giornaliero";
+
+                    checkboxUnaTantum.checked = isUnaTantum;
+                    checkboxUnaTantum.dispatchEvent(new Event("change"));
+                } else {
+                    toastr.info("⏳ Nessuna ricorrenza trovata, puoi inserirne una nuova.");
+                    checkboxUnaTantum.checked = false;
+                    checkboxUnaTantum.dispatchEvent(new Event("change"));
+                }
+
+                new bootstrap.Modal(document.getElementById("ricorrenzaCostoTeamModal")).show();
+            })
+            .catch(err => {
+                console.error("Errore:", err);
+                toastr.error("❌ Errore durante il caricamento della ricorrenza.");
+            });
+    }
+
+
+    // ✅ Salvataggio ricorrenza costo team
+    function salvaRicorrenzaCostoTeam() {
+        const form = document.getElementById("ricorrenzaCostoTeamForm");
+        const formData = new FormData(form);
+
+        // ✅ Imposta dinamicamente ID professionista
+        const idProfessionista = document.getElementById("hiddenOwnerProfessionista")?.value;
+        if (idProfessionista) {
+            formData.set("ID_Professionista", idProfessionista);
+        }
+
+        // ✅ Imposta dinamicamente ID professione
+        const idProfessione = document.getElementById("hiddenProfessione")?.value;
+        if (idProfessione) {
+            formData.set("ID_Professione", idProfessione);
+        }
+
+        const checkUnaTantum = document.getElementById("checkUnaTantumTeam");
+        const periodicita = form.querySelector('[name="Periodicita"]');
+        const dataInizio = form.querySelector('[name="DataInizio"]');
+        const dataFine = form.querySelector('[name="DataFine"]');
+
+        // ✅ Forza valori anche se disabilitati
+        if (checkUnaTantum && checkUnaTantum.checked) {
+            formData.set("Periodicita", "Giornaliero");
+            formData.set("DataInizio", dataInizio.value);
+            formData.set("DataFine", dataInizio.value);
+        } else {
+            formData.set("Periodicita", periodicita.value);
+            formData.set("DataInizio", dataInizio.value);
+            formData.set("DataFine", dataFine.value);
+        }
+
+        // 🔍 Validazione base
+        const idTipoCosto = formData.get("ID_AnagraficaCosto");
+        const tipoValore = formData.get("TipoValore");
+        const valore = formData.get("Valore");
+
+        if (!idTipoCosto || !tipoValore || !valore || !formData.get("DataInizio") || !formData.get("Periodicita")) {
+            toastr.warning("⚠️ Compila tutti i campi obbligatori.");
+            return;
+        }
+
+        fetch('/Pratiche/SalvaRicorrenzaCostoTeam', {
+            method: 'POST',
+            body: formData
+        })
+            .then(res => res.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success("✅ Ricorrenza salvata correttamente.");
+                    const modal = bootstrap.Modal.getInstance(document.getElementById("ricorrenzaCostoTeamModal"));
+                    if (modal) modal.hide();
+                } else {
+                    toastr.error("❌ Errore durante il salvataggio: " + res.message);
+                }
+            })
+            .catch(err => {
+                toastr.error("❌ Errore di rete: " + err);
+            });
+    }
+
+
+    // ✅ Gestione "Una Tantum" e validazione date per Costi Team
+    document.addEventListener("DOMContentLoaded", function () {
+        const checkbox = document.getElementById("checkUnaTantumTeam");
+        const periodicita = document.querySelector('#ricorrenzaCostoTeamForm select[name="Periodicita"]');
+        const dataInizio = document.querySelector('#ricorrenzaCostoTeamForm input[name="DataInizio"]');
+        const dataFine = document.querySelector('#ricorrenzaCostoTeamForm input[name="DataFine"]');
+
+        if (!checkbox || !periodicita || !dataInizio || !dataFine)
+            return;
+
+        function aggiornaCampiUnaTantumTeam() {
+            const oggi = new Date().toISOString().slice(0, 10);
+
+            if (checkbox.checked) {
+                periodicita.value = "Giornaliero";
+                if (!dataInizio.value) dataInizio.value = oggi;
+                dataFine.value = dataInizio.value;
+
+                // 🔒 Disabilita i campi
+                periodicita.disabled = true;
+                dataInizio.disabled = true;
+                dataFine.disabled = true;
+            } else {
+                // 🔓 Riabilita i campi
+                periodicita.disabled = false;
+                dataInizio.disabled = false;
+                dataFine.disabled = false;
+            }
+        }
+
+        checkbox.addEventListener("change", aggiornaCampiUnaTantumTeam);
+
+        // 🔄 Inizializza all'avvio
+        aggiornaCampiUnaTantumTeam();
+
+        // ⛔ Validazione coerente tra date
+        const validateDateRange = () => {
+            const start = new Date(dataInizio.value);
+            const end = new Date(dataFine.value);
+
+            if (dataInizio.value && dataFine.value && end < start) {
+                toastr.warning("⚠️ La Data Fine non può essere precedente alla Data Inizio.");
+                dataFine.value = "";
+            }
+        };
+
+        dataInizio.addEventListener("change", validateDateRange);
+        dataFine.addEventListener("change", validateDateRange);
+    });
+
+
+
+    // 🔍 Filtro e paginazione - Costi Team
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('costiTeamTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = Array.from(document.querySelectorAll('.card-costo')); // per mobile
+
+        const controlliContainer = document.getElementById('controlliCostiTeam');
+        const paginationContainer = document.getElementById('paginazioneCostiTeam');
+
+        const searchInput = document.createElement('input');
+        const selectPageSize = document.createElement('select');
+        const selectRicorrenza = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📄 Page Size
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // ⚙️ Ricorrenza
+        const labelRicorrenza = document.createElement('label');
+        labelRicorrenza.textContent = 'Ricorrenza:';
+        labelRicorrenza.className = 'form-label mb-0 me-1';
+
+        ['Tutti', 'Attiva', 'Scaduta', 'Nessuna'].forEach(stato => {
+            const option = document.createElement('option');
+            option.value = stato;
+            option.textContent = stato;
+            selectRicorrenza.appendChild(option);
+        });
+        selectRicorrenza.className = 'form-select form-select-sm w-auto';
+
+        // ➕ Inserisci controlli nella barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(labelRicorrenza);
+        controlliContainer.appendChild(selectRicorrenza);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroStato = selectRicorrenza.value;
+
+            // Filtra righe desktop
+            let filteredRows = rows.filter(row => {
+                const text = row.innerText.toLowerCase();
+                const statoCell = row.querySelector('td:nth-child(4)'); // colonna Ricorrenza
+                const stato = statoCell ? statoCell.innerText.trim() : '';
+                const statoMatch = (filtroStato === 'Tutti' || stato.includes(filtroStato));
+                return text.includes(keyword) && statoMatch;
+            });
+
+            // Filtra card mobile
+            let filteredCards = cards.filter(card => {
+                const text = card.innerText.toLowerCase();
+                const statoEl = card.querySelector('.stato'); // <span class="stato">Attiva</span>
+                const stato = statoEl ? statoEl.innerText.trim() : '';
+                const statoMatch = (filtroStato === 'Tutti' || stato.includes(filtroStato));
+                return text.includes(keyword) && statoMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // 🖥️ Mostra/nasconde righe tabella
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+
+            // 📱 Mostra/nasconde card mobile
+            cards.forEach(c => c.style.display = 'none');
+            filteredCards.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(c => c.style.display = '');
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectRicorrenza.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+</script>

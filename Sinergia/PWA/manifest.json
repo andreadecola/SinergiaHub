@@ -1,0 +1,26 @@
+{
+  "name": "Sinergia Progressive Web App",
+  "short_name": "Sinergia PWA",
+  "description": "Sinergia - Gestione collaborativa di pratiche, clienti, permessi e processi professionali .",
+  "display": "standalone",
+  "start_url": "/",
+  //"related_applications": [
+  //  {
+  //    "platform": "webapp",
+  //    //"url": "https://pwa.sinergia.nobiliore.it/manifest.json" url da inserire prossimamente 
+  //  }
+  //],
+  "id": "/",
+  "icons": [
+    {
+      "src": "/Content/img/icons/logo-sinergia-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/Content/img/icons/logo-sinergia-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

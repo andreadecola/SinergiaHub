@@ -1,0 +1,74 @@
+﻿@model List<Sinergia.Models.OperazioniPrevisionaliViewModel>
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Report Operazioni Previsionali</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            margin: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <h2>Report Operazioni Previsionali</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Tipo</th>
+                <th>Descrizione</th>
+                <th>Importo</th>
+                <th>Data</th>
+                <th>Cliente</th>
+                <th>Pratica</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var op in Model)
+            {
+                <tr>
+                    <td>@op.TipoOperazione</td>
+                    <td>@op.Descrizione</td>
+                    <td class="text-center"> @(op.ImportoPrevisto.HasValue ? op.ImportoPrevisto.Value.ToString("N2") : "-")</td>
+                    <td>@(op.DataPrevisione?.ToString("dd/MM/yyyy") ?? "-")</td>
+                    <td>@(string.IsNullOrEmpty(op.NomeCliente) ? "-" : op.NomeCliente)</td>
+                    <td>@(string.IsNullOrEmpty(op.NomePratica) ? "-" : op.NomePratica)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>
+

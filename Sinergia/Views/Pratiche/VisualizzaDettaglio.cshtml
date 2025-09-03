@@ -1,0 +1,138 @@
+﻿@model Sinergia.Models.VisualizzaDettaglioPraticaViewModel
+
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid">
+
+    <!-- Dettaglio Pratica -->
+    <div class="card mb-3 shadow-sm border-0">
+        <div class="card-header  text-dark fw-bold">
+            <i class="bi bi-folder-fill me-1"></i> Dettaglio Pratica
+        </div>
+        <div class="card-body">
+            <p><strong>Titolo:</strong> @Model.Pratica.Titolo</p>
+            <p><strong>Cliente:</strong> @Model.Pratica.NomeCliente</p>
+            <p><strong>Budget:</strong> @Model.Pratica.Budget.ToString("C2")</p>
+            <p><strong>Data Creazione:</strong> @(Model.Pratica.DataCreazione?.ToString("dd/MM/yyyy") ?? "-")</p>
+            <p>
+                <strong>Professionista Responsabile:</strong>
+                @(Model.Pratica.NomeUtenteResponsabile?.Trim().ToLower() == "admin admin"
+                    ? "Admin"
+                    : Model.Pratica.NomeUtenteResponsabile)
+            </p>
+            <p><strong>Stato Pratica:</strong> @Model.Pratica.Stato</p>
+
+            @*@if (Model.Utenti != null && Model.Utenti.Any())
+            {
+                <p><strong>Collaboratori Assegnati:</strong></p>
+                <ul>
+                    @foreach (var c in Model.Utenti)
+                    {
+                        <li>@c.Nome @c.Cognome (ID Utente: @c.ID_Utente)</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="text-muted fst-italic">Nessun collaboratore assegnato a questa pratica.</p>
+            }*@
+        </div>
+    </div>
+
+    <!-- Cluster Associati -->
+    <div class="card mb-3 shadow-sm border-0">
+        <div class="card-header  text-dark fw-bold">
+            <i class="bi bi-diagram-3-fill me-1"></i> Cluster Associati
+        </div>
+        <div class="card-body">
+            @if (Model.Cluster == null || !Model.Cluster.Any())
+            {
+                <p class="text-muted">Nessun cluster associato a questa pratica.</p>
+            }
+            else
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Collaboratore</th>
+                            <th>Tipo Cluster</th>
+                            <th>Percentuale</th>
+                            <th>Importo</th>
+                            <th>Data Assegnazione</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in Model.Cluster)
+                        {
+                            <tr>
+                                <td>@c.NomeUtente</td>
+                                <td>@c.TipoCluster</td>
+                                <td>@c.PercentualePrevisione.ToString("N2") %</td>
+                                <td>@c.ImportoCalcolato.ToString("C2")</td>
+                                <td>
+                                    @(c.DataAssegnazione.HasValue
+                        ? c.DataAssegnazione.Value.ToString("dd/MM/yyyy")
+                        : "-")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+
+    <!-- Avvisi Parcella -->
+    <div class="card mb-3 shadow-sm border-0">
+        <div class="card-header  text-dark fw-bold">
+            <i class="bi bi-receipt me-1"></i> Avvisi Parcella
+        </div>
+        <div class="card-body">
+            @if (Model.AvvisiParcella == null || !Model.AvvisiParcella.Any())
+            {
+                <p class="text-muted fst-italic">Nessun avviso parcella registrato per questa pratica.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data Avviso</th>
+                                <th>Importo</th>
+                                <th>Metodo di Pagamento</th>
+                                <th>Importo IVA</th>
+                                <th>Contributo Integrativo</th>
+                                <th>Stato</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var avviso in Model.AvvisiParcella)
+                            {
+                                <tr>
+                                    <td>@(avviso.DataAvviso?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                    <td>@(avviso.Importo?.ToString("C2") ?? "-")</td>
+                                    <td>@avviso.MetodoPagamento</td>
+                                    <td>@(avviso.ImportoIVA?.ToString("C2") ?? "-")</td>
+                                    <td>@(avviso.ContributoIntegrativoImporto?.ToString("C2") ?? "-")</td>
+                                    <td>@avviso.Stato</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Pulsanti di Navigazione -->
+    <div class="d-flex justify-content-start mt-3">
+        <a href="@Url.Action("GestionePratiche", "Pratiche")" class="btn btn-secondary btn-sm me-2">
+            <i class="bi bi-arrow-left"></i> Torna alla lista pratiche
+        </a>
+    </div>
+
+</div>

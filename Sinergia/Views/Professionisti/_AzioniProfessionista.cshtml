@@ -1,0 +1,57 @@
+﻿@model Sinergia.Models.ProfessionistiViewModel
+
+<div class="d-flex flex-wrap gap-1 justify-content-start justify-content-md-center align-items-center">
+
+    @if (Model.UtenteCorrenteHaPermessi)
+    {
+        <!-- ✏️ Modifica -->
+        if (Model.PuoModificare)
+        {
+            <button class="btn btn-warning btn-sm" title="Modifica"
+                    onclick="apriModificaProfessionista(@Model.ID_Professionista)">
+                <i class="fa fa-pencil"></i>
+            </button>
+        }
+
+        <!-- ♻️ Riattiva (solo se inattivo) -->
+        if (Model.Stato == "Inattivo" && Model.PuoModificare)
+        {
+            <button class="btn btn-success btn-sm" title="Riattiva"
+                    onclick="riattivaProfessionista(@Model.ID_Professionista)">
+                <i class="fa fa-undo"></i>
+            </button>
+        }
+
+        <!-- 🗑️ Elimina -->
+        if (Model.PuoEliminare)
+        {
+            <button class="btn btn-danger btn-sm" title="Elimina"
+                    onclick="apriEliminaProfessionista(@Model.ID_Professionista)">
+                <i class="fa fa-trash"></i>
+            </button>
+        }
+
+        <!-- 📂 Documenti (sempre visibile se ha permessi base) -->
+        <button class="btn btn-secondary btn-sm" title="Documenti"
+                onclick="gestisciDocumentiProfessionista(@Model.ID_Professionista)">
+            <i class="fa fa-folder-open"></i>
+        </button>
+
+        <!-- 👥 Visualizza / ➕ Assegna Utenti -->
+        if (Model.HaUtentiAssegnati)
+        {
+            <button class="btn btn-outline-dark btn-sm" title="Visualizza Utenti Assegnati"
+                    onclick="visualizzaUtentiAssegnatiProfessionista(@Model.ID_Professionista)">
+                <i class="fa fa-users"></i>
+            </button>
+        }
+        else
+        {
+            <button class="btn btn-outline-dark btn-sm" title="Assegna Utente"
+                    onclick="apriAssegnaUtenteProfessionista(@Model.ID_Professionista)">
+                <i class="fa fa-user-plus"></i>
+            </button>
+        }
+    }
+
+</div>

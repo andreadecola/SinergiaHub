@@ -1,0 +1,64 @@
+﻿@model List<Sinergia.Models.RicavoSinergiaViewModel>
+@{
+    Layout = null;
+
+    // Raggruppiamo per pratica e professionista
+    var gruppi = Model
+        .GroupBy(x => new { x.ID_Pratiche, x.ID_Professionista, x.Titolo, x.NomeProfessionista })
+        .ToList();
+
+    decimal totaleTrattenute = Model
+        .Where(x => x.Categoria == "Trattenuta Sinergia" || x.Categoria == "Trattenuta Sinergia Personalizzata")
+        .Sum(x => x.Importo);
+}
+
+<div class="modal fade" id="riepilogoRicaviModal" tabindex="-1" role="dialog" aria-labelledby="riepilogoRicaviLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Riepilogo Trattenute Sinergia</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                @if (gruppi.Any())
+                {
+                    <table class="table table-bordered table-sm mb-4">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID Pratica</th>
+                                <th>Titolo</th>
+                                <th>Professionista</th>
+                                <th>Trattenuta Sinergia (€)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var g in gruppi)
+                            {
+                                var trattenuta = g
+                                    .Where(x => x.Categoria == "Trattenuta Sinergia" || x.Categoria == "Trattenuta Sinergia Personalizzata")
+                                    .Sum(x => x.Importo);
+
+                                <tr>
+                                    <td>@g.Key.ID_Pratiche</td>
+                                    <td>@g.Key.Titolo</td>
+                                    <td>@g.Key.NomeProfessionista</td>
+                                    <td>@(trattenuta > 0 ? string.Format("{0:C}", trattenuta) : "-")</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-secondary fw-bold">
+                                <td colspan="3" class="text-end">Totale complessivo:</td>
+                                <td>@totaleTrattenute.ToString("C")</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                }
+                else
+                {
+                    <p class="text-muted">Nessun dato disponibile per il riepilogo.</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
