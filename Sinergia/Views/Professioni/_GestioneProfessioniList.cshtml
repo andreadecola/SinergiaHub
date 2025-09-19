@@ -13,14 +13,18 @@
 <link href="~/Content/css/style-mobile.css" rel="stylesheet" />
 
 <!-- 🔍 Controlli filtro/paginazione -->
-<div class="d-flex justify-content-between align-items-center mb-2 controls-professioni-wrap">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-2 controls-professioni-wrap">
     <div id="controlliProfessioni" class="d-flex align-items-center gap-1 flex-nowrap"></div>
 
     @if (puoAggiungere)
     {
-        <button class="btn btn-outline-primary btn-sm btn-new-prof" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovaProfessione()">
-            Nuova Professione
-        </button>
+        <div class="mt-2 mt-sm-0 w-100 w-sm-auto text-sm-end">
+            <button class="btn btn-outline-primary btn-sm  w-sm-auto"
+                    style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"
+                    onclick="apriNuovaProfessione()">
+                Nuova Professione
+            </button>
+        </div>
     }
 </div>
 
@@ -32,7 +36,7 @@
                 <tr>
                     <th class="w-20">Codice</th>
                     <th class="w-45">Descrizione</th>
-                    <th class="w-20">Professionista di riferimento</th>
+                    @*<th class="w-20">Professionista di riferimento</th>*@
                     @if (mostraAzioni)
                     {
                         <th class="w-15 text-center">Azioni</th>
@@ -44,10 +48,10 @@
                 {
                     <tr data-codice="@prof.Codice"
                         data-descrizione="@prof.Descrizione"
-                        data-professionista="@prof.NomeProfessionista">
+                        @*data-professionista="@prof.NomeProfessionista"*@>
                         <td>@prof.Codice</td>
                         <td>@prof.Descrizione</td>
-                        <td>@prof.NomeProfessionista</td>
+                        @*<td>@prof.NomeProfessionista</td>*@
 
                         @if (mostraAzioni)
                         {
@@ -69,7 +73,7 @@
         <div class="border rounded shadow-sm p-3 mb-3 bg-white card-professione"
              data-codice="@prof.Codice"
              data-descrizione="@prof.Descrizione"
-             data-professionista="@prof.NomeProfessionista">
+             @*data-professionista="@prof.NomeProfessionista"*@>
 
             <div class="d-flex justify-content-between align-items-center mb-1">
                 <span class="fw-bold text-primary">@prof.Codice</span>
@@ -119,16 +123,16 @@
                         <input name="Descrizione" type="text" class="form-control form-control-sm" required />
                     </div>
 
-                    <div class="mb-2">
-                        <label>Professionista di riferimento</label>
-                        <select name="ID_ProfessionistaRiferimento" class="form-select form-select-sm" required>
-                            <option value="">-- Seleziona Professionista --</option>
-                            @foreach (var prof in ViewBag.Professionisti as List<SelectListItem>)
-                            {
-                                <option value="@prof.Value">@prof.Text</option>
-                            }
-                        </select>
-                    </div>
+                    @*<div class="mb-2">
+                            <label>Professionista di riferimento</label>
+                            <select name="ID_ProfessionistaRiferimento" class="form-select form-select-sm" required>
+                                <option value="">-- Seleziona Professionista --</option>
+                                @foreach (var prof in ViewBag.Professionisti as List<SelectListItem>)
+                                {
+                                    <option value="@prof.Value">@prof.Text</option>
+                                }
+                            </select>
+                        </div>*@
 
                     <!-- ✅ Nuovo campo: Percentuale Contributo Integrativo -->
                     <div class="mb-2">
@@ -190,7 +194,7 @@
                 form.querySelector('[name="ProfessioniID"]').value = p.ProfessioniID;
                 form.querySelector('[name="Codice"]').value = p.Codice;
                 form.querySelector('[name="Descrizione"]').value = p.Descrizione;
-                form.querySelector('[name="ID_ProfessionistaRiferimento"]').value = p.ID_ProfessionistaRiferimento;
+                /*   form.querySelector('[name="ID_ProfessionistaRiferimento"]').value = p.ID_ProfessionistaRiferimento;*/
                 form.querySelector('[name="PercentualeContributoIntegrativo"]').value = p.PercentualeContributoIntegrativo ?? '';
 
                 document.getElementById("professioneModalLabel").textContent = "Modifica Professione";

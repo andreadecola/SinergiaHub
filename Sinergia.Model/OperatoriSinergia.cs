@@ -23,7 +23,7 @@ namespace Sinergia.Model
         [StringLength(100)]
         public string Cognome { get; set; }
 
-        [StringLength(16)]
+        [StringLength(255)]
         public string CodiceFiscale { get; set; }
 
         [StringLength(20)]

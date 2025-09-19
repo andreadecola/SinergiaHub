@@ -322,27 +322,27 @@
             });
     });
 
-    function confermaEliminazioneFinanziamento(id) {
-        idFinanziamentoDaEliminare = id;
-        new bootstrap.Modal(document.getElementById("eliminaFinanziamentoModal")).show();
-    }
+    //function confermaEliminazioneFinanziamento(id) {
+    //    idFinanziamentoDaEliminare = id;
+    //    new bootstrap.Modal(document.getElementById("eliminaFinanziamentoModal")).show();
+    //}
 
-    document.getElementById("btnConfermaEliminazioneFinanziamento").addEventListener("click", function () {
-        fetch('/Pratiche/EliminaFinanziamento', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `id=${idFinanziamentoDaEliminare}`
-        })
-            .then(r => r.json())
-            .then(res => {
-                if (res.success) {
-                    toastr.success(res.message);
-                    location.reload();
-                } else {
-                    toastr.error(res.message);
-                }
-            });
-    });
+    //document.getElementById("btnConfermaEliminazioneFinanziamento").addEventListener("click", function () {
+    //    fetch('/Pratiche/EliminaFinanziamento', {
+    //        method: 'POST',
+    //        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    //        body: `id=${idFinanziamentoDaEliminare}`
+    //    })
+    //        .then(r => r.json())
+    //        .then(res => {
+    //            if (res.success) {
+    //                toastr.success(res.message);
+    //                location.reload();
+    //            } else {
+    //                toastr.error(res.message);
+    //            }
+    //        });
+    //});
 
     //salvataggio costo personale professionista
 
@@ -353,7 +353,7 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    document.getElementById("plafondDisponibileInput").value = data.plafond + " €";
+                    document.getElementById("plafondDisponibileInput").value = data.plafond ;
                 } else {
                     document.getElementById("plafondDisponibileInput").value = "Errore";
                 }

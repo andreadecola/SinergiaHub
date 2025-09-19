@@ -24,10 +24,14 @@ namespace Sinergia.Model
         public virtual DbSet<Citta> Citta { get; set; }
         public virtual DbSet<Clienti> Clienti { get; set; }
         public virtual DbSet<Clienti_a> Clienti_a { get; set; }
+        public virtual DbSet<ClientiProfessionisti> ClientiProfessionisti { get; set; }
+        public virtual DbSet<ClientiProfessionisti_a> ClientiProfessionisti_a { get; set; }
         public virtual DbSet<Cluster> Cluster { get; set; }
         public virtual DbSet<Cluster_a> Cluster_a { get; set; }
         public virtual DbSet<CompensiPratica> CompensiPratica { get; set; }
         public virtual DbSet<CompensiPratica_a> CompensiPratica_a { get; set; }
+        public virtual DbSet<CompensiPraticaDettaglio> CompensiPraticaDettaglio { get; set; }
+        public virtual DbSet<CompensiPraticaDettaglio_a> CompensiPraticaDettaglio_a { get; set; }
         public virtual DbSet<CostiGeneraliUtente> CostiGeneraliUtente { get; set; }
         public virtual DbSet<CostiGeneraliUtente_a> CostiGeneraliUtente_a { get; set; }
         public virtual DbSet<CostiPersonaliUtente> CostiPersonaliUtente { get; set; }
@@ -202,6 +206,22 @@ namespace Sinergia.Model
             modelBuilder.Entity<Cluster>()
                 .Property(e => e.PercentualePrevisione)
                 .HasPrecision(5, 2);
+
+            modelBuilder.Entity<CompensiPraticaDettaglio>()
+                .Property(e => e.TipoCompenso)
+                .IsUnicode(false);
+
+            modelBuilder.Entity<CompensiPraticaDettaglio>()
+                .Property(e => e.Categoria)
+                .IsUnicode(false);
+
+            modelBuilder.Entity<CompensiPraticaDettaglio_a>()
+                .Property(e => e.TipoCompenso)
+                .IsUnicode(false);
+
+            modelBuilder.Entity<CompensiPraticaDettaglio_a>()
+                .Property(e => e.Categoria)
+                .IsUnicode(false);
 
             modelBuilder.Entity<CostiPersonaliUtente>()
                 .Property(e => e.Importo)
@@ -381,10 +401,6 @@ namespace Sinergia.Model
                 .IsUnicode(false);
 
             modelBuilder.Entity<OperatoriSinergia>()
-                .Property(e => e.CodiceFiscale)
-                .IsUnicode(false);
-
-            modelBuilder.Entity<OperatoriSinergia>()
                 .Property(e => e.PIVA)
                 .IsUnicode(false);
 
@@ -434,10 +450,6 @@ namespace Sinergia.Model
 
             modelBuilder.Entity<OperatoriSinergia_a>()
                 .Property(e => e.Cognome)
-                .IsUnicode(false);
-
-            modelBuilder.Entity<OperatoriSinergia_a>()
-                .Property(e => e.CodiceFiscale)
                 .IsUnicode(false);
 
             modelBuilder.Entity<OperatoriSinergia_a>()

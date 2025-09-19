@@ -22,6 +22,14 @@
     </style>
 }
 
+@{
+    var utenteLoggato = Session["User"] as Sinergia.Model.Utenti;
+}
+<script>
+    const tipoUtenteLoggato = "@(utenteLoggato?.TipoUtente ?? "")";
+</script>
+
+
 <div id="content">
     <div class="row">
         <div class="col-xs-12 col-sm-7 col-md-7 col-lg-4">
@@ -36,7 +44,6 @@
             <article class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
                 <div class="jarviswidget" id="wid-id-utenti" data-widget-editbutton="false" data-widget-deletebutton="false">
                     <header>
-                        <span class="widget-icon"><i class="fa fa-list"></i></span>
                         <h2 class="fadeInLeft animated">Lista Utenti</h2>
                     </header>
                     <div>
@@ -87,8 +94,14 @@
                             </div>
                             <div class="col-md-4">
                                 <label>Codice Fiscale</label>
-                                <input type="text" name="CodiceFiscale" class="form-control form-control-sm" />
+                                <input type="text"
+                                       name="CodiceFiscale"
+                                       id="CodiceFiscale"
+                                       class="form-control form-control-sm codice-fiscale-input"
+                                       maxlength="16" />
+                                <small class="text-danger d-none" id="erroreCodiceFiscale">Il codice fiscale deve avere 16 caratteri</small>
                             </div>
+
                             <div class="col-md-4">
                                 <label>Email *</label>
                                 <input type="email" name="MAIL1" class="form-control form-control-sm" required />
@@ -232,9 +245,14 @@
                             </div>
                             <div class="col-md-4">
                                 <label>Codice Fiscale</label>
-                                <input type="text" name="CodiceFiscale" class="form-control form-control-sm" />
-                                <small class="text-muted d-none" data-prev="Codice Fiscale"></small>
+                                <input type="text"
+                                       name="CodiceFiscale"
+                                       id="CodiceFiscale"
+                                       class="form-control form-control-sm codice-fiscale-input"
+                                       maxlength="16" />
+                                <small class="text-danger d-none" id="erroreCodiceFiscale">Il codice fiscale deve avere 16 caratteri</small>
                             </div>
+
                             <div class="col-md-4">
                                 <label>Email *</label>
                                 <input type="email" name="MAIL1" class="form-control form-control-sm" required />
@@ -748,6 +766,66 @@
         nuovoInput.appendChild(removeBtn);
         container.appendChild(nuovoInput);
     }
+
+    // === Validazione Codice Fiscale ===
+    document.addEventListener("DOMContentLoaded", function () {
+        const cfInputs = document.querySelectorAll(".codice-fiscale-input");
+
+        cfInputs.forEach(input => {
+            // Forza maiuscolo in tempo reale
+            input.addEventListener("input", function () {
+                this.value = this.value.toUpperCase();
+            });
+
+            // Controllo alla perdita di focus
+            input.addEventListener("blur", function () {
+                const errore = this.parentElement.querySelector(".errore-cf");
+
+                if (!this.value.trim()) {
+                    if (errore) errore.classList.add("d-none");
+                    return;
+                }
+
+                if (this.value.length !== 16) {
+                    if (errore) errore.classList.remove("d-none");
+                    this.classList.add("is-invalid");
+                } else {
+                    if (errore) errore.classList.add("d-none");
+                    this.classList.remove("is-invalid");
+                    this.classList.add("is-valid");
+                }
+            });
+        });
+    });
+
+
+
+    document.addEventListener("DOMContentLoaded", function () {
+        // Trova tutti i select TipoUtente delle modali
+        const selects = document.querySelectorAll('select[name="TipoUtente"]');
+
+        selects.forEach(select => {
+            // Sblocca tutto all'inizio
+            Array.from(select.options).forEach(opt => opt.disabled = false);
+
+            if (tipoUtenteLoggato === "Collaboratore") {
+                // Collaboratore non può creare/modificare nessun utente
+                select.innerHTML = '<option value="">❌ Non hai i permessi</option>';
+                select.disabled = true;
+            }
+            else if (tipoUtenteLoggato === "Professionista") {
+                // Professionista può solo gestire Collaboratori
+                Array.from(select.options).forEach(opt => {
+                    if (opt.value === "Admin" || opt.value === "Professionista") {
+                        opt.disabled = true;
+                    }
+                });
+            }
+            // Admin → non facciamo nulla (vede tutto)
+        });
+    });
+
+
 </script>
 
 

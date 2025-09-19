@@ -110,11 +110,13 @@
             <thead>
                 <tr>
                     <th class="w-10">Nome</th>
-                    <th class="w-15">Cognome / Rag. Sociale</th>
+                    <th class="w-15">Cognome</th>
+                    <th class="w-15">Ragione Sociale</th>
                     <th class="w-15 d-none d-md-table-cell">Email</th>
                     <th class="w-10 d-none d-md-table-cell">Telefono</th>
                     <th class="w-5 stato">Stato</th>
-                    <th class="w-15 d-none d-md-table-cell">Assegnato a</th>
+                    <th class="w-15 d-none d-md-table-cell">Owner</th>
+                    <th class="w-15 d-none d-md-table-cell">Associati</th>
                     @if (mostraAzioni)
                     {
                         <th class="w-10 text-center">Azioni</th>
@@ -127,12 +129,16 @@
                     <tr class="cliente-row"
                         data-ricerca="@($"{c.Nome} {c.Cognome} {c.RagioneSociale} {c.Email} {c.Telefono} {c.OperatoreVisualizzato}")"
                         data-stato="@c.Stato">
+
                         <td>@c.Nome</td>
-                        <td>@(string.IsNullOrWhiteSpace(c.RagioneSociale) ? c.Cognome : c.RagioneSociale)</td>
+                        <td>@c.Cognome</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.RagioneSociale) ? "-" : c.RagioneSociale)</td> <!-- 👈 trattino se vuoto -->
                         <td class="d-none d-md-table-cell">@c.Email</td>
                         <td class="d-none d-md-table-cell">@c.Telefono</td>
                         <td class="stato">@c.Stato</td>
-                        <td class="d-none d-md-table-cell">@c.OperatoreVisualizzato</td>
+                        <td class="d-none d-md-table-cell">@c.OwnerVisualizzato</td>
+                        <td class="d-none d-md-table-cell">@c.AssociatiVisualizzati</td>
+
                         @if (mostraAzioni)
                         {
                             <td class="text-nowrap text-center">
@@ -170,6 +176,7 @@
                     </tr>
                 }
             </tbody>
+
         </table>
     </div>
 </div>
@@ -184,7 +191,8 @@
              data-email="@c.Email"
              data-telefono="@c.Telefono"
              data-stato="@c.Stato"
-             data-assegnato="@c.OperatoreVisualizzato">
+             data-owner="@c.OwnerVisualizzato"
+             data-associati="@c.AssociatiVisualizzati">
 
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-bold text-primary">
@@ -199,8 +207,15 @@
             <div class="text-muted small">
                 <i class="fas fa-phone me-1"></i> <strong>Telefono:</strong> @c.Telefono
             </div>
+
+            <!-- 🔹 Owner -->
+            <div class="text-muted small">
+                <i class="fas fa-user-shield me-1"></i> <strong>Owner:</strong> @c.OwnerVisualizzato
+            </div>
+
+            <!-- 🔹 Associati -->
             <div class="text-muted small mb-2">
-                <i class="fas fa-user-tie me-1"></i> <strong>Assegnato a:</strong> @c.OperatoreVisualizzato
+                <i class="fas fa-users me-1"></i> <strong>Associati:</strong> @c.AssociatiVisualizzati
             </div>
 
             @if (mostraAzioni)
@@ -276,9 +291,11 @@
 
                             <div class="col-md-4">
                                 <label>Codice Fiscale</label>
-                                <input name="CodiceFiscale" class="form-control form-control-sm" />
+                                <input name="CodiceFiscale"
+                                       class="form-control form-control-sm codice-fiscale-input" />
                                 <small class="text-muted d-none" data-prev="Codice Fiscale"></small>
                             </div>
+
 
                             <div class="col-md-4">
                                 <label>P.IVA</label>
@@ -372,33 +389,45 @@
     </div>
 </div>
 
-<!-- Modale Assegna Professionista -->
+<!-- Modale Gestione Professionisti Cliente -->
 <div class="modal fade" id="assegnaModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-md">
         <form id="assegnaForm">
             <div class="modal-content">
-                <div class="modal-header  text-black">
-                    <h5 class="modal-title">Assegna Professionista</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header text-black">
+                    <h5 class="modal-title">Gestione Professionisti Cliente</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" name="ID_Cliente" />
-                    <label>Professionista</label>
-                    <select name="ID_Operatore" class="form-select form-select-sm">
-                        @foreach (var p in ViewBag.Professionisti as List<SelectListItem>)
-                        {
-                            <option value="@p.Value">@p.Text</option>
-                        }
-                    </select>
+                    <input type="hidden" name="ID_Cliente" id="idClienteAssegna" />
+
+                    <!-- ✅ Owner -->
+                    <div class="mb-3">
+                        <label class="fw-bold">Owner (assegnato al cliente)</label>
+                        <input type="text" id="ownerCliente" class="form-control form-control-sm bg-light" readonly />
+                    </div>
+
+                    <!-- ✅ Lista professionisti associati -->
+                    <div id="listaProfessionisti" class="mb-2">
+                        <!-- Righe dinamiche generate da JS -->
+                    </div>
+
+                    <!-- Bottone per aggiungere -->
+                    <button type="button" id="btnAggiungiProfessionista"
+                            class="btn btn-outline-primary btn-sm">
+                        <i class="fa fa-plus"></i> Aggiungi Professionista
+                    </button>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
-                    <button type="submit" class="btn btn-primary btn-sm">Assegna</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
                 </div>
             </div>
         </form>
     </div>
 </div>
+
+
 
 <script>
     let idClienteDaEliminare = 0;
@@ -630,34 +659,104 @@
 
     function apriAssegnaProfessionista(id) {
         $('#assegnaForm input[name="ID_Cliente"]').val(id);
+        $('#ownerCliente').val("");
+        $('#listaProfessionisti').empty();
+
+        fetch(`/Utenti/GetDettaglioClienteProfessionisti?id=${id}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) {
+                    toastr.error(res.message || "Errore nel caricamento dati");
+                    return;
+                }
+
+                if (res.owner) {
+                    $('#ownerCliente').val(res.owner.Nome);
+                }
+
+                // Salvo globalmente
+                window.professionistiDisponibili = res.disponibili || [];
+
+                // Popolo già associati
+                if (res.associati && res.associati.length > 0) {
+                    res.associati.forEach(a => aggiungiProfessionista(a.ID));
+                }
+            });
+
         new bootstrap.Modal(document.getElementById("assegnaModal")).show();
     }
 
-    $('#assegnaForm').on('submit', function (e) {
-        e.preventDefault(); // ✅ Impedisce invio classico
-        const formData = new FormData(this);
+    // ➕ Aggiungi riga select dinamica
+    function aggiungiProfessionista(idPreselezionato = null) {
+        if (!window.professionistiDisponibili || window.professionistiDisponibili.length === 0) {
+            toastr.warning("⚠️ Nessun professionista disponibile.");
+            return;
+        }
 
-        fetch('/Utenti/AssegnaProfessionistaCliente', {
+        const idx = Date.now();
+        const wrapper = $(`
+        <div class="d-flex align-items-center mb-2" id="profRow_${idx}">
+            <select class="form-select form-select-sm me-2" name="ProfessionistiAssociati">
+                <option value="">-- Seleziona Professionista --</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="$('#profRow_${idx}').remove()">
+                <i class="fa fa-times"></i>
+            </button>
+        </div>
+    `);
+
+        const select = wrapper.find("select");
+        window.professionistiDisponibili.forEach(p => {
+            const opt = $('<option>').val(p.ID).text(p.Nome);
+            if (idPreselezionato && p.ID === idPreselezionato) opt.prop("selected", true);
+            select.append(opt);
+        });
+
+        $('#listaProfessionisti').append(wrapper);
+    }
+
+    // 🔗 Collego il pulsante
+    $(document).on("click", "#btnAggiungiProfessionista", function () {
+        aggiungiProfessionista();
+    });
+
+    // ✅ Submit
+    $('#assegnaForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const idCliente = $('#assegnaForm input[name="ID_Cliente"]').val();
+
+        // Costruiamo parametri corretti per MVC
+        const params = new URLSearchParams();
+        params.append("ID_Cliente", idCliente);
+
+        $('#listaProfessionisti select').each(function () {
+            const val = $(this).val();
+            if (val) params.append("ProfessionistiAssociati", val);
+            // 👆 MVC lo mapperà come int[] ProfessionistiAssociati
+        });
+
+        fetch('/Utenti/AssegnaProfessionistiCliente', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: params.toString()
         })
-            .then(async r => {
-                const text = await r.text();
-                try {
-                    const res = JSON.parse(text);
-                    if (res.success) {
-                        toastr.success(res.message);
-                        location.reload();
-                    } else {
-                        toastr.error(res.message);
-                    }
-                } catch (err) {
-                    console.error("❌ Errore parsing JSON:", text);
-                    toastr.error("Errore durante l'elaborazione della risposta.");
+            .then(r => {
+                if (!r.ok) throw new Error("HTTP error " + r.status);
+                return r.json();
+            })
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
                 }
             })
             .catch(err => {
-                console.error("❌ Errore nella richiesta:", err);
+                console.error("❌ Errore:", err);
                 toastr.error("Errore nella richiesta al server.");
             });
     });
@@ -688,6 +787,63 @@
             }
         });
     }
+
+
+    // MAIUSCOLO CODICE FISCALE SENZA OBBLIGATORIETA' CARATTERI
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const cfInputs = document.querySelectorAll(".codice-fiscale-input");
+
+        cfInputs.forEach(input => {
+            // Forza maiuscolo in tempo reale
+            input.addEventListener("input", function () {
+                this.value = this.value.toUpperCase();
+            });
+        });
+    });
+
+
+    // GESTIONE NOME COGNOME E RAGIONE SOCIALE
+    document.addEventListener("DOMContentLoaded", function () {
+        const nome = document.querySelector('#clienteForm [name="Nome"]');
+        const cognome = document.querySelector('#clienteForm [name="Cognome"]');
+        const ragione = document.querySelector('#clienteForm [name="RagioneSociale"]');
+
+        function aggiornaCampiAlternativi() {
+            const haNomeCognome = nome.value.trim() || cognome.value.trim();
+            const haRagione = ragione.value.trim();
+
+            if (haNomeCognome) {
+                ragione.value = "";
+                ragione.disabled = true;
+                ragione.classList.add("bg-light");
+            } else {
+                ragione.disabled = false;
+                ragione.classList.remove("bg-light");
+            }
+
+            if (haRagione) {
+                nome.value = "";
+                cognome.value = "";
+                nome.disabled = true;
+                cognome.disabled = true;
+                nome.classList.add("bg-light");
+                cognome.classList.add("bg-light");
+            } else {
+                nome.disabled = false;
+                cognome.disabled = false;
+                nome.classList.remove("bg-light");
+                cognome.classList.remove("bg-light");
+            }
+        }
+
+        nome.addEventListener("input", aggiornaCampiAlternativi);
+        cognome.addEventListener("input", aggiornaCampiAlternativi);
+        ragione.addEventListener("input", aggiornaCampiAlternativi);
+
+        // inizializza subito
+        aggiornaCampiAlternativi();
+    });
 
 
     // Filtro Ricerca + Stato + Paginazione
@@ -780,6 +936,8 @@
             selectStato.appendChild(option);
         });
         selectStato.className = 'form-select input-responsive me-2 mb-2';
+        // ✅ Default su "Attivo"
+        selectStato.value = "Attivo";
 
         controlliContainer.appendChild(searchInput);
         controlliContainer.appendChild(selectStato);

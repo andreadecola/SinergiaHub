@@ -11,7 +11,7 @@ namespace Sinergia.Models
         public int ID_Finanziamento { get; set; }
 
         [Required(ErrorMessage = "Il professionista è obbligatorio.")]
-        public int ID_Professionista { get; set; }
+        public int? ID_Professionista { get; set; }
 
         [Required(ErrorMessage = "L'importo è obbligatorio.")]
         [Range(0.01, 1000000, ErrorMessage = "L'importo deve essere maggiore di zero.")]

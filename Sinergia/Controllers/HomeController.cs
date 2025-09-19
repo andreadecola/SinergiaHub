@@ -435,17 +435,17 @@ namespace Sinergia.Controllers
             {
                 case "AnagraficaCostiPratica":
                     lista = db.AnagraficaCostiPratica_a
-                        .OrderByDescending(x => x.DataArchiviazione)
+                        .OrderByDescending(x => x.DataUltimaModifica)
                         .Select(x => new LogModificaViewModel
                         {
                             ID = x.ID_AnagraficaCosto_a,
-                            Data = (DateTime)x.DataArchiviazione,
+                            Data = x.DataUltimaModifica,
                             ModificheTestuali = x.ModificheTestuali,
                             TipoModifica = "Modifica",
                             NumeroVersione = x.NumeroVersione,
-                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                            ID_UtenteUltimaModifica = x.ID_UtenteUltimaModifica.ToString(),
                             NomeUtente = db.Utenti
-                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                                .Where(u => u.ID_Utente == x.ID_UtenteUltimaModifica)
                                 .Select(u => u.Nome + " " + u.Cognome)
                                 .FirstOrDefault()
                         }).ToList();
@@ -455,17 +455,17 @@ namespace Sinergia.Controllers
 
                 case "AvvisiParcella":
                     lista = db.AvvisiParcella_a
-                        .OrderByDescending(x => x.DataArchiviazione)
+                        .OrderByDescending(x => x.DataModifica)
                         .Select(x => new LogModificaViewModel
                         {
                             ID = x.ID_Archivio,
-                            Data = x.DataArchiviazione ?? DateTime.Now,
+                            Data = x.DataModifica,
                             ModificheTestuali = x.ModificheTestuali,
                             TipoModifica = "Modifica",
                             NumeroVersione = x.NumeroVersione,
-                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                            ID_UtenteUltimaModifica = x.ID_UtenteModifica.ToString(),
                             NomeUtente = db.Utenti
-                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                                .Where(u => u.ID_Utente == x.ID_UtenteModifica)
                                 .Select(u => u.Nome + " " + u.Cognome)
                                 .FirstOrDefault()
                         }).ToList();
@@ -477,17 +477,20 @@ namespace Sinergia.Controllers
                         .OrderByDescending(x => x.DataArchiviazione ?? x.UltimaModifica ?? x.DataCreazione)
                         .Select(x => new LogModificaViewModel
                         {
-                            ID = x.ID_Utente,
+                            ID = x.IDVersioneUtenti,
                             Data = x.DataArchiviazione ?? x.UltimaModifica ?? x.DataCreazione ?? DateTime.Now,
                             ModificheTestuali = x.ModificheTestuali,
-                            TipoModifica = "Modifica",
+                            TipoModifica = x.NumeroVersione == 1 ? "Creazione" : "Modifica",
                             NumeroVersione = x.NumeroVersione,
-                            ID_UtenteUltimaModifica = x.ID_UtenteUltimaModifica.ToString(),
+
+                            // 👤 Chi ha fatto la modifica (archiviazione)
+                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
                             NomeUtente = db.Utenti
-                                .Where(u => u.ID_Utente == x.ID_UtenteUltimaModifica)
+                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
                                 .Select(u => u.Nome + " " + u.Cognome)
-                                .FirstOrDefault()
-                        }).ToList();
+                                .FirstOrDefault() ?? "-"
+                        })
+                        .ToList();
                     break;
 
 
@@ -519,9 +522,9 @@ namespace Sinergia.Controllers
                             ModificheTestuali = x.ModificheTestuali,
                             TipoModifica = "Modifica",
                             NumeroVersione = x.NumeroVersione,
-                            ID_UtenteUltimaModifica = x.ID_UtenteUltimaModifica.ToString(),
+                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
                             NomeUtente = db.Utenti
-                                .Where(u => u.ID_Utente == x.ID_UtenteUltimaModifica)
+                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
                                 .Select(u => u.Nome + " " + u.Cognome)
                                 .FirstOrDefault()
                         }).ToList();
@@ -583,11 +586,11 @@ namespace Sinergia.Controllers
 
                 case "FinanziamentiProfessionisti":
                     lista = db.FinanziamentiProfessionisti_a
-                        .OrderByDescending(x => x.DataArchiviazione)
+                        .OrderByDescending(x => x.DataUltimaModifica)
                         .Select(x => new LogModificaViewModel
                         {
                             ID = x.ID_Finanziamento_Archivio,
-                            Data = (DateTime)x.DataArchiviazione,
+                            Data = x.DataUltimaModifica,
                             ModificheTestuali = x.ModificheTestuali,
                             TipoModifica = "Modifica",
                             NumeroVersione = x.NumeroVersione,
@@ -604,7 +607,7 @@ namespace Sinergia.Controllers
                     lista = db.Cluster_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Cluster_a,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = "",
                         NumeroVersione = x.NumeroVersione,
@@ -637,13 +640,13 @@ namespace Sinergia.Controllers
                     lista = db.CostiPersonaliUtente_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.IDVersioneCostoPersonale,
-                        Data = x.DataArchiviazione,
+                        Data = x.DataUltimaModifica,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = "",
                         NumeroVersione = x.NumeroVersione,
-                        ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                        ID_UtenteUltimaModifica = x.ID_UtenteUltimaModifica.ToString(),
                         NomeUtente = db.Utenti
-                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                                .Where(u => u.ID_Utente == x.ID_UtenteUltimaModifica)
                                 .Select(u => u.Nome + " " + u.Cognome)
                                 .FirstOrDefault()
 
@@ -654,7 +657,7 @@ namespace Sinergia.Controllers
                     lista = db.DatiBancari_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_DatoBancario,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = "",
                         NumeroVersione = x.NumeroVersione,
@@ -686,7 +689,7 @@ namespace Sinergia.Controllers
                     lista = db.DocumentiPratiche_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Documento_a,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = "",
                         NumeroVersione = x.NumeroVersione,
@@ -702,7 +705,7 @@ namespace Sinergia.Controllers
                     lista = db.Economico_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_EconomicoArchivio,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = "",
                         NumeroVersione = x.NumeroVersione,
@@ -719,7 +722,7 @@ namespace Sinergia.Controllers
                     lista = db.Incassi_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Archivio,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = "",
                         NumeroVersione = x.NumeroVersione,
@@ -735,7 +738,7 @@ namespace Sinergia.Controllers
                     lista = db.MovimentiBancari_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Movimento,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = "",
                         NumeroVersione = x.NumeroVersione,
@@ -752,7 +755,7 @@ namespace Sinergia.Controllers
                     lista = db.OperatoriSinergia_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Cliente,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = x.TipoCliente,
                         NumeroVersione = x.NumeroVersione,
@@ -764,27 +767,27 @@ namespace Sinergia.Controllers
                     }).ToList();
                     break;
 
-                case "OrdiniFornitori":
-                    lista = db.OrdiniFornitori_a.Select(x => new LogModificaViewModel
-                    {
-                        ID = x.ID_Ordine,
-                        Data = (DateTime)x.DataArchiviazione,
-                        ModificheTestuali = x.ModificheTestuali,
-                        TipoModifica = "",
-                        NumeroVersione = x.NumeroVersione,
-                        ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
-                        NomeUtente = db.Utenti
-                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
-                                .Select(u => u.Nome + " " + u.Cognome)
-                                .FirstOrDefault()
-                    }).ToList();
-                    break;
+                //case "OrdiniFornitori":
+                //    lista = db.OrdiniFornitori_a.Select(x => new LogModificaViewModel
+                //    {
+                //        ID = x.ID_Ordine,
+                //        Data = (DateTime)x.DataArchiviazione,
+                //        ModificheTestuali = x.ModificheTestuali,
+                //        TipoModifica = "",
+                //        NumeroVersione = x.NumeroVersione,
+                //        ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                //        NomeUtente = db.Utenti
+                //                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                //                .Select(u => u.Nome + " " + u.Cognome)
+                //                .FirstOrDefault()
+                //    }).ToList();
+                //    break;
 
                 case "Permessi":
                     lista = db.Permessi_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Permesso,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         NumeroVersione = x.NumeroVersione,
                         ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
@@ -795,27 +798,27 @@ namespace Sinergia.Controllers
                     }).ToList();
                     break;
 
-                case "PermessiDelegatiProfessionista":
-                    lista = db.PermessiDelegabiliPerProfessionista_a.Select(x => new LogModificaViewModel
-                    {
-                        ID = x.ID_PermessiDelegabiliPerProfessionista_a,
-                        Data = x.DataArchiviazione,
-                        ModificheTestuali = x.ModificheTestuali,
-                        TipoModifica = "",
-                        NumeroVersione = x.NumeroVersione,
-                        ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
-                        NomeUtente = db.Utenti
-                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
-                                .Select(u => u.Nome + " " + u.Cognome)
-                                .FirstOrDefault()
-                    }).ToList();
-                    break;
+                //case "PermessiDelegatiProfessionista":
+                //    lista = db.PermessiDelegabiliPerProfessionista_a.Select(x => new LogModificaViewModel
+                //    {
+                //        ID = x.ID_PermessiDelegabiliPerProfessionista_a,
+                //        Data = x.DataArchiviazione,
+                //        ModificheTestuali = x.ModificheTestuali,
+                //        TipoModifica = "",
+                //        NumeroVersione = x.NumeroVersione,
+                //        ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                //        NomeUtente = db.Utenti
+                //                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                //                .Select(u => u.Nome + " " + u.Cognome)
+                //                .FirstOrDefault()
+                //    }).ToList();
+                //    break;
 
                 case "PlafondUtente":
                     lista = db.PlafondUtente_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_PlannedPlafond_Archivio,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = "",
                         NumeroVersione = x.NumeroVersione,
@@ -831,7 +834,7 @@ namespace Sinergia.Controllers
                     lista = db.Previsione_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_PrevisioneArchivio,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         NumeroVersione = x.NumeroVersione,
                         ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
@@ -846,7 +849,7 @@ namespace Sinergia.Controllers
                     lista = db.Professioni_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Archivio,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = x.Codice,
                         NumeroVersione = x.NumeroVersione,
@@ -862,7 +865,7 @@ namespace Sinergia.Controllers
                     lista = db.RelazionePraticheUtenti_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Relazione_a,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = x.Ruolo,
                         NumeroVersione = x.NumeroVersione,
@@ -878,7 +881,7 @@ namespace Sinergia.Controllers
                     lista = db.RelazioneUtenti_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Relazione,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data = x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = x.TipoRelazione,
                         NumeroVersione = x.NumeroVersione,
@@ -910,7 +913,7 @@ namespace Sinergia.Controllers
                     lista = db.SettoriFornitori_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.ID_Storico,
-                        Data = (DateTime)x.DataArchiviazione,
+                        Data =x.DataArchiviazione,
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = x.Nome,
                         NumeroVersione = x.NumeroVersione,
@@ -942,7 +945,7 @@ namespace Sinergia.Controllers
                     lista = db.RicorrenzeCosti_a.Select(x => new LogModificaViewModel
                     {
                         ID = x.IDVersioneRicorrenza,
-                        Data = (DateTime)x.DataCreazione, // Se DataArchiviazione è null, assegna 01/01/0001
+                        Data = x.DataCreazione, // Se DataArchiviazione è null, assegna 01/01/0001
                         ModificheTestuali = x.ModificheTestuali,
                         TipoModifica = x.Periodicita ?? "Ricorrenza",
                         NumeroVersione = x.NumeroVersione, // 0 se null
@@ -1018,8 +1021,87 @@ namespace Sinergia.Controllers
                     }).ToList();
                     break;
 
+                case "AnagraficaCostiProfessionista":
+                    lista = db.AnagraficaCostiProfessionista_a
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.ID_AnagraficaCostoProfessionista_a,   // 🔑 chiave della tabella archivio
+                            Data = x.DataUltimaModifica,
+                            ModificheTestuali = x.ModificheTestuali,
+                            TipoModifica = x.Operazione ?? "Modifica",   // Inserimento / Modifica / Eliminazione
+                            NumeroVersione = x.NumeroVersione ?? 0,
+                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.HasValue
+                                                        ? x.ID_UtenteArchiviazione.Value.ToString()
+                                                        : null,
+                            NomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .OrderByDescending(l => l.Data)
+                        .ToList();
+                    break;
 
+                case "CostiGeneraliUtente":
+                    lista = db.CostiGeneraliUtente_a
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.IDVersioneCostoGenerale,   // 🔑 chiave primaria archivio
+                            Data = x.DataArchiviazione,
+                            ModificheTestuali = x.ModificheTestuali,
+                            TipoModifica = "Modifica",        // qui non hai il campo Operazione → default
+                            NumeroVersione = x.NumeroVersione,
+                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                            NomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .OrderByDescending(l => l.Data)
+                        .ToList();
+                    break;
 
+                case "EccezioniRicorrenzeCosti":
+                    lista = db.EccezioniRicorrenzeCosti_a
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.ID_Eccezione_a,                  // 🔑 chiave primaria archivio
+                            Data = x.DataUltimaModifica,             // data archiviazione versione
+                            ModificheTestuali = x.ModificheTestuali,
+                            TipoModifica = "Modifica",              // non c’è campo Operazione, lo fisso
+                            NumeroVersione = x.NumeroVersione,
+                            ID_UtenteUltimaModifica = x.ID_UtenteUltimaModifica.ToString(),
+                            NomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == x.ID_UtenteUltimaModifica)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .OrderByDescending(l => l.Data)
+                        .ToList();
+                    break;
+
+                case "Finanziario":
+                    lista = db.Finanziario_a
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.ID_FinanziarioArchivio,         // 🔑 chiave archivio
+                            Data = x.DataArchiviazione,            // data archiviazione
+                            ModificheTestuali = x.ModificheTestuali,
+                            TipoModifica = "Modifica",             // non c’è campo Operazione
+                            NumeroVersione = x.NumeroVersione,
+                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.HasValue
+                                ? x.ID_UtenteArchiviazione.Value.ToString()
+                                : null,
+                            NomeUtente = x.ID_UtenteArchiviazione.HasValue
+                                ? db.Utenti
+                                    .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione.Value)
+                                    .Select(u => u.Nome + " " + u.Cognome)
+                                    .FirstOrDefault()
+                                : "(utente non disponibile)"
+                        })
+                        .OrderByDescending(l => l.Data)
+                        .ToList();
+                    break;
 
                 default:
                     return Json(new { success = false, message = "Tabella non riconosciuta." }, JsonRequestBehavior.AllowGet);
@@ -1033,45 +1115,47 @@ namespace Sinergia.Controllers
         public JsonResult GetTabelleArchivio()
         {
             var tabelle = new List<SelectListItem>
-    {
-        new SelectListItem { Text = "AnagraficaCostiPratica", Value = "AnagraficaCostiPratica" },
-        new SelectListItem { Text = "AnagraficaCostiTeam", Value = "AnagraficaCostiTeam" },
-        new SelectListItem { Text = "AvvisiParcella", Value = "AvvisiParcella" },
-        new SelectListItem { Text = "Clienti", Value = "Clienti" },
-        new SelectListItem { Text = "Cluster", Value = "Cluster" },
-        new SelectListItem { Text = "CompensiPratica", Value = "CompensiPratica" },
-        new SelectListItem { Text = "CostiPersonaliUtente", Value = "CostiPersonaliUtente" },
-        new SelectListItem { Text = "CostiPratica", Value = "CostiPratica" },
-        new SelectListItem { Text = "DatiBancari", Value = "DatiBancari" },
-        new SelectListItem { Text = "DistribuzioneCostiTeam", Value = "DistribuzioneCostiTeam" },
-        new SelectListItem { Text = "DocumentiAziende", Value = "DocumentiAziende" },
-        new SelectListItem { Text = "DocumentiPratiche", Value = "DocumentiPratiche" },
-        new SelectListItem { Text = "Economico", Value = "Economico" },
-        new SelectListItem { Text = "FinanziamentiProfessionisti", Value = "FinanziamentiProfessionisti" },
-        new SelectListItem { Text = "Finanziario", Value = "Finanziario" },
-        new SelectListItem { Text = "Incassi", Value = "Incassi" },
-        new SelectListItem { Text = "MembriTeam", Value = "MembriTeam" },
-        new SelectListItem { Text = "MovimentiBancari", Value = "MovimentiBancari" },
-        new SelectListItem { Text = "OperatoriSinergia", Value = "OperatoriSinergia" },
-        new SelectListItem { Text = "OrdiniFornitori", Value = "OrdiniFornitori" },
-        new SelectListItem { Text = "Permessi", Value = "Permessi" },
-        new SelectListItem { Text = "PermessiDelegatiProfessionista", Value = "PermessiDelegatiProfessionista" },
-        new SelectListItem { Text = "PlafondUtente", Value = "PlafondUtente" },
-        new SelectListItem { Text = "Pratiche", Value = "Pratiche" },
-        new SelectListItem { Text = "Previsione", Value = "Previsione" },
-        new SelectListItem { Text = "Professioni", Value = "Professioni" },
-        new SelectListItem { Text = "RelazionePraticheUtenti", Value = "RelazionePraticheUtenti" },
-        new SelectListItem { Text = "RelazioneUtenti", Value = "RelazioneUtenti" },
-        new SelectListItem { Text = "RicorrenzeCosti", Value = "RicorrenzeCosti" },
-        new SelectListItem { Text = "RimborsiPratica", Value = "RimborsiPratica" },
-        new SelectListItem { Text = "SettoriFornitori", Value = "SettoriFornitori" },
-        new SelectListItem { Text = "TeamProfessionisti", Value = "TeamProfessionisti" },
-        new SelectListItem { Text = "TemplateIncarichi", Value = "TemplateIncarichi" },
-        new SelectListItem { Text = "TipologieCosti", Value = "TipologieCosti" },
-        new SelectListItem { Text = "TipoRagioneSociale", Value = "TipoRagioneSociale" },
-        new SelectListItem { Text = "Utenti", Value = "Utenti" }
-    };
-
+            {
+                new SelectListItem { Text = "AnagraficaCostiPratica", Value = "AnagraficaCostiPratica" },
+                new SelectListItem { Text = "AnagraficaCostiTeam", Value = "AnagraficaCostiTeam" },
+                new SelectListItem { Text = "AnagraficaCostiProfessionista", Value = "AnagraficaCostiProfessionista" }, // ✅ AGGIUNTO
+                new SelectListItem { Text = "AvvisiParcella", Value = "AvvisiParcella" },
+                new SelectListItem { Text = "Clienti", Value = "Clienti" },
+                new SelectListItem { Text = "Cluster", Value = "Cluster" },
+                new SelectListItem { Text = "CompensiPratica", Value = "CompensiPratica" },
+                new SelectListItem { Text = "CostiGeneraliUtente", Value = "CostiGeneraliUtente" }, // ✅ AGGIUNTO
+                new SelectListItem { Text = "CostiPersonaliUtente", Value = "CostiPersonaliUtente" },
+                new SelectListItem { Text = "CostiPratica", Value = "CostiPratica" },
+                new SelectListItem { Text = "DatiBancari", Value = "DatiBancari" },
+                new SelectListItem { Text = "DistribuzioneCostiTeam", Value = "DistribuzioneCostiTeam" },
+                new SelectListItem { Text = "DocumentiAziende", Value = "DocumentiAziende" },
+                new SelectListItem { Text = "DocumentiPratiche", Value = "DocumentiPratiche" },
+                new SelectListItem { Text = "Economico", Value = "Economico" },
+                new SelectListItem { Text = "EccezioniRicorrenzeCosti", Value = "EccezioniRicorrenzeCosti" }, // ✅ AGGIUNTO
+                new SelectListItem { Text = "FinanziamentiProfessionisti", Value = "FinanziamentiProfessionisti" },
+                new SelectListItem { Text = "Finanziario", Value = "Finanziario" },
+                new SelectListItem { Text = "Incassi", Value = "Incassi" },
+                new SelectListItem { Text = "MembriTeam", Value = "MembriTeam" },
+                new SelectListItem { Text = "MovimentiBancari", Value = "MovimentiBancari" },
+                new SelectListItem { Text = "OperatoriSinergia", Value = "OperatoriSinergia" },
+                //new SelectListItem { Text = "OrdiniFornitori", Value = "OrdiniFornitori" },
+                new SelectListItem { Text = "Permessi", Value = "Permessi" },
+                //new SelectListItem { Text = "PermessiDelegatiProfessionista", Value = "PermessiDelegatiProfessionista" },
+                new SelectListItem { Text = "PlafondUtente", Value = "PlafondUtente" },
+                new SelectListItem { Text = "Pratiche", Value = "Pratiche" },
+                new SelectListItem { Text = "Previsione", Value = "Previsione" },
+                new SelectListItem { Text = "Professioni", Value = "Professioni" },
+                new SelectListItem { Text = "RelazionePraticheUtenti", Value = "RelazionePraticheUtenti" },
+                new SelectListItem { Text = "RelazioneUtenti", Value = "RelazioneUtenti" },
+                new SelectListItem { Text = "RicorrenzeCosti", Value = "RicorrenzeCosti" },
+                new SelectListItem { Text = "RimborsiPratica", Value = "RimborsiPratica" },
+                new SelectListItem { Text = "SettoriFornitori", Value = "SettoriFornitori" },
+                new SelectListItem { Text = "TeamProfessionisti", Value = "TeamProfessionisti" },
+                new SelectListItem { Text = "TemplateIncarichi", Value = "TemplateIncarichi" },
+                new SelectListItem { Text = "TipologieCosti", Value = "TipologieCosti" },
+                new SelectListItem { Text = "TipoRagioneSociale", Value = "TipoRagioneSociale" },
+                new SelectListItem { Text = "Utenti", Value = "Utenti" }
+            };
             return Json(tabelle, JsonRequestBehavior.AllowGet);
         }
 
@@ -1082,122 +1166,609 @@ namespace Sinergia.Controllers
             switch (nomeTabella)
             {
                 case "AnagraficaCostiPratica":
-                    contenuto = db.AnagraficaCostiPratica_a.FirstOrDefault(x => x.ID_AnagraficaCosto_a == idArchivio)?.ModificheTestuali;
+                    var ac = db.AnagraficaCostiPratica_a.FirstOrDefault(x => x.ID_AnagraficaCosto_a == idArchivio);
+                    if (ac != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == ac.ID_UtenteUltimaModifica);
+                        contenuto =
+                            $"🗓 Data: {ac.DataUltimaModifica:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {ac.ID_UtenteUltimaModifica})\n" +
+                            $"🔢 Versione: {ac.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +   // qui non hai un campo Operazione, metto default
+                            $"📝 Dettagli: {ac.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "AvvisiParcella":
-                    contenuto = db.AvvisiParcella_a.FirstOrDefault(x => x.ID_Archivio == idArchivio)?.ModificheTestuali;
+                    var ap = db.AvvisiParcella_a.FirstOrDefault(x => x.ID_Archivio == idArchivio);
+                    if (ap != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == ap.ID_UtenteModifica);
+                        contenuto =
+                            $"🗓 Data: {ap.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {ap.ID_UtenteModifica})\n" +
+                            $"🔢 Versione: {ap.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +   // non c’è un campo specifico, default
+                            $"📝 Dettagli: {ap.ModificheTestuali}";
+                    }
                     break;
+
                 case "Clienti":
-                    contenuto = db.Clienti_a.FirstOrDefault(x => x.ID_Cliente_a == idArchivio)?.ModificheTestuali;
+                    var cl = db.Clienti_a.FirstOrDefault(x => x.ID_Cliente_a == idArchivio);
+                    if (cl != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == cl.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {cl.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {cl.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {cl.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +   // default perché non c’è un campo specifico
+                            $"📝 Dettagli: {cl.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "Cluster":
-                    contenuto = db.Cluster_a.FirstOrDefault(x => x.ID_Cluster_a == idArchivio)?.ModificheTestuali;
+                    var clust = db.Cluster_a.FirstOrDefault(x => x.ID_Cluster_a == idArchivio);
+                    if (clust != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == clust.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {clust.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {clust.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {clust.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +   // non esiste un campo Operazione → default
+                            $"📝 Dettagli: {clust.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "CompensiPratica":
-                    contenuto = db.CompensiPratica_a.FirstOrDefault(x => x.ID_CompensoArchivio == idArchivio)?.ModificheTestuali;
+                    var comp = db.CompensiPratica_a.FirstOrDefault(x => x.ID_CompensoArchivio == idArchivio);
+                    if (comp != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == comp.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {comp.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {comp.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {comp.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +   // qui non hai un campo Operazione → default
+                            $"📝 Dettagli: {comp.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "CostiPersonaliUtente":
-                    contenuto = db.CostiPersonaliUtente_a.FirstOrDefault(x => x.IDVersioneCostoPersonale == idArchivio)?.ModificheTestuali;
+                    var cpu = db.CostiPersonaliUtente_a.FirstOrDefault(x => x.IDVersioneCostoPersonale == idArchivio);
+                    if (cpu != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == cpu.ID_UtenteUltimaModifica);
+                        contenuto =
+                            $"🗓 Data: {cpu.DataUltimaModifica:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {cpu.ID_UtenteUltimaModifica})\n" +
+                            $"🔢 Versione: {cpu.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +   // non c’è campo Operazione → default
+                            $"📝 Dettagli: {cpu.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "AnagraficaCostiTeam":
-                    contenuto = db.AnagraficaCostiTeam_a.FirstOrDefault(x => x.IDVersioneAnagraficaCostoTeam == idArchivio)?.ModificheTestuali;
+                    var act = db.AnagraficaCostiTeam_a.FirstOrDefault(x => x.IDVersioneAnagraficaCostoTeam == idArchivio);
+                    if (act != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == act.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {act.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {act.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {act.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +   // non c’è campo Operazione → default
+                            $"📝 Dettagli: {act.ModificheTestuali}";
+                    }
                     break;
+
+                case "AnagraficaCostiProfessionista":
+                    var acp = db.AnagraficaCostiProfessionista_a.FirstOrDefault(x => x.ID_AnagraficaCostoProfessionista_a == idArchivio);
+                    if (acp != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == acp.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {acp.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {acp.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {acp.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {acp.Operazione ?? "Modifica"}\n" +
+                            $"📝 Dettagli: {acp.ModificheTestuali}";
+                    }
+                    break;
+                case "CostiGeneraliUtente":
+                    var cgu = db.CostiGeneraliUtente_a.FirstOrDefault(x => x.IDVersioneCostoGenerale == idArchivio);
+                    if (cgu != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == cgu.ID_UtenteArchiviazione);
+                        var professionista = db.Utenti.FirstOrDefault(u => u.ID_Utente == cgu.ID_Utente);
+
+                        string nomeProfessionista = professionista != null
+                            ? $"{professionista.Nome} {professionista.Cognome} (ID {professionista.ID_Utente})"
+                            : $"ID {cgu.ID_Utente}";
+
+                        contenuto =
+                            $"🗓 Data: {cgu.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {cgu.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {cgu.NumeroVersione}\n" +
+                            $"📝 Dettagli: {cgu.ModificheTestuali?.Replace($"professionista {cgu.ID_Utente}", $"professionista {nomeProfessionista}")}";
+                    }
+                    break;
+
+
+
+                case "EccezioniRicorrenzeCosti":
+                    var ecc = db.EccezioniRicorrenzeCosti_a.FirstOrDefault(x => x.ID_Eccezione_a == idArchivio);
+                    if (ecc != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == ecc.ID_UtenteUltimaModifica);
+                        contenuto =
+                            $"🗓 Data: {ecc.DataUltimaModifica:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {ecc.ID_UtenteUltimaModifica})\n" +
+                            $"🔢 Versione: {ecc.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +  // non ha campo Operazione → fisso "Modifica"
+                            $"📝 Dettagli: {ecc.ModificheTestuali}";
+                    }
+                    break;
+
+
                 case "CostiPratica":
-                    contenuto = db.CostiPratica_a.FirstOrDefault(x => x.ID_CostoPratica_Archivio == idArchivio)?.ModificheTestuali;
+                    var cp = db.CostiPratica_a.FirstOrDefault(x => x.ID_CostoPratica_Archivio == idArchivio);
+                    if (cp != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == cp.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {cp.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {cp.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {cp.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +   // qui non c’è campo Operazione → imposto "Modifica"
+                            $"📝 Dettagli: {cp.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "DatiBancari":
-                    contenuto = db.DatiBancari_a.FirstOrDefault(x => x.ID_DatoBancario == idArchivio)?.ModificheTestuali;
+                    var dbanc = db.DatiBancari_a.FirstOrDefault(x => x.ID_DatoBancario == idArchivio);
+                    if (dbanc != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == dbanc.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {dbanc.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {dbanc.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {dbanc.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +  // non c’è campo Operazione → default "Modifica"
+                            $"📝 Dettagli: {dbanc.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "DistribuzioneCostiTeam":
-                    contenuto = db.DistribuzioneCostiTeam_a.FirstOrDefault(x => x.ID_DistribuzioneArchivio == idArchivio)?.ModificheTestuali;
+                    var dct = db.DistribuzioneCostiTeam_a.FirstOrDefault(x => x.ID_DistribuzioneArchivio == idArchivio);
+                    if (dct != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == dct.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {dct.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {dct.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {dct.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" +  // non c’è campo Operazione, imposto default
+                            $"📝 Dettagli: {dct.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "DocumentiAziende":
-                    contenuto = db.DocumentiAziende_a.FirstOrDefault(x => x.ID_Documento_A == idArchivio)?.ModificheTestuali;
+                    var daz = db.DocumentiAziende_a.FirstOrDefault(x => x.ID_Documento_A == idArchivio);
+                    if (daz != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == daz.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {daz.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {daz.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {daz.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" + // non c’è campo Operazione, uso default
+                            $"📝 Dettagli: {daz.ModificheTestuali}";
+                    }
                     break;
+
                 case "DocumentiPratiche":
-                    contenuto = db.DocumentiPratiche_a.FirstOrDefault(x => x.ID_Documento_a == idArchivio)?.ModificheTestuali;
+                    var dpr = db.DocumentiPratiche_a.FirstOrDefault(x => x.ID_Documento_a == idArchivio);
+                    if (dpr != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == dpr.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {dpr.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {dpr.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {dpr.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" + // non esiste campo Operazione, imposto default
+                            $"📝 Dettagli: {dpr.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "Economico":
-                    contenuto = db.Economico_a.FirstOrDefault(x => x.ID_EconomicoArchivio == idArchivio)?.ModificheTestuali;
+                    var eco = db.Economico_a.FirstOrDefault(x => x.ID_EconomicoArchivio == idArchivio);
+                    if (eco != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == eco.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {eco.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {eco.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {eco.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" + // non c’è un campo Operazione → default
+                            $"📝 Dettagli: {eco.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "FinanziamentiProfessionisti":
-                    contenuto = db.FinanziamentiProfessionisti_a.FirstOrDefault(x => x.ID_Finanziamento_Archivio == idArchivio)?.ModificheTestuali;
+                    var fin = db.FinanziamentiProfessionisti_a.FirstOrDefault(x => x.ID_Finanziamento_Archivio == idArchivio);
+                    if (fin != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == fin.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {fin.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {fin.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {fin.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" + // fisso a Modifica, non c’è campo Operazione
+                            $"📝 Dettagli: {fin.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "Finanziario":
-                    contenuto = db.Finanziario_a.FirstOrDefault(x => x.ID_FinanziarioArchivio == idArchivio)?.ModificheTestuali;
+                    var fina = db.Finanziario_a.FirstOrDefault(x => x.ID_FinanziarioArchivio == idArchivio);
+                    if (fina != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == fina.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {fina.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {fina.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {fina.NumeroVersione}\n" +
+                            $"📝 Dettagli: {fina.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "Incassi":
-                    contenuto = db.Incassi_a.FirstOrDefault(x => x.ID_Archivio == idArchivio)?.ModificheTestuali;
+                    var inc = db.Incassi_a.FirstOrDefault(x => x.ID_Archivio == idArchivio);
+                    if (inc != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == inc.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {inc.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {inc.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {inc.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" + // non c’è campo Operazione
+                            $"📝 Dettagli: {inc.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "MembriTeam":
-                    contenuto = db.MembriTeam_a.FirstOrDefault(x => x.ID_VersioneMembroTeam == idArchivio)?.ModificheTestuali;
+                    var mt = db.MembriTeam_a.FirstOrDefault(x => x.ID_VersioneMembroTeam == idArchivio);
+                    if (mt != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == mt.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {mt.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {mt.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {mt.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" + // non ha campo Operazione
+                            $"📝 Dettagli: {mt.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "MovimentiBancari":
-                    contenuto = db.MovimentiBancari_a.FirstOrDefault(x => x.ID_Movimento == idArchivio)?.ModificheTestuali;
+                    var mb = db.MovimentiBancari_a.FirstOrDefault(x => x.ID_Movimento == idArchivio);
+                    if (mb != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == mb.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {mb.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {mb.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {mb.NumeroVersione}\n" +
+                            $"⚙️ Operazione: {"Modifica"}\n" + // non ha campo Operazione
+                            $"📝 Dettagli: {mb.ModificheTestuali}";
+                    }
                     break;
+
                 case "OperatoriSinergia":
-                    contenuto = db.OperatoriSinergia_a.FirstOrDefault(x => x.ID_Cliente == idArchivio)?.ModificheTestuali;
+                    var os = db.OperatoriSinergia_a.FirstOrDefault(x => x.ID_Cliente == idArchivio);
+                    if (os != null)
+                    {
+                        var utenteArchiviazione = db.Utenti.FirstOrDefault(u => u.ID_Utente == os.ID_UtenteArchiviazione);
+
+                        // Recupero del nome completo in base al tipo cliente
+                        Func<int, string> GetNomeCliente = (id) =>
+                        {
+                            var cli = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == id);
+                            if (cli == null) return $"ID {id}";
+
+                            if (cli.TipoCliente == "Professionista")
+                                return $"{cli.Nome} {cli.Cognome} (ID {cli.ID_Cliente})";
+                            if (cli.TipoCliente == "Azienda")
+                                return !string.IsNullOrEmpty(cli.TipoRagioneSociale)
+                                    ? $"{cli.TipoRagioneSociale} {cli.Nome} (ID {cli.ID_Cliente})"
+                                    : $"{cli.Nome} (ID {cli.ID_Cliente})";
+
+                            return $"{cli.Nome} {cli.Cognome} (ID {cli.ID_Cliente})";
+                        };
+
+                        string dettagli = os.ModificheTestuali ?? "";
+
+                        // 🔄 sostituzione ID_Cliente
+                        var regexCliente = new System.Text.RegularExpressions.Regex(@"ID_Cliente\s*=\s*(\d+)");
+                        dettagli = regexCliente.Replace(dettagli, match =>
+                        {
+                            int idCli;
+                            if (int.TryParse(match.Groups[1].Value, out idCli))
+                                return $"Cliente: {GetNomeCliente(idCli)}";
+                            return match.Value;
+                        });
+
+                        // 🔄 sostituzione ID_Professionista
+                        var regexProf = new System.Text.RegularExpressions.Regex(@"ID_Professionista\s*=\s*(\d+)");
+                        dettagli = regexProf.Replace(dettagli, match =>
+                        {
+                            int idProf;
+                            if (int.TryParse(match.Groups[1].Value, out idProf))
+                                return $"Professionista: {GetNomeCliente(idProf)}";
+                            return match.Value;
+                        });
+
+                        contenuto =
+                            $"🗓 Data: {os.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utenteArchiviazione?.Nome} {utenteArchiviazione?.Cognome} (ID {os.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {os.NumeroVersione}\n" +
+                            $"🏷 Tipo Cliente: {os.TipoCliente}\n" +
+                            $"📝 Dettagli: {dettagli}";
+                    }
                     break;
-                case "OrdiniFornitori":
-                    contenuto = db.OrdiniFornitori_a.FirstOrDefault(x => x.ID_Ordine == idArchivio)?.ModificheTestuali;
-                    break;
+
+
+                //case "OrdiniFornitori":
+                //    contenuto = db.OrdiniFornitori_a
+                //        .FirstOrDefault(x => x.ID_Ordine == idArchivio)?.ModificheTestuali;
+                //    break;
+
                 case "Permessi":
-                    contenuto = db.Permessi_a.FirstOrDefault(x => x.ID_Permesso == idArchivio)?.ModificheTestuali;
+                    var perm = db.Permessi_a.FirstOrDefault(x => x.ID_Permesso == idArchivio);
+                    if (perm != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == perm.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {perm.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {perm.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {perm.NumeroVersione}\n" +
+                            $"📝 Dettagli: {perm.ModificheTestuali}";
+                    }
                     break;
-                case "PermessiDelegatiProfessionista":
-                    contenuto = db.PermessiDelegabiliPerProfessionista_a.FirstOrDefault(x => x.ID_PermessiDelegabiliPerProfessionista_a == idArchivio)?.ModificheTestuali;
-                    break;
+
+
+                //case "PermessiDelegatiProfessionista":
+                //    contenuto = db.PermessiDelegabiliPerProfessionista_a
+                //        .FirstOrDefault(x => x.ID_PermessiDelegabiliPerProfessionista_a == idArchivio)?.ModificheTestuali;
+                //    break;
+
                 case "PlafondUtente":
-                    contenuto = db.PlafondUtente_a.FirstOrDefault(x => x.ID_PlannedPlafond_Archivio == idArchivio)?.ModificheTestuali;
+                    var plaf = db.PlafondUtente_a.FirstOrDefault(x => x.ID_PlannedPlafond_Archivio == idArchivio);
+                    if (plaf != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == plaf.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {plaf.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {plaf.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {plaf.NumeroVersione}\n" +
+                            $"📝 Dettagli: {plaf.ModificheTestuali}";
+                    }
                     break;
+
                 case "Pratiche":
-                    contenuto = db.Pratiche_a.FirstOrDefault(x => x.ID_Pratiche_a == idArchivio)?.ModificheTestuali;
+                    var pr = db.Pratiche_a.FirstOrDefault(x => x.ID_Pratiche_a == idArchivio);
+                    if (pr != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == pr.ID_UtenteUltimaModifica);
+                        contenuto =
+                            $"🗓 Data: {(pr.DataArchiviazione ?? pr.UltimaModifica ?? pr.DataCreazione):dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {pr.ID_UtenteUltimaModifica})\n" +
+                            $"🔢 Versione: {pr.NumeroVersione}\n" +
+                            $"📌 Stato: {pr.Stato}\n" +
+                            $"📝 Dettagli: {pr.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "Previsione":
-                    contenuto = db.Previsione_a.FirstOrDefault(x => x.ID_PrevisioneArchivio == idArchivio)?.ModificheTestuali;
+                    var prev = db.Previsione_a.FirstOrDefault(x => x.ID_PrevisioneArchivio == idArchivio);
+                    if (prev != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == prev.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {prev.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {prev.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {prev.NumeroVersione}\n" +
+                            $"📝 Dettagli: {prev.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "Professioni":
-                    contenuto = db.Professioni_a.FirstOrDefault(x => x.ID_Archivio == idArchivio)?.ModificheTestuali;
+                    var prof = db.Professioni_a.FirstOrDefault(x => x.ID_Archivio == idArchivio);
+                    if (prof != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == prof.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {prof.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {prof.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {prof.NumeroVersione}\n" +
+                            $"⚙️ Tipo: {prof.Codice}\n" +
+                            $"📝 Dettagli: {prof.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "RelazionePraticheUtenti":
-                    contenuto = db.RelazionePraticheUtenti_a.FirstOrDefault(x => x.ID_Relazione_a == idArchivio)?.ModificheTestuali;
+                    var rpu = db.RelazionePraticheUtenti_a.FirstOrDefault(x => x.ID_Relazione_a == idArchivio);
+                    if (rpu != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == rpu.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {rpu.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {rpu.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {rpu.NumeroVersione}\n" +
+                            $"⚙️ Ruolo: {rpu.Ruolo}\n" +
+                            $"📝 Dettagli: {rpu.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "RelazioneUtenti":
-                    contenuto = db.RelazioneUtenti_a.FirstOrDefault(x => x.ID_Relazione == idArchivio)?.ModificheTestuali;
+                    var ru = db.RelazioneUtenti_a.FirstOrDefault(x => x.ID_Relazione == idArchivio);
+                    if (ru != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == ru.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {ru.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {ru.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {ru.NumeroVersione}\n" +
+                            $"🤝 Tipo relazione: {ru.TipoRelazione}\n" +
+                            $"📝 Dettagli: {ru.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "RicorrenzeCosti":
-                    contenuto = db.RicorrenzeCosti_a.FirstOrDefault(x => x.IDVersioneRicorrenza == idArchivio)?.ModificheTestuali;
+                    var rc = db.RicorrenzeCosti_a.FirstOrDefault(x => x.IDVersioneRicorrenza == idArchivio);
+                    if (rc != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == rc.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {rc.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {rc.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {rc.NumeroVersione}\n" +
+                            $"📆 Periodicità: {rc.Periodicita ?? "N/D"}\n" +
+                            $"📝 Dettagli: {rc.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "RimborsiPratica":
-                    contenuto = db.RimborsiPratica_a.FirstOrDefault(x => x.ID_RimborsoArchivio == idArchivio)?.ModificheTestuali;
+                    var rp = db.RimborsiPratica_a.FirstOrDefault(x => x.ID_RimborsoArchivio == idArchivio);
+                    if (rp != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == rp.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {rp.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {rp.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {rp.NumeroVersione}\n" +
+                            $"📝 Dettagli: {rp.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "SettoriFornitori":
-                    contenuto = db.SettoriFornitori_a.FirstOrDefault(x => x.ID_Storico == idArchivio)?.ModificheTestuali;
+                    var sf = db.SettoriFornitori_a.FirstOrDefault(x => x.ID_Storico == idArchivio);
+                    if (sf != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == sf.ID_UtenteUltimaModifica);
+                        contenuto =
+                            $"🗓 Data: {sf.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {sf.ID_UtenteUltimaModifica})\n" +
+                            $"🔢 Versione: {sf.NumeroVersione}\n" +
+                            $"📝 Dettagli: {sf.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "TeamProfessionisti":
-                    contenuto = db.TeamProfessionisti_a.FirstOrDefault(x => x.ID_VersioneTeam == idArchivio)?.ModificheTestuali;
+                    var tp = db.TeamProfessionisti_a.FirstOrDefault(x => x.ID_VersioneTeam == idArchivio);
+                    if (tp != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == tp.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {tp.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {tp.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {tp.NumeroVersione}\n" +
+                            $"📝 Dettagli: {tp.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "TemplateIncarichi":
-                    contenuto = db.TemplateIncarichi_a.FirstOrDefault(x => x.ID_Archivio == idArchivio)?.ModificheTestuali;
+                    var ti = db.TemplateIncarichi_a.FirstOrDefault(x => x.ID_Archivio == idArchivio);
+                    if (ti != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == ti.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {ti.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {ti.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {ti.NumeroVersione}\n" +
+                            $"📝 Dettagli: {ti.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "TipologieCosti":
-                    contenuto = db.TipologieCosti_a.FirstOrDefault(x => x.ID_Storico == idArchivio)?.ModificheTestuali;
+                    var tc = db.TipologieCosti_a.FirstOrDefault(x => x.ID_Storico == idArchivio);
+                    if (tc != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == tc.ID_UtenteUltimaModifica);
+                        contenuto =
+                            $"🗓 Data: {tc.DataUltimaModifica:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {tc.ID_UtenteUltimaModifica})\n" +
+                            $"🔢 Versione: {tc.NumeroVersione}\n" +
+                            $"⚙️ Tipo: {tc.Tipo}\n" +
+                            $"📝 Dettagli: {tc.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "TipoRagioneSociale":
-                    contenuto = db.TipoRagioneSociale_a.FirstOrDefault(x => x.ID_Archivio == idArchivio)?.ModificheTestuali;
+                    var trs = db.TipoRagioneSociale_a.FirstOrDefault(x => x.ID_Archivio == idArchivio);
+                    if (trs != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == trs.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {trs.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {trs.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {trs.NumeroVersione}\n" +
+                            $"⚙️ Descrizione: {trs.Descrizione}\n" +
+                            $"📝 Dettagli: {trs.ModificheTestuali}";
+                    }
                     break;
+
+
                 case "Utenti":
-                    contenuto = db.Utenti_a.FirstOrDefault(x => x.IDVersioneUtenti == idArchivio)?.ModificheTestuali;
+                    var ut = db.Utenti_a.FirstOrDefault(x => x.IDVersioneUtenti == idArchivio);
+                    if (ut != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == ut.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {(ut.DataArchiviazione ?? ut.UltimaModifica ?? ut.DataCreazione):dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {ut.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {ut.NumeroVersione}\n" +
+                            $"📝 Dettagli: {ut.ModificheTestuali}";
+                    }
                     break;
+
+
                 default:
                     contenuto = "⚠️ Tabella non gestita o record non trovato.";
                     break;
             }
 
-            contenuto = string.IsNullOrWhiteSpace(contenuto) ? "Nessuna modifica registrata." : contenuto;
+            contenuto = string.IsNullOrWhiteSpace(contenuto)? "Nessuna modifica registrata." : contenuto;
 
             return Content($"<pre>{contenuto}</pre>");
         }
+
 
 
         // LOG MODIFICHE DETTAGLIATO 
@@ -2816,13 +3387,27 @@ namespace Sinergia.Controllers
 
         public ActionResult Error()
         {
-            var exception = HttpContext.Items["Exception"] as Exception;
+            var exception = System.Web.HttpContext.Current.Items["LastException"] as Exception;
 
-            ViewBag.Exception = exception;
-            ViewBag.Controller = RouteData.Values["controller"];
-            ViewBag.Action = RouteData.Values["action"];
+            // 🔎 Se vuoi loggare sempre l’errore
+            if (exception != null)
+            {
+                System.Diagnostics.Debug.WriteLine("🚨 ERRORE CATTURATO:");
+                System.Diagnostics.Debug.WriteLine("Messaggio: " + exception.Message);
+                System.Diagnostics.Debug.WriteLine("StackTrace: " + exception.StackTrace);
+                if (exception.InnerException != null)
+                    System.Diagnostics.Debug.WriteLine("Inner: " + exception.InnerException);
+            }
 
-            return View("Error"); // chiama la View ~/Views/Shared/Error.cshtml
+            ViewBag.MessaggioPrincipale = exception?.Message ?? "Errore sconosciuto";
+            ViewBag.StackTrace = exception?.StackTrace;
+            ViewBag.Inner = exception?.InnerException?.ToString();
+            ViewBag.Controller = RouteData.Values["originalController"];
+            ViewBag.Action = RouteData.Values["originalAction"];
+
+            // 🔧 Puoi anche passare un model tipizzato invece di ViewBag
+            return View("Error");
         }
+
     }
 }

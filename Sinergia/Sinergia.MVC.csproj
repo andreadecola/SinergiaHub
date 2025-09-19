@@ -253,6 +253,7 @@
     <Compile Include="Models\ClienteViewModel.cs" />
     <Compile Include="Models\ClusterViewModel.cs" />
     <Compile Include="Models\CollaboratorePraticaViewModel.cs" />
+    <Compile Include="Models\CompensoPraticaDettaglioViewModel.cs" />
     <Compile Include="Models\CostiPersonaliUtenteViewModel.cs" />
     <Compile Include="Models\CostiPraticaViewModel.cs" />
     <Compile Include="Models\CostoProfessionistaCompletoViewModel.cs" />

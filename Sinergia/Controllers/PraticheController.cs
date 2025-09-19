@@ -35,16 +35,14 @@ namespace SinergiaMvc.Controllers
             return View("~/Views/Pratiche/GestionePratiche.cshtml");
         }
 
-
         [HttpGet]
-        public ActionResult GestionePraticheList(string ricerca = "", int giorniFiltro = 30, string tipoFiltro = "Tutti")
+        public ActionResult GestionePraticheList(string ricerca = "", string tipoFiltro = "Tutti")
         {
             int idUtente = UserManager.GetIDUtenteCollegato();
             var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtente);
             if (utenteCorrente == null)
                 return Json(new { success = false, message = "Utente non autenticato." }, JsonRequestBehavior.AllowGet);
 
-            DateTime dataLimite = DateTime.Now.AddDays(-giorniFiltro);
             var statiValidi = new[] { "Attiva", "Inattiva", "In lavorazione", "Contrattualizzazione", "Conclusa" };
 
             var query = db.Pratiche.Where(p =>
@@ -58,44 +56,83 @@ namespace SinergiaMvc.Controllers
                     p.Descrizione.Contains(ricerca));
             }
 
-            if (giorniFiltro > 0)
-            {
-                query = query.Where(p => p.DataCreazione >= dataLimite);
-            }
-
-            // 🔍 Clienti visibili
-            var clientiDisponibili = DashboardHelper.GetClientiDisponibiliPerNavbar(idUtente, utenteCorrente.TipoUtente);
-
-            var idClientiTutti = clientiDisponibili
-                .Select(x =>
-                {
-                    var parts = x.Value.Split('_');
-                    return int.Parse(parts.Length > 1 ? parts[1] : parts[0]);
-                }).ToList();
-
-            // query = query.Where(p => idClientiTutti.Contains(p.ID_Cliente));
-
+            // dizionari per lookup
             var clientiEsterniIds = db.Clienti.Select(c => c.ID_Cliente).ToHashSet();
             var operatoriDict = db.OperatoriSinergia.ToDictionary(c => c.ID_Cliente);
             var utentiDict = db.Utenti.ToDictionary(u => u.ID_Utente);
+
+            // 👤 Se Admin impersonifica un professionista → filtro
+            int idClienteProfessionistaSelezionato = UserManager.GetIDClienteCorrente();
+
+            System.Diagnostics.Debug.WriteLine($"🟡 Sessione IDClienteProfessionistaCorrente = {idClienteProfessionistaSelezionato}");
+
+            if (utenteCorrente.TipoUtente == "Admin" && idClienteProfessionistaSelezionato > 0)
+            {
+                int idClienteProfessionista = idClienteProfessionistaSelezionato;
+
+                query = query.Where(p =>
+                    // owner sempre visibile
+                    p.ID_Owner == idClienteProfessionista
+                    // oppure cliente è associato e professionista ha un ruolo su quella pratica
+                    || (db.ClientiProfessionisti.Any(cp => cp.ID_Cliente == p.ID_Cliente && cp.ID_Professionista == idClienteProfessionista)
+                        && (
+                            db.OperatoriSinergia.Any(o => o.ID_Cliente == idClienteProfessionista && p.ID_UtenteResponsabile == o.ID_UtenteCollegato)
+                            || db.Cluster.Any(c => c.ID_Pratiche == p.ID_Pratiche && c.ID_Utente == db.OperatoriSinergia.Where(o => o.ID_Cliente == idClienteProfessionista).Select(o => o.ID_UtenteCollegato).FirstOrDefault())
+                            || db.RelazionePraticheUtenti.Any(r => r.ID_Pratiche == p.ID_Pratiche && r.ID_Utente == db.OperatoriSinergia.Where(o => o.ID_Cliente == idClienteProfessionista).Select(o => o.ID_UtenteCollegato).FirstOrDefault())
+                        )
+                    )
+                );
+            }
+            else if (utenteCorrente.TipoUtente == "Professionista")
+            {
+                var op = db.OperatoriSinergia
+                           .FirstOrDefault(o => o.ID_UtenteCollegato == idUtente && o.TipoCliente == "Professionista");
+
+                if (op != null)
+                {
+                    int idClienteProfessionista = op.ID_Cliente;
+
+                    query = query.Where(p =>
+                        // 🔹 Se è owner del cliente, sempre visibile
+                        p.ID_Owner == idClienteProfessionista
+
+                        // 🔹 Altrimenti, se il cliente è associato a questo professionista
+                        || db.ClientiProfessionisti.Any(cp =>
+                               cp.ID_Cliente == p.ID_Cliente &&
+                               cp.ID_Professionista == idClienteProfessionista)
+                    );
+                }
+            }
+
 
             var praticheList = query.ToList().Select(p =>
             {
                 string tipoCliente = "";
                 string nomeCliente = "";
+                string ragioneSociale = "";
+                string nomeCompleto = "";
 
                 if (clientiEsterniIds.Contains(p.ID_Cliente))
                 {
                     tipoCliente = "ClienteEsterno";
                     var cliEst = db.Clienti.FirstOrDefault(c => c.ID_Cliente == p.ID_Cliente);
-                    nomeCliente = cliEst != null ? $"{cliEst.Nome} {cliEst.Cognome}".Trim() : "";
+                    if (cliEst != null)
+                    {
+                        ragioneSociale = cliEst.RagioneSociale;
+                        nomeCompleto = (cliEst.Nome + " " + cliEst.Cognome).Trim();
+                        nomeCliente = string.IsNullOrEmpty(cliEst.RagioneSociale)
+                            ? nomeCompleto
+                            : cliEst.RagioneSociale;
+                    }
                 }
                 else if (operatoriDict.ContainsKey(p.ID_Cliente))
                 {
                     var op = operatoriDict[p.ID_Cliente];
                     tipoCliente = op.TipoCliente ?? "";
-                    nomeCliente = string.IsNullOrWhiteSpace(op.TipoRagioneSociale)
-                        ? $"{op.Nome} {op.Cognome}"
+                    ragioneSociale = op.TipoRagioneSociale;
+                    nomeCompleto = (op.Nome + " " + op.Cognome).Trim();
+                    nomeCliente = string.IsNullOrEmpty(op.TipoRagioneSociale)
+                        ? nomeCompleto
                         : op.TipoRagioneSociale;
                 }
 
@@ -135,7 +172,12 @@ namespace SinergiaMvc.Controllers
                     Stato = p.Stato,
                     ID_Cliente = p.ID_Cliente,
                     TipoCliente = tipoCliente,
+
+                    // 👇 nuovi campi gestiti
                     NomeCliente = nomeCliente,
+                    ClienteRagioneSociale = ragioneSociale,
+                    ClienteNomeCompleto = nomeCompleto,
+
                     ID_UtenteResponsabile = p.ID_UtenteResponsabile,
                     NomeUtenteResponsabile = nomeResponsabile,
                     Budget = p.Budget,
@@ -154,6 +196,7 @@ namespace SinergiaMvc.Controllers
                     ID_DocumentoIncarico = idDocumentoIncarico
                 };
             }).ToList();
+
 
             if (tipoFiltro == "Azienda")
                 praticheList = praticheList.Where(p => p.TipoCliente == "Azienda").ToList();
@@ -181,7 +224,6 @@ namespace SinergiaMvc.Controllers
                 }
             }
 
-            // ✅ Flags per la partial _AzioniPratica.cshtml
             ViewBag.PuoModificare = permessiUtente?.Permessi.Any(p => p.Modifica) == true;
             ViewBag.PuoEliminare = permessiUtente?.Permessi.Any(p => p.Elimina) == true;
             ViewBag.MostraAzioni = (ViewBag.PuoModificare || ViewBag.PuoEliminare);
@@ -207,6 +249,11 @@ namespace SinergiaMvc.Controllers
             var stopwatch = new System.Diagnostics.Stopwatch();
             stopwatch.Start();
             System.Diagnostics.Debug.WriteLine("⏱ [CreaPratica] Inizio esecuzione");
+            // 🔍 Debug: valore raw dal form (senza binding)
+            System.Diagnostics.Debug.WriteLine(">>> Raw form Budget = " + Request.Form["Budget"]);
+
+            // 🔍 Debug: valore già bindato nel model
+            System.Diagnostics.Debug.WriteLine($"📥 [CreaPratica] Budget ricevuto dal form = {model.Budget}");
 
             try
             {
@@ -234,6 +281,12 @@ namespace SinergiaMvc.Controllers
 
                     int idOwner = operatore.ID_Owner.Value;
 
+                    // ⚠️ Metodo di compenso obbligatorio SOLO se nuova pratica
+                    if (model.ID_Pratiche == 0 && string.IsNullOrEmpty(model.MetodoCompenso))
+                    {
+                        return Json(new { success = false, message = "⚠️ Seleziona il metodo di compenso." });
+                    }
+
                     // 3️⃣ Crea pratica
                     var pratica = new Pratiche
                     {
@@ -243,7 +296,7 @@ namespace SinergiaMvc.Controllers
                         DataFineAttivitaStimata = model.DataFineAttivitaStimata,
                         Stato = model.Stato,
                         ID_Cliente = cliente.ID_Cliente,
-                        ID_UtenteResponsabile = idOwner,
+                        ID_UtenteResponsabile = model.ID_UtenteResponsabile > 0 ? model.ID_UtenteResponsabile : idOwner,
                         ID_UtenteCreatore = idUtente,
                         ID_Owner = idOwner,
                         Budget = model.Budget,
@@ -251,39 +304,70 @@ namespace SinergiaMvc.Controllers
                         DataCreazione = now,
                         UltimaModifica = now,
                         TrattenutaPersonalizzata = model.TrattenutaPersonalizzata,
-
-                        //ImportoIncassato = 0
                     };
+
                     db.Pratiche.Add(pratica);
                     db.SaveChanges();
                     System.Diagnostics.Debug.WriteLine($"⏱ Dopo salvataggio Pratica: {stopwatch.ElapsedMilliseconds}ms");
 
-
-                    // 1️⃣3️⃣ Versionamento - PRATICHE
-                    db.Pratiche_a.Add(new Pratiche_a
+                    if (!string.IsNullOrEmpty(model.CompensiJSON))
                     {
-                        ID_Pratiche_a = pratica.ID_Pratiche,
-                        Titolo = pratica.Titolo,
-                        Descrizione = pratica.Descrizione,
-                        Stato = pratica.Stato,
-                        DataInizioAttivitaStimata = pratica.DataInizioAttivitaStimata,
-                        DataFineAttivitaStimata = pratica.DataFineAttivitaStimata,
-                        Note = pratica.Note,
-                        Budget = pratica.Budget,
-                        ID_Cliente = pratica.ID_Cliente,
-                        ID_UtenteResponsabile = pratica.ID_UtenteResponsabile,
-                        ID_UtenteCreatore = pratica.ID_UtenteCreatore,
-                        ID_Owner = pratica.ID_Owner,
-                        DataCreazione = now,
-                        UltimaModifica = now,
-                        TrattenutaPersonalizzata = pratica.TrattenutaPersonalizzata,
-                        NumeroVersione = 1,
-                        ID_UtenteArchiviazione = idUtente,
-                        DataArchiviazione = now,
-                        ModificheTestuali = "Creazione Pratica"
-                    });
+                        System.Diagnostics.Debug.WriteLine("📦 JSON Compensi ricevuto:");
+                        System.Diagnostics.Debug.WriteLine(model.CompensiJSON);
 
-                    // 4️⃣ Salva file incarico
+                        // Deserializzo come dizionario generico, così leggo anche le chiavi strane (_1, _2, ecc.)
+                        var compensiRaw = Newtonsoft.Json.JsonConvert
+                            .DeserializeObject<List<Dictionary<string, string>>>(model.CompensiJSON);
+
+                        if (compensiRaw != null && compensiRaw.Any())
+                        {
+                            int ordine = 1;
+                            foreach (var c in compensiRaw)
+                            {
+                                var dettaglio = new CompensiPraticaDettaglio
+                                {
+                                    ID_Pratiche = pratica.ID_Pratiche,
+                                    TipoCompenso = c.ContainsKey("Metodo") ? c["Metodo"] : null,
+
+                                    Descrizione =
+                                      (c.ContainsKey("Descrizione") ? c["Descrizione"] :
+                                      (c.ContainsKey("Descrizione_1") ? c["Descrizione_1"] : null))
+                                      ?? (c.ContainsKey("Ruolo_1") ? c["Ruolo_1"] : null)
+                                      ?? (c.ContainsKey("Ruolo") ? c["Ruolo"] : null),
+
+                                    Importo =
+                                      (c.ContainsKey("Importo") && decimal.TryParse(c["Importo"], out var imp) ? imp :
+                                      (c.ContainsKey("Importo_1") && decimal.TryParse(c["Importo_1"], out var imp1) ? imp1 : (decimal?)null))
+                                      ?? (c.ContainsKey("Tariffa_1") && decimal.TryParse(c["Tariffa_1"], out var impT) ? impT : (decimal?)null),
+
+                                    Categoria = c.ContainsKey("Tipologia") ? c["Tipologia"] : (c.ContainsKey("Tipologia_1") ? c["Tipologia_1"] : "Contrattuale"),
+
+                                    ValoreStimato =
+                                      (c.ContainsKey("ValoreStimato") && decimal.TryParse(c["ValoreStimato"], out var val) ? val :
+                                      (c.ContainsKey("ValoreStimato_1") && decimal.TryParse(c["ValoreStimato_1"], out var val1) ? val1 : (decimal?)null)),
+
+                                    Ordine = ordine++,
+                                    EstremiGiudizio = c.ContainsKey("EstremiGiudizio") ? c["EstremiGiudizio"] : null,
+                                    OggettoIncarico = c.ContainsKey("OggettoIncarico") ? c["OggettoIncarico"] : null,
+                                    DataCreazione = now,
+                                    ID_UtenteCreatore = idUtente,
+
+                                    // 👇 Nuovo campo
+                                    ID_ProfessionistaIntestatario =
+                                          (c.ContainsKey("ID_ProfessionistaIntestatario") && int.TryParse(c["ID_ProfessionistaIntestatario"], out var idProf))
+                                          ? (int?)idProf : null
+                                        };
+
+
+                                        db.CompensiPraticaDettaglio.Add(dettaglio);
+                                    }
+
+                                    db.SaveChanges();
+                                }
+                            }
+
+
+                    // 5️⃣ Salva file incarico
                     if (model.IncaricoProfessionale != null && model.IncaricoProfessionale.ContentLength > 0)
                     {
                         var nomeFile = Path.GetFileName(model.IncaricoProfessionale.FileName);
@@ -293,7 +377,7 @@ namespace SinergiaMvc.Controllers
                         model.IncaricoProfessionale.SaveAs(path);
                     }
 
-                    // 5️⃣ Inserisci Owner nel cluster
+                    // 6️⃣ Inserisci solo Owner nel cluster
                     var ownerFee = db.TipologieCosti
                         .FirstOrDefault(t => t.Nome == "Owner Fee" && t.Stato == "Attivo" && t.Tipo == "Percentuale");
                     decimal percentualeOwner = ownerFee?.ValorePercentuale ?? 5;
@@ -308,12 +392,12 @@ namespace SinergiaMvc.Controllers
                         ID_UtenteCreatore = idUtente
                     });
 
-                    // 6️⃣ Collaboratori
+                    // 7️⃣ Collaboratori → solo quelli selezionati dall’utente
                     if (model.UtentiAssociati != null)
                     {
                         foreach (var collab in model.UtentiAssociati)
                         {
-                            if (collab.ID_Utente == idOwner) continue;
+                            if (collab.ID_Utente == idOwner) continue; // evita duplicato owner
 
                             db.Cluster.Add(new Cluster
                             {
@@ -324,25 +408,8 @@ namespace SinergiaMvc.Controllers
                                 DataAssegnazione = now,
                                 ID_UtenteCreatore = idUtente
                             });
-                        }
-                    }
-                    System.Diagnostics.Debug.WriteLine($"⏱ Dopo cluster/relazioni/costi: {stopwatch.ElapsedMilliseconds}ms");
 
-
-                    // 7️⃣ Relazioni
-                    db.RelazionePraticheUtenti.Add(new RelazionePraticheUtenti
-                    {
-                        ID_Pratiche = pratica.ID_Pratiche,
-                        ID_Utente = idOwner,
-                        Ruolo = "Owner",
-                        DataAssegnazione = now,
-                        ID_UtenteCreatore = idUtente
-                    });
-
-                    if (model.UtentiAssociati != null)
-                    {
-                        foreach (var collab in model.UtentiAssociati)
-                        {
+                            // ➝ Relazione solo per Collaboratori
                             db.RelazionePraticheUtenti.Add(new RelazionePraticheUtenti
                             {
                                 ID_Pratiche = pratica.ID_Pratiche,
@@ -354,43 +421,9 @@ namespace SinergiaMvc.Controllers
                         }
                     }
 
-                    System.Diagnostics.Debug.WriteLine($"⏱ Dopo cluster/relazioni/costi: {stopwatch.ElapsedMilliseconds}ms");
+                    db.SaveChanges();
 
-                    // 8️⃣ Salva dati di compenso direttamente nella pratica
-                    if (!string.IsNullOrEmpty(model.Tipologia))
-                    {
-                        pratica.Tipologia = model.Tipologia;
-
-                        if (model.Tipologia == "Fisso" && model.ImportoFisso.HasValue)
-                        {
-                            pratica.ImportoFisso = model.ImportoFisso.Value;
-                            pratica.TerminiPagamento = model.TerminiPagamento; // ✅ aggiunto anche per Fisso
-                        }
-                        else if (model.Tipologia == "A ore" && model.TariffaOraria.HasValue)
-                        {
-                            pratica.TariffaOraria = model.TariffaOraria.Value;
-                            pratica.TerminiPagamento = model.TerminiPagamento; // ✅ aggiunto anche per A ore
-                        }
-                        else if (model.Tipologia == "Giudiziale" && model.AccontoGiudiziale.HasValue)
-                        {
-                            pratica.AccontoGiudiziale = model.AccontoGiudiziale.Value;
-                            pratica.GradoGiudizio = model.GradoGiudizio;
-                            pratica.TerminiPagamento = model.TerminiPagamento;
-                        }
-
-                        // 🔄 Comuni a tutte le tipologie (se presenti)
-                        if (model.OrePreviste.HasValue)
-                            pratica.OrePreviste = model.OrePreviste;
-
-                        if (model.OreEffettive.HasValue)
-                            pratica.OreEffettive = model.OreEffettive;
-                    }
-
-                    System.Diagnostics.Debug.WriteLine($"⏱ Dopo cluster/relazioni/costi: {stopwatch.ElapsedMilliseconds}ms");
-
-
-
-                    // 9️⃣ Rimborsi
+                    // 8️⃣ Rimborsi
                     if (model.Rimborsi != null)
                     {
                         foreach (var rim in model.Rimborsi)
@@ -406,12 +439,13 @@ namespace SinergiaMvc.Controllers
                         }
                     }
 
+                    // 9️⃣ Costi pratica
                     if (model.CostiPratica != null)
                     {
                         foreach (var cp in model.CostiPratica)
                         {
                             var anagrafica = db.AnagraficaCostiPratica
-                                .FirstOrDefault(a => a.ID_AnagraficaCosto == cp.ID_AnagraficaCosto); // ✅ CAMBIATO
+                                .FirstOrDefault(a => a.ID_AnagraficaCosto == cp.ID_AnagraficaCosto);
 
                             if (anagrafica != null)
                             {
@@ -438,8 +472,6 @@ namespace SinergiaMvc.Controllers
                             }
                         }
                     }
-
-
 
                     db.SaveChanges();
 
@@ -516,6 +548,37 @@ namespace SinergiaMvc.Controllers
                         });
                     }
 
+                    // 1️⃣9️⃣ Versionamento - COMPENSI PRATICA DETTAGLIO
+                    var compensiSalvati = db.CompensiPraticaDettaglio
+                        .Where(c => c.ID_Pratiche == pratica.ID_Pratiche)
+                        .ToList();
+
+                    foreach (var c in compensiSalvati)
+                    {
+                        db.CompensiPraticaDettaglio_a.Add(new CompensiPraticaDettaglio_a
+                        {
+                            ID_RigaCompensoOriginale = c.ID_RigaCompenso,
+                            ID_Pratiche = c.ID_Pratiche,
+                            TipoCompenso = c.TipoCompenso,
+                            Descrizione = c.Descrizione,
+                            Importo = c.Importo,
+                            Categoria = c.Categoria,
+                            ValoreStimato = c.ValoreStimato,
+                            Ordine = c.Ordine,
+                            EstremiGiudizio = c.EstremiGiudizio,
+                            OggettoIncarico = c.OggettoIncarico,
+                            DataCreazione = c.DataCreazione,
+                            ID_UtenteCreatore = c.ID_UtenteCreatore,
+                            UltimaModifica = c.UltimaModifica,
+                            ID_UtenteUltimaModifica = c.ID_UtenteUltimaModifica,
+                            NumeroVersione = 1, // 🚨 se ti serve incrementare, calcolalo come fai per Pratiche_a
+                            DataArchiviazione = now,
+                            ID_UtenteArchiviazione = idUtente,
+                            ModificheTestuali = "Creazione Compenso Pratica",
+                            ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario
+                        });
+                    }
+
                     transaction.Commit();
                     stopwatch.Stop();
                     System.Diagnostics.Debug.WriteLine($"⏱ [CreaPratica] Fine metodo - Totale: {stopwatch.ElapsedMilliseconds}ms");
@@ -546,8 +609,6 @@ namespace SinergiaMvc.Controllers
 
         }
 
-
-
         [HttpPost]
         public ActionResult ModificaPratica(PraticaViewModel model)
         {
@@ -561,6 +622,12 @@ namespace SinergiaMvc.Controllers
 
                     int idUtente = UserManager.GetIDUtenteCollegato();
                     DateTime now = DateTime.Now;
+
+                    // 🔎 LOG per debug Budget
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] --- MODIFICA PRATICA ---");
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Model.ID_Pratiche = {model.ID_Pratiche}");
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Model.Budget = {model.Budget}");
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Pratica DB prima = {pratica.Budget}");
 
                     var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == model.ID_Cliente);
                     if (cliente == null)
@@ -652,59 +719,94 @@ namespace SinergiaMvc.Controllers
                     pratica.ID_Cliente = model.ID_Cliente;
                     pratica.ID_UtenteUltimaModifica = idUtente;
                     pratica.Budget = model.Budget;
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Pratica DB dopo assegnazione = {pratica.Budget}");
                     pratica.Note = model.Note;
-                    pratica.ID_UtenteResponsabile = idOwner;
+                    // Responsabile: se passato dal model, usa quello, altrimenti fallback su owner
+                    if (model.ID_UtenteResponsabile > 0)
+                        pratica.ID_UtenteResponsabile = model.ID_UtenteResponsabile;
+                    else
+                        pratica.ID_UtenteResponsabile = idOwner;
                     pratica.ID_Owner = idOwner;
                     pratica.UltimaModifica = now;
                     pratica.OrePreviste = model.OrePreviste;
                     pratica.OreEffettive = model.OreEffettive;
 
 
-                    if (!string.IsNullOrEmpty(model.Tipologia))
-                    {
-                        pratica.Tipologia = model.Tipologia;
-                        pratica.ImportoFisso = null;
-                        pratica.TariffaOraria = null;
-                        pratica.AccontoGiudiziale = null;
-                        pratica.GradoGiudizio = null;
-                        pratica.TerminiPagamento = null;
-                        pratica.OrePreviste = null;
-                        pratica.OreEffettive = null;
+                    // 🔄 Gestione Compensi Pratica Dettaglio (con versionamento)
+                    var compensiEsistenti = db.CompensiPraticaDettaglio
+                        .Where(c => c.ID_Pratiche == pratica.ID_Pratiche)
+                        .ToList();
 
-                        if (model.Tipologia == "Fisso" && model.ImportoFisso.HasValue)
+                    // Archivio versioni precedenti
+                    foreach (var c in compensiEsistenti)
+                    {
+                        db.CompensiPraticaDettaglio_a.Add(new CompensiPraticaDettaglio_a
                         {
-                            pratica.ImportoFisso = model.ImportoFisso.Value;
-                            pratica.TerminiPagamento = model.TerminiPagamento;
-                        }
-                        else if (model.Tipologia == "A ore" && model.TariffaOraria.HasValue)
+                            ID_RigaCompensoOriginale = c.ID_RigaCompenso,
+                            ID_Pratiche = c.ID_Pratiche,
+                            TipoCompenso = c.TipoCompenso,
+                            Descrizione = c.Descrizione,
+                            Importo = c.Importo,
+                            Categoria = c.Categoria,
+                            ValoreStimato = c.ValoreStimato,
+                            Ordine = c.Ordine,
+                            EstremiGiudizio = c.EstremiGiudizio,
+                            OggettoIncarico = c.OggettoIncarico,
+                            DataCreazione = c.DataCreazione,
+                            ID_UtenteCreatore = c.ID_UtenteCreatore,
+                            UltimaModifica = c.UltimaModifica,
+                            ID_UtenteUltimaModifica = c.ID_UtenteUltimaModifica,
+                            NumeroVersione = (db.CompensiPraticaDettaglio_a
+                                .Where(x => x.ID_RigaCompensoOriginale == c.ID_RigaCompenso)
+                                .Max(x => (int?)x.NumeroVersione) ?? 0) + 1,
+                            DataArchiviazione = now,
+                            ID_UtenteArchiviazione = idUtente,
+                            ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
+                            ModificheTestuali = "Modifica Compenso"
+                        });
+                    }
+                    db.CompensiPraticaDettaglio.RemoveRange(compensiEsistenti);
+
+                    // 🔄 Inserisci nuovi compensi dal JSON
+                    if (!string.IsNullOrEmpty(model.CompensiJSON))
+                    {
+                        var compensiRaw = Newtonsoft.Json.JsonConvert
+                            .DeserializeObject<List<Dictionary<string, string>>>(model.CompensiJSON);
+
+                        if (compensiRaw != null && compensiRaw.Any())
                         {
-                            pratica.TariffaOraria = model.TariffaOraria.Value;
-                            pratica.OrePreviste = model.OrePreviste;
-                            pratica.OreEffettive = model.OreEffettive;
-                            pratica.TerminiPagamento = model.TerminiPagamento;
-                        }
-                        else if (model.Tipologia == "Giudiziale" && model.AccontoGiudiziale.HasValue)
-                        {
-                            pratica.AccontoGiudiziale = model.AccontoGiudiziale.Value;
-                            pratica.GradoGiudizio = model.GradoGiudizio;
-                            pratica.TerminiPagamento = model.TerminiPagamento;
+                            int ordine = 1;
+                            foreach (var c in compensiRaw)
+                            {
+                                var nuovoCompenso = new CompensiPraticaDettaglio
+                                {
+                                    ID_Pratiche = pratica.ID_Pratiche,
+                                    TipoCompenso = c.ContainsKey("Metodo") ? c["Metodo"] : null,
+
+                                    Descrizione =
+                                     (c.ContainsKey("Descrizione") ? c["Descrizione"] : (c.ContainsKey("Descrizione_1") ? c["Descrizione_1"] : null)) ?? (c.ContainsKey("Ruolo_1") ? c["Ruolo_1"] : null)?? (c.ContainsKey("Ruolo") ? c["Ruolo"] : null),
+
+                                    Importo = (c.ContainsKey("Importo") && decimal.TryParse(c["Importo"], out var imp) ? imp :(c.ContainsKey("Importo_1") && decimal.TryParse(c["Importo_1"], out var imp1) ? imp1 : (decimal?)null)) ?? (c.ContainsKey("Tariffa_1") && decimal.TryParse(c["Tariffa_1"], out var impT) ? impT : (decimal?)null),
+
+                                    Categoria = c.ContainsKey("Tipologia") ? c["Tipologia"] : (c.ContainsKey("Tipologia_1") ? c["Tipologia_1"] : "Contrattuale"),
+
+                                    ValoreStimato = (c.ContainsKey("ValoreStimato") && decimal.TryParse(c["ValoreStimato"], out var val) ? val :(c.ContainsKey("ValoreStimato_1") && decimal.TryParse(c["ValoreStimato_1"], out var val1) ? val1 : (decimal?)null)),
+
+                                    Ordine = ordine++,
+                                    EstremiGiudizio = c.ContainsKey("EstremiGiudizio") ? c["EstremiGiudizio"] : null,
+                                    OggettoIncarico = c.ContainsKey("OggettoIncarico") ? c["OggettoIncarico"] : null,
+                                    DataCreazione = now,
+                                    ID_UtenteCreatore = idUtente,
+
+                                    // 👇 nuovo campo
+                                    ID_ProfessionistaIntestatario =(c.ContainsKey("ID_ProfessionistaIntestatario") && int.TryParse(c["ID_ProfessionistaIntestatario"], out var idProf)) ? (int?)idProf : null
+                                };
+
+
+                                db.CompensiPraticaDettaglio.Add(nuovoCompenso);
+                            }
                         }
                     }
-
-                    else
-                    {
-                        pratica.Tipologia = null;
-                        pratica.ImportoFisso = null;
-                        pratica.TariffaOraria = null;
-                        pratica.AccontoGiudiziale = null;
-                        pratica.GradoGiudizio = null;
-                        pratica.TerminiPagamento = null;
-                        pratica.OreEffettive = null;
-                        pratica.OrePreviste = null;
-                    }
-
-                    db.SaveChanges();
-
 
                     // ... (inizio del metodo già definito sopra)
 
@@ -913,7 +1015,7 @@ namespace SinergiaMvc.Controllers
                         db.SaveChanges();
                     }
 
-                    if (model.Stato == "Lavorazione")
+                    if (model.Stato == " In Lavorazione")
                     {
                         bool filePDFPresente = db.DocumentiPratiche.Any(d =>
                             d.ID_Pratiche == pratica.ID_Pratiche &&
@@ -983,6 +1085,7 @@ namespace SinergiaMvc.Controllers
                         ID_UtenteResponsabile = pratica.ID_UtenteResponsabile,
                         ID_UtenteCreatore = pratica.ID_UtenteCreatore,
                         ID_UtenteUltimaModifica = userId,
+                        ID_Owner = pratica.ID_Owner,   // ✅ aggiunto
                         Budget = pratica.Budget,
                         Note = pratica.Note,
                         Tipologia = pratica.Tipologia,
@@ -1001,7 +1104,6 @@ namespace SinergiaMvc.Controllers
                         NumeroVersione = ultimaVersione + 1,
                         ModificheTestuali = $"Eliminazione effettuata da ID_Utente = {userId} in data {now:g}"
                     });
-
 
                     // 🔁 Archivia tabelle correlate
                     void Archivia<T, A>(IQueryable<T> query, Func<T, A> factory) where A : class
@@ -1025,12 +1127,11 @@ namespace SinergiaMvc.Controllers
 
                     Archivia(db.RelazionePraticheUtenti.Where(r => r.ID_Pratiche == id), r => new RelazionePraticheUtenti_a
                     {
-                        ID_Relazione_Originale = 0, // se hai un ID_Relazione, usalo qui
+                        ID_Relazione_Originale = r.ID_Relazione,
                         ID_Pratiche = r.ID_Pratiche,
                         ID_Utente = r.ID_Utente,
                         Ruolo = r.Ruolo,
                         DataAssegnazione = r.DataAssegnazione,
-
                         DataArchiviazione = now,
                         ID_UtenteArchiviazione = userId,
                         NumeroVersione = 1
@@ -1064,11 +1165,8 @@ namespace SinergiaMvc.Controllers
                         NumeroVersione = 1
                     });
 
-
-                    // 🔁 Archivia tabelle correlate
                     Archivia(db.DocumentiPratiche.Where(d => d.ID_Pratiche == id), d => new DocumentiPratiche_a
                     {
-                        // ID originale se esiste
                         ID_Documento_a = d.ID_Documento,
                         ID_Pratiche = d.ID_Pratiche,
                         NomeFile = d.NomeFile,
@@ -1084,6 +1182,39 @@ namespace SinergiaMvc.Controllers
                         NumeroVersione = 1
                     });
 
+                    var compensiEsistenti = db.CompensiPraticaDettaglio
+                              .Where(c => c.ID_Pratiche == id)
+                              .ToList();
+
+                    foreach (var c in compensiEsistenti)
+                    {
+                        int UltimaVersione = db.CompensiPraticaDettaglio_a
+                            .Where(x => x.ID_RigaCompensoOriginale == c.ID_RigaCompenso)
+                            .Select(x => (int?)x.NumeroVersione).Max() ?? 0;
+
+                        db.CompensiPraticaDettaglio_a.Add(new CompensiPraticaDettaglio_a
+                        {
+                            ID_RigaCompensoOriginale = c.ID_RigaCompenso,
+                            ID_Pratiche = c.ID_Pratiche,
+                            TipoCompenso = c.TipoCompenso,
+                            Descrizione = c.Descrizione,
+                            Importo = c.Importo,
+                            Categoria = c.Categoria,
+                            ValoreStimato = c.ValoreStimato,
+                            Ordine = c.Ordine,
+                            EstremiGiudizio = c.EstremiGiudizio,
+                            OggettoIncarico = c.OggettoIncarico,
+                            DataCreazione = c.DataCreazione,
+                            ID_UtenteCreatore = c.ID_UtenteCreatore,
+                            UltimaModifica = c.UltimaModifica,
+                            ID_UtenteUltimaModifica = c.ID_UtenteUltimaModifica,
+                            DataArchiviazione = now,
+                            ID_UtenteArchiviazione = userId,
+                            NumeroVersione = UltimaVersione + 1,
+                            ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
+                            ModificheTestuali = $"Archiviazione compenso in fase di eliminazione pratica (ID {pratica.ID_Pratiche})"
+                        });
+                    }
 
                     db.SaveChanges();
 
@@ -1102,14 +1233,9 @@ namespace SinergiaMvc.Controllers
                     // Include il responsabile
                     destinatari.Add(pratica.ID_UtenteResponsabile);
 
-                    // Include l'owner del cliente, se esiste
-                    var ownerId = db.OperatoriSinergia
-                        .Where(o => o.ID_Cliente == pratica.ID_Cliente)
-                        .Select(o => o.ID_Owner)
-                        .FirstOrDefault();
-
-                    if (ownerId.HasValue)
-                        destinatari.Add(ownerId.Value);
+                    // Include sempre l’owner
+                    if (pratica.ID_Owner.HasValue)
+                        destinatari.Add(pratica.ID_Owner.Value);
 
                     foreach (var u in destinatari.Distinct())
                     {
@@ -1126,9 +1252,8 @@ namespace SinergiaMvc.Controllers
                     }
 
                     db.SaveChanges();
-
-
                     transaction.Commit();
+
                     return Json(new { success = true, message = "✅ Pratica eliminata correttamente e archiviata." });
                 }
                 catch (Exception ex)
@@ -1139,95 +1264,91 @@ namespace SinergiaMvc.Controllers
             }
         }
 
-
-
         [HttpGet]
         public ActionResult GetPratica(int id)
         {
             var pratica = db.Pratiche
-                .Where(p => p.ID_Pratiche == id && p.Stato != "Eliminato")
-                .Select(p => new PraticaViewModel
-                {
-                    ID_Pratiche = p.ID_Pratiche,
-                    Titolo = p.Titolo,
-                    Descrizione = p.Descrizione,
-                    DataInizioAttivitaStimata = p.DataInizioAttivitaStimata,
-                    DataFineAttivitaStimata = p.DataFineAttivitaStimata,
-                    Stato = p.Stato,
-                    ID_Cliente = p.ID_Cliente,
-                    ID_UtenteResponsabile = p.ID_UtenteResponsabile,
-                    ID_UtenteUltimaModifica = p.ID_UtenteUltimaModifica,
-                    TrattenutaPersonalizzata = p.TrattenutaPersonalizzata,
-                    Budget = p.Budget,
-                    DataCreazione = p.DataCreazione,
-                    UltimaModifica = p.UltimaModifica,
-                    Note = p.Note,
-                    Tipologia = p.Tipologia,
-                    ImportoFisso = p.ImportoFisso,
-                    TariffaOraria = p.TariffaOraria,
-                    AccontoGiudiziale = p.AccontoGiudiziale,
-                    GradoGiudizio = p.GradoGiudizio,
-                    TerminiPagamento = p.TerminiPagamento,
-                    OrePreviste = p.OrePreviste,
-                    OreEffettive = p.OreEffettive
-                })
-                .FirstOrDefault();
+                 .Where(p => p.ID_Pratiche == id && p.Stato != "Eliminato")
+                 .AsEnumerable()   // 👈 forza esecuzione in memoria
+                 .Select(p => new PraticaViewModel
+                 {
+                     ID_Pratiche = p.ID_Pratiche,
+                     Titolo = p.Titolo,
+                     Descrizione = p.Descrizione,
+                     DataInizioAttivitaStimata = p.DataInizioAttivitaStimata,
+                     DataFineAttivitaStimata = p.DataFineAttivitaStimata,
+                     Stato = p.Stato,
+                     ID_Cliente = p.ID_Cliente,
+                     ID_UtenteResponsabile = p.ID_UtenteResponsabile,
+                     ID_UtenteUltimaModifica = p.ID_UtenteUltimaModifica,
+                     ID_Owner = p.ID_Owner,
+                     TrattenutaPersonalizzata = p.TrattenutaPersonalizzata,
+                     Budget = p.Budget,
+                     BudgetFormattato = p.Budget.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                     DataCreazione = p.DataCreazione,
+                     UltimaModifica = p.UltimaModifica,
+                     Note = p.Note,
+                     Tipologia = p.Tipologia,
+                     ImportoFisso = p.ImportoFisso,
+                     TariffaOraria = p.TariffaOraria,
+                     AccontoGiudiziale = p.AccontoGiudiziale,
+                     GradoGiudizio = p.GradoGiudizio,
+                     TerminiPagamento = p.TerminiPagamento,
+                     OrePreviste = p.OrePreviste,
+                     OreEffettive = p.OreEffettive
+                 })
+                 .FirstOrDefault();
 
             if (pratica == null)
-            {
-                Debug.WriteLine($"❌ Pratica ID {id} non trovata o eliminata.");
                 return Json(new { success = false, message = "Pratica non trovata." }, JsonRequestBehavior.AllowGet);
-            }
 
-            Debug.WriteLine($"✅ Caricata pratica ID {pratica.ID_Pratiche} - Titolo: {pratica.Titolo}");
-            Debug.WriteLine($"🧑‍💼 ID_UtenteResponsabile: {pratica.ID_UtenteResponsabile}");
-
+            // 👤 Owner
             var nomeOwner = (from o in db.OperatoriSinergia
-                             join u in db.Utenti on o.ID_UtenteCollegato equals u.ID_Utente
-                             where o.ID_Cliente == pratica.ID_UtenteResponsabile
-                             select u.Nome + " " + u.Cognome).FirstOrDefault();
+                             where o.ID_Cliente == pratica.ID_Owner
+                             select (o.Nome + " " + o.Cognome) ?? o.TipoRagioneSociale)
+                            .FirstOrDefault();
 
-            Debug.WriteLine($"👤 Nome owner recuperato: {nomeOwner}");
+            // 👤 Responsabile
+            var nomeResponsabile = db.Utenti
+                .Where(u => u.ID_Utente == pratica.ID_UtenteResponsabile)
+                .Select(u => u.Nome + " " + u.Cognome)
+                .FirstOrDefault();
 
+            // 🏢 Cliente
             var nomeCliente = (from cli in db.Clienti
-                               join op in db.OperatoriSinergia on cli.ID_Operatore equals op.ID_Cliente
                                where cli.ID_Cliente == pratica.ID_Cliente
-                               select op.Nome ?? op.TipoRagioneSociale).FirstOrDefault();
+                               select string.IsNullOrEmpty(cli.RagioneSociale)
+                                      ? (cli.Nome + " " + cli.Cognome)
+                                      : cli.RagioneSociale).FirstOrDefault();
 
-            Debug.WriteLine($"🏢 Nome cliente: {nomeCliente}");
-
+            // 👥 Collaboratori (cluster)
             var utentiAssociati = db.Cluster
                 .Where(c => c.ID_Pratiche == id && c.TipoCluster == "Collaboratore")
                 .Select(c => new
                 {
-                    ID_Utente = c.ID_Utente,
-                    Nome = db.Utenti.Where(u => u.ID_Utente == c.ID_Utente)
-                                    .Select(u => u.Nome + " " + u.Cognome)
-                                    .FirstOrDefault(),
-                    Percentuale = c.PercentualePrevisione
+                    c.ID_Utente,
+                    Nome = db.Utenti
+                             .Where(u => u.ID_Utente == c.ID_Utente)
+                             .Select(u => u.Nome + " " + u.Cognome)
+                             .FirstOrDefault(),
+                    c.PercentualePrevisione
                 })
-                .Distinct()
                 .ToList();
 
-            Debug.WriteLine($"👥 Utenti associati (cluster): {utentiAssociati.Count}");
-
-
+            // 📋 Costi
             var costiPratica = (from c in db.CostiPratica
                                 join a in db.AnagraficaCostiPratica on c.ID_AnagraficaCosto equals a.ID_AnagraficaCosto into joined
                                 from a in joined.DefaultIfEmpty()
                                 where c.ID_Pratiche == id
                                 select new
                                 {
-                                    ID_CostoPratica = c.ID_CostoPratica,
-                                    IDCostoHidden = c.ID_CostoPratica,
-                                    ID_AnagraficaCosto = c.ID_AnagraficaCosto,
+                                    c.ID_CostoPratica,
+                                    c.ID_AnagraficaCosto,
                                     Descrizione = (c.Descrizione ?? ((a.Nome ?? "") + " - " + (a.Descrizione ?? ""))).Trim(),
-                                    Importo = c.Importo
+                                    c.Importo
                                 }).ToList();
 
-
-            Debug.WriteLine($"📋 Costi Pratica: {costiPratica.Count}");
-
+            // 💰 Rimborsi
             var rimborsi = db.RimborsiPratica
                 .Where(r => r.ID_Pratiche == id)
                 .Select(r => new
@@ -1236,31 +1357,95 @@ namespace SinergiaMvc.Controllers
                     r.Importo
                 }).ToList();
 
-            Debug.WriteLine($"💰 Rimborsi trovati: {rimborsi.Count}");
+            // 💵 Compensi Pratica Dettaglio (per visualizzazione)
+            var compensiDettaglio = db.CompensiPraticaDettaglio
+                .Where(c => c.ID_Pratiche == id)
+                .Select(c => new
+                {
+                    c.ID_RigaCompenso,
+                    c.TipoCompenso,
+                    c.Descrizione,
+                    c.Importo,
+                    c.Categoria,
+                    c.ValoreStimato,
+                    c.Ordine,
+                    c.EstremiGiudizio,
+                    c.OggettoIncarico,
+                    c.DataCreazione,
+                    Creatore = db.Utenti
+                        .Where(u => u.ID_Utente == c.ID_UtenteCreatore)
+                        .Select(u => u.Nome + " " + u.Cognome)
+                        .FirstOrDefault(),
+                    UltimaModifica = c.UltimaModifica,
+                    UltimoModificatore = db.Utenti
+                        .Where(u => u.ID_Utente == c.ID_UtenteUltimaModifica)
+                        .Select(u => u.Nome + " " + u.Cognome)
+                        .FirstOrDefault(),
 
+                    // 👇 nuovo campo
+                    ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
+                    NomeProfessionistaIntestatario = db.Utenti
+                        .Where(u => u.ID_Utente == c.ID_ProfessionistaIntestatario)
+                        .Select(u => u.Nome + " " + u.Cognome)
+                        .FirstOrDefault()
+                })
+                .OrderBy(c => c.Ordine)
+                .ToList();
+
+
+            // 🔄 Compensi JSON per frontend
+            var compensiRaw = db.CompensiPraticaDettaglio
+                .Where(c => c.ID_Pratiche == id)
+                .OrderBy(c => c.Ordine)
+                .ToList() // materializza prima
+                .Select(c => new
+                {
+                    Metodo = c.TipoCompenso ?? "",
+                    // 👇 Usa sempre Descrizione, ma se è vuota e il metodo è "A ore" → fallback su Ruolo
+                    Descrizione_1 = !string.IsNullOrEmpty(c.Descrizione)
+                        ? c.Descrizione
+                        : (c.TipoCompenso == "A ore" ? c.Descrizione : ""),
+                    Importo_1 = c.Importo.HasValue ? c.Importo.Value.ToString("0.##") : "",
+                    Tipologia_1 = c.Categoria ?? "Contrattuale",
+                    ValoreStimato_1 = c.ValoreStimato.HasValue ? c.ValoreStimato.Value.ToString("0.##") : "",
+                    EstremiGiudizio = c.EstremiGiudizio ?? "",
+                    OggettoIncarico = c.OggettoIncarico ?? "",
+                    ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
+                    // 👇 AGGIUNGI QUESTO
+                    IntestatarioNome = db.Utenti
+                    .Where(u => u.ID_Utente == c.ID_ProfessionistaIntestatario)
+                    .Select(u => u.Nome + " " + u.Cognome)
+                    .FirstOrDefault()
+                })
+                .ToList();
+
+
+            // 📄 Documento incarico (ultimo caricato, sia HTML che PDF)
             var documentoIncarico = db.DocumentiPratiche
-                .Where(d => d.ID_Pratiche == id && d.Estensione == ".html" && d.Stato == "Da firmare")
+                .Where(d => d.ID_Pratiche == id &&
+                            (d.Estensione == ".html" || d.Estensione == ".pdf"))
                 .OrderByDescending(d => d.DataCaricamento)
                 .FirstOrDefault();
-
-            if (documentoIncarico != null)
-                Debug.WriteLine($"📄 Documento incarico trovato: {documentoIncarico.NomeFile}");
 
             return Json(new
             {
                 success = true,
                 data = pratica,
                 nomeOwner,
+                nomeResponsabile,
                 nomeCliente,
                 utentiAssociati,
                 costi = costiPratica,
                 rimborsi,
+                compensiDettaglio,
+                compensiRaw, // 👈 aggiunto
                 incarico = documentoIncarico?.NomeFile,
-                incaricoHtml = documentoIncarico != null
+                incaricoHtml = documentoIncarico?.Estensione == ".html"
                     ? System.Text.Encoding.UTF8.GetString(documentoIncarico.Documento)
                     : null
             }, JsonRequestBehavior.AllowGet);
         }
+
 
 
         [HttpPost]
@@ -2047,11 +2232,17 @@ namespace SinergiaMvc.Controllers
                     NomePratica = pratica.Titolo
                 }).ToList();
 
-            decimal totaleCompensi = pratica.Compensi.Sum(c => c.Importo);
+            // ✅ Usa CompensiPraticaDettaglio (e gestisci null con ?? 0)
+            decimal totaleCompensi = db.CompensiPraticaDettaglio
+                .Where(c => c.ID_Pratiche == id)
+                .Sum(c => (decimal?)c.Importo) ?? 0;
+
             decimal totaleRimborsi = pratica.Rimborsi.Sum(r => r.Importo);
-            decimal totaleCosti = pratica.CostiPratica.Sum(c => c.Importo);
-            decimal totalePercentuale = clusterList.Sum(c => c.PercentualePrevisione);
-            decimal importoFinale = pratica.Budget * (totalePercentuale / 100);
+            decimal totaleCosti = pratica.CostiPratica.Sum(c => c.Importo );
+
+            decimal totalePercentuale = clusterList.Sum(c => c.PercentualePrevisione );
+            decimal importoFinale = (pratica.Budget) * (totalePercentuale / 100);
+
 
             var model = new VisualizzaDettaglioPraticaViewModel
             {
@@ -2069,8 +2260,6 @@ namespace SinergiaMvc.Controllers
         }
 
 
-
-
         [HttpGet]
         public JsonResult GetUtentiDisponibiliPerPratica(int idCliente)
         {
@@ -2078,9 +2267,6 @@ namespace SinergiaMvc.Controllers
             var lista = DashboardHelper.GetUtentiDisponibiliPerPratica(idCliente, idUtente);
             return Json(lista, JsonRequestBehavior.AllowGet);
         }
-
-
-
         [HttpGet]
         public ActionResult GetDocumentiPratica(int idPratica)
         {
@@ -2263,18 +2449,45 @@ namespace SinergiaMvc.Controllers
         [HttpGet]
         public JsonResult GetUtentiAssociatiCliente(int idCliente)
         {
-            var utenti = db.RelazioneUtenti
-                .Where(r => r.ID_UtenteAssociato == idCliente && r.Stato == "Attivo")
-                .Join(db.Utenti, r => r.ID_Utente, u => u.ID_Utente, (r, u) => new
-                {
-                    ID_Utente = u.ID_Utente,
-                    NomeCompleto = u.Nome + " " + u.Cognome
-                })
-                .OrderBy(u => u.NomeCompleto)
-                .ToList();
+            // 🔍 Recupera cliente
+            var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == idCliente);
+            if (cliente == null)
+            {
+                return Json(new { success = false, message = "Cliente non trovato." }, JsonRequestBehavior.AllowGet);
+            }
 
-            return Json(utenti, JsonRequestBehavior.AllowGet);
+            // 1️⃣ Owner
+            var owner = (from o in db.OperatoriSinergia
+                         join u in db.Utenti on o.ID_UtenteCollegato equals u.ID_Utente
+                         where o.ID_Cliente == cliente.ID_Operatore && o.TipoCliente == cliente.TipoOperatore
+                         select new
+                         {
+                             ID_Utente = u.ID_Utente,
+                             NomeCompleto = u.Nome + " " + u.Cognome + " (Owner)"
+                         }).FirstOrDefault();
+
+            // 2️⃣ Associati
+            var associati = (from cp in db.ClientiProfessionisti
+                             join o in db.OperatoriSinergia on cp.ID_Professionista equals o.ID_Cliente
+                             join u in db.Utenti on o.ID_UtenteCollegato equals u.ID_Utente
+                             where cp.ID_Cliente == idCliente
+                             select new
+                             {
+                                 ID_Utente = u.ID_Utente,
+                                 NomeCompleto = u.Nome + " " + u.Cognome
+                             }).ToList();
+
+            // 3️⃣ Combina risultati
+            var utenti = new List<object>();
+            if (owner != null) utenti.Add(owner);
+            utenti.AddRange(associati);
+
+            // 🔽 Ordino subito sulla proprietà anonima
+            var ordinati = utenti.OrderBy(u => u.GetType().GetProperty("NomeCompleto").GetValue(u, null)).ToList();
+
+            return Json(ordinati, JsonRequestBehavior.AllowGet);
         }
+
 
         [HttpGet]
         public JsonResult GetClientiAttivi()
@@ -2284,21 +2497,27 @@ namespace SinergiaMvc.Controllers
 
             // 🔍 Trova l'operatore (professionista) collegato a quell'utente
             var operatore = db.OperatoriSinergia
-                .FirstOrDefault(o => o.ID_UtenteCollegato == idUtente);
+                .FirstOrDefault(o => o.ID_UtenteCollegato == idUtente && o.TipoCliente == "Professionista");
 
             if (operatore == null)
             {
                 return Json(new { success = false, message = "Operatore non trovato." }, JsonRequestBehavior.AllowGet);
             }
 
-            int idOperatore = operatore.ID_Cliente;
+            int idProfessionista = operatore.ID_Cliente;
 
+            // 🔹 Prende tutti i clienti in cui:
+            //   - è l'owner (campo legacy ID_Operatore)
+            //   - oppure è associato nella nuova tabella ClientiProfessionisti
             var clienti = db.Clienti
-                .Where(c => c.ID_Operatore == idOperatore && c.Stato == "Attivo")
+                .Where(c => c.Stato == "Attivo" &&
+                           (c.ID_Operatore == idProfessionista ||
+                            db.ClientiProfessionisti.Any(cp => cp.ID_Cliente == c.ID_Cliente &&
+                                                               cp.ID_Professionista == idProfessionista)))
                 .Select(c => new
                 {
                     c.ID_Cliente,
-                    Nome = (string.IsNullOrEmpty(c.RagioneSociale))
+                    Nome = string.IsNullOrEmpty(c.RagioneSociale)
                             ? (c.Nome + " " + c.Cognome)
                             : c.RagioneSociale
                 })
@@ -2307,9 +2526,6 @@ namespace SinergiaMvc.Controllers
 
             return Json(clienti, JsonRequestBehavior.AllowGet);
         }
-
-
-
 
         // questo metodo parte nel caso di creazione pratica l'azienda e il professionista non ha la partita iva registrata in anagrafica 
         [HttpPost]
@@ -2327,7 +2543,6 @@ namespace SinergiaMvc.Controllers
 
             return Json(new { success = true, message = "Dati cliente aggiornati." });
         }
-
 
         [HttpGet]
         public ActionResult GetAnagraficaCostiPratica()
@@ -2357,9 +2572,6 @@ namespace SinergiaMvc.Controllers
             }
         }
 
-
-
-
         [HttpGet]
         public JsonResult GetOwnerCliente(int idCliente)
         {
@@ -2372,7 +2584,7 @@ namespace SinergiaMvc.Controllers
                 if (cliente.ID_Operatore == 0)
                     return Json(new { success = false, message = "Cliente senza operatore." }, JsonRequestBehavior.AllowGet);
 
-                // 🔍 Recupera record OperatoriSinergia (rappresenta il professionista owner collegato al cliente)
+                // 🔍 Recupera record OperatoriSinergia (professionista owner collegato al cliente)
                 var owner = db.OperatoriSinergia.FirstOrDefault(o =>
                     o.ID_Cliente == cliente.ID_Operatore &&
                     o.TipoCliente == "Professionista" &&
@@ -2381,23 +2593,20 @@ namespace SinergiaMvc.Controllers
                 if (owner == null)
                     return Json(new { success = false, message = "Owner non trovato." }, JsonRequestBehavior.AllowGet);
 
-                // 🔍 Ora cerchiamo l’utente collegato a questo Operatore
-                var utenteOwner = db.Utenti.FirstOrDefault(u => u.ID_Utente == owner.ID_Cliente);
+                // 🔍 Utente collegato
+                var utenteOwner = db.Utenti.FirstOrDefault(u => u.ID_Utente == owner.ID_UtenteCollegato);
 
                 string nomeCompleto = string.IsNullOrWhiteSpace(owner.Cognome)
                     ? owner.Nome
                     : $"{owner.Nome} {owner.Cognome}";
 
-                // 🔍 Estrai anche la professione collegata
-                int? idProfessione = owner.ID_Professione;
-
                 return Json(new
                 {
                     success = true,
                     nomeOwner = nomeCompleto,
-                    idOperatore = owner.ID_Cliente,              // ← per assegnare alla pratica
-                    idOwner = utenteOwner?.ID_Utente,            // ← per escludere dai collaboratori
-                    idProfessione = idProfessione
+                    idOperatore = owner.ID_Cliente,                // ID Operatore (tabella OperatoriSinergia)
+                    idOwner = utenteOwner?.ID_Utente,              // ✅ ID corretto dell’utente collegato
+                    idProfessione = owner.ID_Professione
                 }, JsonRequestBehavior.AllowGet);
             }
             catch (Exception ex)
@@ -2410,6 +2619,7 @@ namespace SinergiaMvc.Controllers
                 }, JsonRequestBehavior.AllowGet);
             }
         }
+
 
         [HttpGet]
         public ActionResult EsportaPraticheCsv(DateTime? da, DateTime? a)
@@ -8638,100 +8848,158 @@ namespace SinergiaMvc.Controllers
 
         public ActionResult GestioneIncassiList(int? idPratica = null)
         {
-            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
-            var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-
-            if (utenteCorrente == null)
-                return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
-
-            // Passo anche il tipo utente alla view
-            ViewBag.TipoUtente = utenteCorrente.TipoUtente;
-
-            // 🔍 Query base sugli incassi
-            IQueryable<Incassi> query = db.Incassi;
-            if (idPratica.HasValue)
-                query = query.Where(i => i.ID_Pratiche == idPratica.Value);
-
-            // 🔐 Gestione permessi
-            bool puoAggiungere = false;
-            bool puoModificare = false;
-            bool puoEliminare = false;
-
-            if (utenteCorrente.TipoUtente == "Admin")
+            try
             {
-                puoAggiungere = puoModificare = puoEliminare = true;
-            }
-            else if (utenteCorrente.TipoUtente == "Professionista" || utenteCorrente.TipoUtente == "Collaboratore")
-            {
-                var permessiDb = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
-                puoAggiungere = permessiDb.Any(p => p.Aggiungi == true);
-                puoModificare = permessiDb.Any(p => p.Modifica == true);
-                puoEliminare = permessiDb.Any(p => p.Elimina == true);
-            }
+                int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+                var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
 
-            // 🔄 Costruzione lista ViewModel incassi
-            var lista = query
-                .OrderByDescending(i => i.DataIncasso)
-                .ToList()
-                .Select(i =>
+                if (utenteCorrente == null)
+                    throw new InvalidOperationException("❌ Utente non autenticato o non trovato.");
+
+                // Passo anche il tipo utente alla view
+                ViewBag.TipoUtente = utenteCorrente.TipoUtente;
+
+                IQueryable<Incassi> query;
+                try
                 {
-                    var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == i.ID_Pratiche);
+                    query = db.Incassi;
+                    if (idPratica.HasValue)
+                        query = query.Where(i => i.ID_Pratiche == idPratica.Value);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("❌ Errore durante la query sugli Incassi.", ex);
+                }
 
-                    decimal utileNetto = db.BilancioProfessionista
-                         .Where(b =>
-                             b.ID_Pratiche == i.ID_Pratiche &&
-                             b.Categoria == "Utile netto da incasso")
-                         .OrderByDescending(b => b.DataRegistrazione)
-                         .Select(b => (decimal?)b.Importo)
-                         .FirstOrDefault() ?? 0;
+                // 🔐 Gestione permessi
+                bool puoAggiungere = false;
+                bool puoModificare = false;
+                bool puoEliminare = false;
 
-                    return new IncassoViewModel
+                try
+                {
+                    if (utenteCorrente.TipoUtente == "Admin")
                     {
-                        ID_Incasso = i.ID_Incasso,
-                        ID_Pratiche = i.ID_Pratiche ?? 0,
-                        DataIncasso = i.DataIncasso,
-                        Importo = i.Importo,
-                        MetodoPagamento = i.ModalitaPagamento,
-                        NomePratica = pratica?.Titolo ?? "(N/D)",
-                        UtileNetto = utileNetto,
-                        VersaInPlafond = i.VersaInPlafond,
-                        PuoEliminare = puoEliminare,
-                        PuoModificare = puoModificare // 🔹 nuovo campo nel ViewModel
+                        puoAggiungere = puoModificare = puoEliminare = true;
+                    }
+                    else if (utenteCorrente.TipoUtente == "Professionista" || utenteCorrente.TipoUtente == "Collaboratore")
+                    {
+                        var permessiDb = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
+                        puoAggiungere = permessiDb.Any(p => p.Aggiungi == true);
+                        puoModificare = permessiDb.Any(p => p.Modifica == true);
+                        puoEliminare = permessiDb.Any(p => p.Elimina == true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("❌ Errore durante il recupero dei permessi utente.", ex);
+                }
+
+                List<IncassoViewModel> lista;
+                try
+                {
+                    lista = query
+                        .OrderByDescending(i => i.DataIncasso)
+                        .ToList()
+                        .Select(i =>
+                        {
+                            Pratiche pratica;
+                            try
+                            {
+                                pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == i.ID_Pratiche);
+                            }
+                            catch (Exception ex)
+                            {
+                                throw new InvalidOperationException($"❌ Errore nel recupero della pratica con ID {i.ID_Pratiche}.", ex);
+                            }
+
+                            decimal utileNetto;
+                            try
+                            {
+                                utileNetto = db.BilancioProfessionista
+                                    .Where(b =>
+                                        b.ID_Pratiche == i.ID_Pratiche &&
+                                        b.Categoria == "Utile netto da incasso")
+                                    .OrderByDescending(b => b.DataRegistrazione)
+                                    .Select(b => (decimal?)b.Importo)
+                                    .FirstOrDefault() ?? 0;
+                            }
+                            catch (Exception ex)
+                            {
+                                throw new InvalidOperationException($"❌ Errore nel calcolo dell'utile netto per l'incasso {i.ID_Incasso}.", ex);
+                            }
+
+                            return new IncassoViewModel
+                            {
+                                ID_Incasso = i.ID_Incasso,
+                                ID_Pratiche = i.ID_Pratiche ?? 0,
+                                DataIncasso = i.DataIncasso,
+                                Importo = i.Importo,
+                                MetodoPagamento = i.ModalitaPagamento,
+                                NomePratica = pratica?.Titolo ?? "(N/D)",
+                                UtileNetto = utileNetto,
+                                VersaInPlafond = i.VersaInPlafond,
+                                PuoEliminare = puoEliminare,
+                                PuoModificare = puoModificare
+                            };
+                        })
+                        .ToList();
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("❌ Errore durante la costruzione della lista incassi (ViewModel).", ex);
+                }
+
+                try
+                {
+                    // 🔐 Passaggio permessi alla View
+                    ViewBag.PuoAggiungere = puoAggiungere;
+                    ViewBag.PuoModificare = puoModificare;
+                    ViewBag.PuoEliminare = puoEliminare;
+                    ViewBag.Permessi = new PermessiViewModel
+                    {
+                        ID_Utente = utenteCorrente.ID_Utente,
+                        NomeUtente = utenteCorrente.Nome + " " + utenteCorrente.Cognome,
+                        Permessi = new List<PermessoSingoloViewModel>
+                {
+                    new PermessoSingoloViewModel
+                    {
+                        Aggiungi = puoAggiungere,
+                        Modifica = puoModificare,
+                        Elimina = puoEliminare
+                    }
+                }
                     };
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("❌ Errore durante l'impostazione dei permessi nella ViewBag.", ex);
+                }
 
-                })
-                .ToList();
+                try
+                {
+                    // ⬇️ Carica le pratiche per la modale incasso
+                    ViewBag.Pratiche = db.Pratiche
+                        .Where(p => p.Stato != "Eliminato")
+                        .ToList()
+                        .Select(p => new SelectListItem
+                        {
+                            Value = p.ID_Pratiche.ToString(),
+                            Text = p.ID_Pratiche + " - " + p.Titolo
+                        }).ToList();
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("❌ Errore durante il caricamento delle pratiche per la modale incasso.", ex);
+                }
 
-            // 🔐 Passaggio permessi alla View
-            ViewBag.PuoAggiungere = puoAggiungere;
-            ViewBag.PuoModificare = puoModificare;
-            ViewBag.PuoEliminare = puoEliminare;
-            ViewBag.Permessi = new PermessiViewModel
-            {
-                ID_Utente = utenteCorrente.ID_Utente,
-                NomeUtente = utenteCorrente.Nome + " " + utenteCorrente.Cognome,
-                Permessi = new List<PermessoSingoloViewModel>
-        {
-            new PermessoSingoloViewModel
-            {
-                Aggiungi = puoAggiungere,
-                Modifica = puoModificare,
-                Elimina = puoEliminare
+                return PartialView("~/Views/Incassi/_GestioneIncassiList.cshtml", lista);
             }
-        }
-            };
-
-            // ⬇️ Carica le pratiche per la modale incasso
-            ViewBag.Pratiche = db.Pratiche
-                 .Where(p => p.Stato != "Eliminato")
-                 .ToList()
-                 .Select(p => new SelectListItem
-                 {
-                     Value = p.ID_Pratiche.ToString(),
-                     Text = p.ID_Pratiche + " - " + p.Titolo
-                 }).ToList();
-
-            return PartialView("~/Views/Incassi/_GestioneIncassiList.cshtml", lista);
+            catch (Exception)
+            {
+                // 👇 Lasciamo propagare l'errore al gestore Application_Error / Error.cshtml
+                throw;
+            }
         }
 
         [HttpPost]

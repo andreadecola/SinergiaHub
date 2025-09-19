@@ -189,10 +189,14 @@
     <Compile Include="BilancioProfessionista.cs" />
     <Compile Include="Citta.cs" />
     <Compile Include="Clienti.cs" />
+    <Compile Include="ClientiProfessionisti.cs" />
+    <Compile Include="ClientiProfessionisti_a.cs" />
     <Compile Include="Clienti_a.cs" />
     <Compile Include="Cluster.cs" />
     <Compile Include="Cluster_a.cs" />
     <Compile Include="CompensiPratica.cs" />
+    <Compile Include="CompensiPraticaDettaglio.cs" />
+    <Compile Include="CompensiPraticaDettaglio_a.cs" />
     <Compile Include="CompensiPratica_a.cs" />
     <Compile Include="CostiGeneraliUtente.cs" />
     <Compile Include="CostiGeneraliUtente_a.cs" />

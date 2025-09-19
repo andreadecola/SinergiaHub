@@ -1,8 +1,26 @@
 ﻿@{
     Layout = "~/Views/Shared/_Layout.cshtml";
     var ex = ViewBag.Exception as Exception;
-    var controller = ViewBag.Controller;
-    var action = ViewBag.Action;
+    var controller = ViewBag.Controller ?? "N/A";
+    var action = ViewBag.Action ?? "N/A";
+    bool isDebug = HttpContext.Current.IsDebuggingEnabled;
+
+    // 🔁 Costruzione messaggio concatenato di tutte le inner exception
+    string messaggiCompleti = "";
+    if (ex != null)
+    {
+        var corrente = ex;
+        int livello = 0;
+        while (corrente != null)
+        {
+            messaggiCompleti += $"[Livello {livello}] {corrente.Message}\n";
+            corrente = corrente.InnerException;
+            livello++;
+        }
+    }
+
+    // 🆔 Recupera ID errore da Application_Error (se esiste)
+    var errorId = HttpContext.Current.Items["ErrorId"] ?? Guid.NewGuid().ToString();
 }
 
 <h2 class="text-danger">❌ ERRORE DI SISTEMA</h2>
@@ -12,15 +30,37 @@
     <div class="alert alert-danger">
         <p><strong>🧭 Controller:</strong> @controller</p>
         <p><strong>🔧 Action:</strong> @action</p>
-        <p><strong>📝 Messaggio:</strong> @ex.Message</p>
-        @if (ex.InnerException != null)
-        {
-            <p><strong>💥 InnerException:</strong> @ex.InnerException.Message</p>
+        <p><strong>⏰ Data:</strong> @DateTime.Now</p>
+        <p><strong>🆔 Error ID:</strong> @errorId</p>
+        <p><strong>📝 Messaggio principale:</strong> @ex.Message</p>
+
+        @* Mostra le inner exception *@
+        @{
+            var inner = ex.InnerException;
+            int livello = 1;
+            while (inner != null)
+            {
+                <p><strong>💥 InnerException livello @livello:</strong> @inner.Message</p>
+                inner = inner.InnerException;
+                livello++;
+            }
         }
-        <p><strong>📍 TargetSite:</strong> @ex.TargetSite</p>
-        <p><strong>📁 Source:</strong> @ex.Source</p>
-        <p><strong>📄 Stack Trace:</strong></p>
-        <pre style="white-space: pre-wrap;">@ex.StackTrace</pre>
+
+        @if (isDebug)
+        {
+            <hr />
+            <p><strong>📋 Tutti i messaggi concatenati:</strong></p>
+            <pre style="white-space: pre-wrap; background:#f9f9f9; border:1px solid #ddd; padding:10px;">@messaggiCompleti</pre>
+
+            <p><strong>📍 TargetSite:</strong> @ex.TargetSite</p>
+            <p><strong>📁 Source:</strong> @ex.Source</p>
+            <p><strong>📄 Stack Trace:</strong></p>
+            <pre style="white-space: pre-wrap; overflow:auto; max-height:300px; background:#1e1e1e; color:#dcdcdc; padding:10px;">@ex.StackTrace</pre>
+        }
+        else
+        {
+            <p class="text-muted">Dettagli tecnici nascosti (modalità produzione).</p>
+        }
     </div>
 }
 else

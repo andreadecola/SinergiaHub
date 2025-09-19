@@ -322,6 +322,8 @@
             selectStato.appendChild(option);
         });
         selectStato.className = 'form-select form-select-sm w-auto';
+        // ✅ Default su "Attivo"
+        selectStato.value = "Attivo";
 
         // 📄 Page Size
         [10, 25, 50].forEach(num => {

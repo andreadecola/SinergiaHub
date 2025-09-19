@@ -12,14 +12,14 @@
                 <option value="">-- Seleziona tabella --</option>
                 @{
                     var tabelle = new[] {
-                        "AnagraficaCostiPratica", "AnagraficaCostiTeam", "AvvisiParcella", "Clienti", "Cluster",
-                        "CompensiPratica", "CostiPersonaliUtente", "CostiPratica", "DatiBancari", "DistribuzioneCostiTeam",
-                        "DocumentiAziende", "DocumentiPratiche", "Economico", "FinanziamentiProfessionisti", "Finanziario",
-                        "Incassi", "MembriTeam", "MovimentiBancari", "OperatoriSinergia", "OrdiniFornitori",
-                        "Permessi", "PermessiDelegatiProfessionista", "PlafondUtente", "Pratiche", "Previsione",
-                        "Professioni", "RelazionePraticheUtenti", "RelazioneUtenti", "RicorrenzeCosti", "RimborsiPratica",
-                        "SettoriFornitori", "TeamProfessionisti", "TemplateIncarichi", "TipologieCosti", "TipoRagioneSociale", "Utenti"
+                        "AnagraficaCostiPratica", "AnagraficaCostiTeam", "AnagraficaCostiProfessionista",  "AvvisiParcella",  "Clienti",  "Cluster","CompensiPratica",
+                        "CostiGeneraliUtente","CostiPersonaliUtente", "CostiPratica", "DatiBancari","DistribuzioneCostiTeam", "DocumentiAziende", "DocumentiPratiche",
+                        "EccezioniRicorrenzeCosti", "Economico","FinanziamentiProfessionisti","Finanziario","Incassi","MembriTeam","MovimentiBancari","OperatoriSinergia",
+                         "Permessi","PlafondUtente", "Pratiche", "Previsione", "Professioni", "RelazionePraticheUtenti",
+                        "RelazioneUtenti", "RicorrenzeCosti", "RimborsiPratica", "SettoriFornitori", "TeamProfessionisti", "TemplateIncarichi", "TipologieCosti",
+                        "TipoRagioneSociale","Utenti"
                     };
+
 
                     foreach (var tab in tabelle)
                     {
@@ -67,8 +67,8 @@
                     <th>#</th>
                     <th>Data</th>
                     <th>Modificato da</th>
-                    <th>Tipo</th>
                     <th>Versione</th>
+                    <th>Tipo</th>
                     <th>Dettaglio</th>
                 </tr>
             </thead>

@@ -127,29 +127,37 @@ namespace Sinergia.App_Helpers
                     if (pratica == null || pratica.Stato == "Annullata")
                         return;
 
-                    int idProfessionista = pratica.ID_UtenteResponsabile;
+                    int idResponsabile = pratica.ID_UtenteResponsabile;
+                    int? idOwner = pratica.ID_Owner; // può essere nullo
                     decimal budget = pratica.Budget;
                     DateTime oggi = DateTime.Today;
                     int idUtenteInserimento = UserManager.GetIDUtenteCollegato();
 
-                    // 🔁 Pulisce righe esistenti per la pratica
+                    // 🔁 Rimuove righe esistenti della pratica
                     db.BilancioProfessionista.RemoveRange(db.BilancioProfessionista
                         .Where(b => b.ID_Pratiche == idPratica && b.Origine == "Pratica"));
 
                     var voci = new List<BilancioProfessionista>();
 
-                    // ✅ Trattenuta Personalizzata o Ricorrenza
+                    decimal totaleTrattenute = 0;
+                    decimal totaleOwnerFee = 0;
+                    decimal totaleCostiPratica = 0;
+                    decimal totaleQuoteCollaboratori = 0;
+
+                    // ============================
+                    // ✅ COSTI TRATTENUTA
+                    // ============================
                     bool haTrattenutaPersonalizzata = pratica.TrattenutaPersonalizzata.HasValue && pratica.TrattenutaPersonalizzata.Value > 0;
-                    bool trattenutaAggiunta = false;
 
                     if (haTrattenutaPersonalizzata)
                     {
                         decimal perc = pratica.TrattenutaPersonalizzata.Value;
                         decimal trattenuta = Math.Round(budget * (perc / 100m), 2);
+                        totaleTrattenute += trattenuta;
 
                         voci.Add(new BilancioProfessionista
                         {
-                            ID_Professionista = idProfessionista,
+                            ID_Professionista = idResponsabile,
                             DataRegistrazione = oggi,
                             TipoVoce = "Costo",
                             Categoria = "Trattenuta Sinergia Personalizzata",
@@ -161,16 +169,13 @@ namespace Sinergia.App_Helpers
                             ID_UtenteInserimento = idUtenteInserimento,
                             DataInserimento = DateTime.Now
                         });
-
-                        trattenutaAggiunta = true;
                     }
-
-                    if (!trattenutaAggiunta)
+                    else
                     {
                         var ricTrattenuta = db.RicorrenzeCosti
                             .Where(r => r.Categoria == "Trattenuta Sinergia" && r.Attivo &&
-                                        (r.ID_Professionista == idProfessionista || r.ID_Professionista == null))
-                            .OrderByDescending(r => r.ID_Professionista == idProfessionista)
+                                        (r.ID_Professionista == idResponsabile || r.ID_Professionista == null))
+                            .OrderByDescending(r => r.ID_Professionista == idResponsabile)
                             .FirstOrDefault();
 
                         if (ricTrattenuta != null)
@@ -179,9 +184,11 @@ namespace Sinergia.App_Helpers
                                   ? Math.Round(budget * (ricTrattenuta.Valore / 100m), 2)
                                   : ricTrattenuta.Valore;
 
+                            totaleTrattenute += trattenuta;
+
                             voci.Add(new BilancioProfessionista
                             {
-                                ID_Professionista = idProfessionista,
+                                ID_Professionista = idResponsabile,
                                 DataRegistrazione = oggi,
                                 TipoVoce = "Costo",
                                 Categoria = "Trattenuta Sinergia",
@@ -198,36 +205,22 @@ namespace Sinergia.App_Helpers
                         }
                     }
 
-                    // ✅ Owner Fee 5%
-                    decimal ownerFee = Math.Round(budget * 0.05m, 2);
-                    voci.Add(new BilancioProfessionista
+                    // ============================
+                    // ✅ OWNER FEE
+                    // ============================
+                    if (idOwner.HasValue)
                     {
-                        ID_Professionista = idProfessionista,
-                        DataRegistrazione = oggi,
-                        TipoVoce = "Ricavo",
-                        Categoria = "Owner Fee",
-                        Descrizione = "Ricavo Owner 5%",
-                        Importo = ownerFee,
-                        Stato = "Previsionale",
-                        Origine = "Pratica",
-                        ID_Pratiche = idPratica,
-                        ID_UtenteInserimento = idUtenteInserimento,
-                        DataInserimento = DateTime.Now
-                    });
+                        decimal ownerFee = Math.Round(budget * 0.05m, 2);
+                        totaleOwnerFee += ownerFee;
 
-                    // ✅ Compenso
-                    string tipologia = pratica.Tipologia;
-
-                    if (tipologia == "Fisso" && pratica.ImportoFisso.HasValue)
-                    {
                         voci.Add(new BilancioProfessionista
                         {
-                            ID_Professionista = idProfessionista,
+                            ID_Professionista = idOwner.Value,
                             DataRegistrazione = oggi,
                             TipoVoce = "Ricavo",
-                            Categoria = "Compenso Fisso",
-                            Descrizione = "Compenso Fisso da pratica",
-                            Importo = pratica.ImportoFisso.Value,
+                            Categoria = "Owner Fee",
+                            Descrizione = "Ricavo Owner 5%",
+                            Importo = ownerFee,
                             Stato = "Previsionale",
                             Origine = "Pratica",
                             ID_Pratiche = idPratica,
@@ -235,20 +228,29 @@ namespace Sinergia.App_Helpers
                             DataInserimento = DateTime.Now
                         });
                     }
-                    else if (tipologia == "A ore" && pratica.TariffaOraria.HasValue)
+
+                    // ============================
+                    // ✅ COLLABORATORI
+                    // ============================
+                    var collaboratori = db.Cluster
+                        .Where(c => c.ID_Pratiche == idPratica && c.TipoCluster == "Collaboratore")
+                        .ToList();
+
+                    foreach (var collab in collaboratori)
                     {
-                        if (pratica.OrePreviste.HasValue)
+                        if (collab.PercentualePrevisione > 0)
                         {
-                            decimal previsionale = pratica.TariffaOraria.Value * pratica.OrePreviste.Value;
+                            decimal quotaRicavo = Math.Round(budget * (collab.PercentualePrevisione / 100m), 2);
+                            totaleQuoteCollaboratori += quotaRicavo;
 
                             voci.Add(new BilancioProfessionista
                             {
-                                ID_Professionista = idProfessionista,
+                                ID_Professionista = collab.ID_Utente,
                                 DataRegistrazione = oggi,
                                 TipoVoce = "Ricavo",
-                                Categoria = "Compenso a ore (previsto)",
-                                Descrizione = $"Compenso previsto per {pratica.OrePreviste.Value} ore",
-                                Importo = previsionale,
+                                Categoria = "Quota Collaboratore",
+                                Descrizione = $"Quota ricavo collaboratore {collab.PercentualePrevisione:0.##}%",
+                                Importo = quotaRicavo,
                                 Stato = "Previsionale",
                                 Origine = "Pratica",
                                 ID_Pratiche = idPratica,
@@ -256,75 +258,27 @@ namespace Sinergia.App_Helpers
                                 DataInserimento = DateTime.Now
                             });
                         }
-
-                        if (pratica.OreEffettive.HasValue)
-                        {
-                            decimal economico = pratica.TariffaOraria.Value * pratica.OreEffettive.Value;
-
-                            voci.Add(new BilancioProfessionista
-                            {
-                                ID_Professionista = idProfessionista,
-                                DataRegistrazione = oggi,
-                                TipoVoce = "Ricavo",
-                                Categoria = "Compenso a ore (effettivo)",
-                                Descrizione = $"Compenso effettivo per {pratica.OreEffettive.Value} ore",
-                                Importo = economico,
-                                Stato = "Economico",
-                                Origine = "Pratica",
-                                ID_Pratiche = idPratica,
-                                ID_UtenteInserimento = idUtenteInserimento,
-                                DataInserimento = DateTime.Now
-                            });
-                        }
-                    }
-                    else if (tipologia == "Giudiziale" && pratica.AccontoGiudiziale.HasValue)
-                    {
-                        voci.Add(new BilancioProfessionista
-                        {
-                            ID_Professionista = idProfessionista,
-                            DataRegistrazione = oggi,
-                            TipoVoce = "Ricavo",
-                            Categoria = "Acconto Giudiziale",
-                            Descrizione = "Acconto iniziale per pratica giudiziale",
-                            Importo = pratica.AccontoGiudiziale.Value,
-                            Stato = "Previsionale",
-                            Origine = "Pratica",
-                            ID_Pratiche = idPratica,
-                            ID_UtenteInserimento = idUtenteInserimento,
-                            DataInserimento = DateTime.Now
-                        });
                     }
 
-                    // ✅ Costi Generali
-                    var costiGenerali = db.RicorrenzeCosti
-                        .Where(r =>
-                            (r.ID_Professionista == idProfessionista || r.ID_Professionista == null) &&
-                            r.Categoria == "Costo Generale" && r.Attivo)
+                    // ============================
+                    // ✅ COSTI MANUALI
+                    // ============================
+                    var costiPratica = db.CostiPratica
+                        .Where(c => c.ID_Pratiche == idPratica)
                         .ToList();
 
-                    foreach (var ric in costiGenerali)
+                    foreach (var c in costiPratica)
                     {
-                        // 👉 Qui inserisci la riga di debug:
-                        System.Diagnostics.Debug.WriteLine($"🧪 Ricorrenza ID = {ric.ID_Ricorrenza} | TipoValore = {ric.TipoValore} | Valore = {ric.Valore}");
-
-                        decimal importo = ric.TipoValore == "Percentuale"
-                            ? Math.Round(budget * (ric.Valore / 100m), 2)
-                            : ric.Valore;
-
-                        if (importo <= 0) continue;
-
-                        string descrizione = "Costo Generale";
-
-                        if (haTrattenutaPersonalizzata && descrizione.ToLower().Contains("trattenuta"))
-                            continue;
+                        decimal importo = c.Importo ?? 0;
+                        totaleCostiPratica += importo;
 
                         voci.Add(new BilancioProfessionista
                         {
-                            ID_Professionista = idProfessionista,
+                            ID_Professionista = idResponsabile,
                             DataRegistrazione = oggi,
                             TipoVoce = "Costo",
-                            Categoria = "Costo Generale",
-                            Descrizione = descrizione,
+                            Categoria = "Costo Pratica",
+                            Descrizione = string.IsNullOrWhiteSpace(c.Descrizione) ? "Costo Pratica" : c.Descrizione,
                             Importo = importo,
                             Stato = "Previsionale",
                             Origine = "Pratica",
@@ -334,21 +288,21 @@ namespace Sinergia.App_Helpers
                         });
                     }
 
-                    // ✅ Costi della Pratica (manuali)
-                    var costiPratica = db.CostiPratica
-                        .Where(c => c.ID_Pratiche == idPratica)
-                        .ToList();
+                    // ============================
+                    // ✅ RICAVO RESIDUO RESPONSABILE
+                    // ============================
+                    decimal ricavoResponsabile = budget - (totaleTrattenute + totaleOwnerFee + totaleQuoteCollaboratori + totaleCostiPratica);
 
-                    foreach (var c in costiPratica)
+                    if (ricavoResponsabile > 0)
                     {
                         voci.Add(new BilancioProfessionista
                         {
-                            ID_Professionista = idProfessionista,
+                            ID_Professionista = idResponsabile,
                             DataRegistrazione = oggi,
-                            TipoVoce = "Costo",
-                            Categoria = "Costo Pratica",
-                            Descrizione = c.Descrizione,
-                            Importo = c.Importo ?? 0,
+                            TipoVoce = "Ricavo",
+                            Categoria = "Compenso Responsabile",
+                            Descrizione = "Quota residua responsabile",
+                            Importo = ricavoResponsabile,
                             Stato = "Previsionale",
                             Origine = "Pratica",
                             ID_Pratiche = idPratica,
@@ -357,7 +311,9 @@ namespace Sinergia.App_Helpers
                         });
                     }
 
+                    // ============================
                     // ✅ Salvataggio
+                    // ============================
                     db.BilancioProfessionista.AddRange(voci);
                     db.SaveChanges();
                 }
@@ -372,10 +328,12 @@ namespace Sinergia.App_Helpers
                         System.Diagnostics.Debug.WriteLine($"  ➤ Errore proprietà: {ve.PropertyName} - Messaggio: {ve.ErrorMessage}");
                     }
                 }
-
                 throw;
             }
         }
+
+
+
 
 
 

@@ -96,6 +96,26 @@ namespace Sinergia.App_Helpers
         }
 
 
+        public static int GetIDClienteCorrente()
+        {
+            // 🔹 Se in sessione è stato impostato un ID_Cliente esplicito, usalo
+            if (HttpContext.Current.Session["IDClienteProfessionistaCorrente"] != null)
+            {
+                return (int)HttpContext.Current.Session["IDClienteProfessionistaCorrente"];
+            }
+
+            int idUtente = GetIDUtenteAttivo(); // può essere admin impersonificato o utente reale
+            using (var db = new SinergiaDB())
+            {
+                var operatore = db.OperatoriSinergia
+                    .FirstOrDefault(o => o.ID_UtenteCollegato == idUtente && o.TipoCliente == "Professionista");
+
+                return operatore?.ID_Cliente ?? 0;
+            }
+        }
+
+
+
 
         /// <summary>
         /// Cripta una password con algoritmo custom usando un salt (personalizzabile).

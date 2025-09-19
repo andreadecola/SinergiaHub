@@ -203,7 +203,13 @@
                     <div class="row">
                         <div class="col-md-4 mb-2">
                             <label class="form-label">Codice Fiscale</label>
-                            <input type="text" name="CodiceFiscale" class="form-control form-control-sm" />
+                            <input type="text"
+                                   name="CodiceFiscale"
+                                   class="form-control form-control-sm codice-fiscale-input"
+                                   maxlength="255" />
+                            <small id="erroreCodiceFiscale" class="text-danger d-none">
+                                ⚠️ Il Codice Fiscale deve contenere 16 caratteri (solo per persone fisiche)
+                            </small>
                             <small class="text-muted d-none" data-prev="CodiceFiscale"></small>
                         </div>
                         <div class="col-md-4 mb-2">
@@ -929,13 +935,15 @@
         selectStato.className = 'form-select form-select-sm w-auto';
 
         // 🧾 Ruolo
-        ['Tutti', 'Cliente', 'Fornitore', 'Cliente / Fornitore', 'N/D'].forEach(ruolo => {
+        ['Tutti', 'Fornitore', 'N/D'].forEach(ruolo => {
             const option = document.createElement('option');
             option.value = ruolo;
             option.textContent = ruolo;
             selectRuolo.appendChild(option);
         });
         selectRuolo.className = 'form-select form-select-sm w-auto';
+        // ✅ Default su "Attivo"
+        selectStato.value = "Attivo";
 
         // 📄 Righe per pagina
         [10, 25, 50].forEach(num => {
@@ -1422,6 +1430,39 @@
     });
 
 
+    // GESTIONE CODICE FISCALE 
+    document.addEventListener("DOMContentLoaded", function () {
+        const cfInputs = document.querySelectorAll(".codice-fiscale-input");
+
+        cfInputs.forEach(input => {
+            input.addEventListener("input", function () {
+                this.value = this.value.toUpperCase();
+            });
+
+            input.addEventListener("blur", function () {
+                const form = this.closest("form");
+                const tipo = form?.querySelector("[name='TipoCliente']")?.value || "";
+
+                const errore = this.parentElement.querySelector("#erroreCodiceFiscale");
+
+                if (!this.value.trim()) {
+                    this.classList.remove("is-valid", "is-invalid");
+                    if (errore) errore.classList.add("d-none");
+                    return;
+                }
+
+                if (tipo === "Professionista" && this.value.length !== 16) {
+                    this.classList.add("is-invalid");
+                    this.classList.remove("is-valid");
+                    if (errore) errore.classList.remove("d-none");
+                } else {
+                    this.classList.add("is-valid");
+                    this.classList.remove("is-invalid");
+                    if (errore) errore.classList.add("d-none");
+                }
+            });
+        });
+    });
 
 
 </script>

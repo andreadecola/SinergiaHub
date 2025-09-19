@@ -1,5 +1,4 @@
 ﻿using Sinergia.ActionFilters;
-using System.Web;
 using System.Web.Mvc;
 
 namespace Sinergia
@@ -8,9 +7,11 @@ namespace Sinergia
     {
         public static void RegisterGlobalFilters(GlobalFilterCollection filters)
         {
-            filters.Add(new HandleErrorAttribute());
-            // Applica filtro solo se non è il controller Account
-            filters.Add(new PermissionsActionFilter(), 0); // ma lo gestiamo in PermissionsActionFilter direttamente
+            // ❌ Tolto perché nasconde l’eccezione
+            // filters.Add(new HandleErrorAttribute());
+
+            // ✅ Mantieni solo il filtro dei permessi
+            filters.Add(new PermissionsActionFilter(), 0);
         }
     }
 }
