@@ -21,5 +21,10 @@ namespace Sinergia.Model
         public string Stato { get; set; }
 
         public int ID_Professione { get; set; }
+
+        [StringLength(100)]
+        public string TipoCompenso { get; set; }
+
+        public byte[] FileDocx { get; set; }
     }
 }

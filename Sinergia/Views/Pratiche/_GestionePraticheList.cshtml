@@ -20,11 +20,11 @@
 <script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-@if (tipoUtente == "Admin" && !idClienteProfessionista.HasValue)
+@if (tipoUtente == "Admin" || tipoUtente == "Collaboratore")
 {
     <div class="alert alert-warning d-flex align-items-center" role="alert">
         <i class="fa fa-exclamation-triangle me-2"></i>
-        <strong>Attenzione:</strong>  seleziona prima un professionista per poter creare o modificare una pratica.
+        <strong>Attenzione:</strong> per creare o modificare una pratica devi assicurarti di avere selezionato il professionista corretto nel menu in alto.
     </div>
 }
 
@@ -177,6 +177,7 @@
         <div class="modal-content">
             <form id="PraticaForm" enctype="multipart/form-data">
                 <input type="hidden" name="ContenutoIncaricoHtml" id="hiddenIncaricoHtml" />
+
                 <div class="modal-header text-black">
                     <h5 class="modal-title" id="praticaModalLabel">Nuova Pratica</h5>
                     <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
@@ -195,14 +196,20 @@
                     <div class="row mb-2">
                         <div class="col-md-4">
                             <label class="form-label">Cliente *</label>
+
+                            <!-- 🔍 Aggiungi campo ricerca -->
+                            <input type="text" id="searchCliente" class="form-control form-control-sm mb-1" placeholder="Cerca cliente...">
+
+                            <!-- 🔽 Select clienti -->
                             <select class="form-select form-select-sm" name="ID_Cliente" id="selectCliente" required>
                                 <option value="">-- Seleziona cliente --</option>
                             </select>
                         </div>
+
                         <div class="col-md-4">
                             <label class="form-label">Owner (proprietario cliente)</label>
                             <input type="text" class="form-control form-control-sm" id="inputOwnerProfessionista" readonly />
-                            <input type="hidden" name="ID_Owner" id="hiddenOwnerProfessionista" /> <!-- 👈 uso ID_Owner -->
+                            <input type="hidden" name="ID_Owner" id="hiddenOwnerProfessionista" />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Responsabile Pratica *</label>
@@ -238,23 +245,14 @@
                         <div class="col-md-4">
                             <label class="form-label">Valore Stimato (€)</label>
                             <input type="text" name="Budget" id="BudgetInput"
-                                   class="form-control form-control-sm" readonly data-submit="true" />
-
+                                   class="form-control form-control-sm"
+                                   data-submit="true" /> <!-- 👈 tolto readonly -->
                         </div>
-                        
+
                         <div class="col-md-4">
                             <label class="form-label">Note</label>
                             <textarea name="Note" class="form-control form-control-sm" style="height: 30px;"></textarea>
                         </div>
-
-                        @*<div class="col-md-4 text-center">
-        <div class="form-check form-switch d-flex justify-content-center align-items-center gap-2">
-            <input class="form-check-input" type="checkbox" id="flagTrattenutaPersonalizzata" />
-            <label class="form-check-label fw-bold" for="flagTrattenutaPersonalizzata">
-                Trattenuta Sinergia Personalizzata
-            </label>
-        </div>
-        </div>*@
 
                         <div class="col-md-3 d-none" id="boxTrattenutaPersonalizzata">
                             <label class="form-label">Percentuale Trattenuta (%)</label>
@@ -276,14 +274,21 @@
                             </select>
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
-                            <button type="button" class="btn btn-outline-primary btn-sm ms-2" onclick="apriCompensoModal()">
+                            <button type="button"
+                                    id="btnGestisciCompensi"
+                                    class="btn btn-outline-primary btn-sm ms-2"
+                                    onclick="apriCompensoModal($('#hiddenIDPratica').val())"
+                                    disabled>
                                 ✏️ Gestisci Compensi
                             </button>
+
                         </div>
                     </div>
 
+
                     <!-- Hidden per serializzare le righe compensi -->
                     <div id="hiddenCompensiContainer"></div>
+
                     <!-- 🔹 Riepilogo Compensi inseriti -->
                     <hr />
                     <h6>💵 Riepilogo Compensi Inseriti</h6>
@@ -297,6 +302,7 @@
                                     <th>Importo (€)</th>
                                     <th>Tipologia</th>
                                     <th>Unità / Valore stimato</th>
+                                    <th>Intestatario</th>
                                     <th class="text-center">Azioni</th>
                                 </tr>
                             </thead>
@@ -305,7 +311,6 @@
                             </tbody>
                         </table>
                     </div>
-
 
                     <!-- 🔹 Collaboratori -->
                     <hr />
@@ -321,9 +326,7 @@
                     </div>
                     <!-- ✅ Stato caricamento Costi Pratica -->
                     <div class="alert alert-light border d-flex align-items-center justify-content-between px-3 py-2" id="statoCostiCaricati" style="display:none;">
-                        <div id="riepilogoCostiIcone">
-                            <!-- ✅ Icone dinamiche Costi Pratica -->
-                        </div>
+                        <div id="riepilogoCostiIcone"></div>
                         <div>
                             <i class="fas fa-info-circle text-muted me-1"></i>
                             <small id="riepilogoCostiTooltip" class="text-muted" data-bs-toggle="tooltip" title="">Dettagli</small>
@@ -333,37 +336,35 @@
                     <div class="mt-3" id="contenitoreIncaricoGenerato" style="display:none;">
                         <h6>📑 Anteprima Incarico da Template</h6>
                         <div class="border rounded p-3 bg-light" id="htmlIncaricoGenerato" style="max-height: 300px; overflow:auto;"></div>
-                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="scaricaIncarico()">⬇️ Scarica Incarico</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="scaricaFoglioIncarico()"> Scarica Incarico</button>
                     </div>
-
 
                     <!-- 🔹 Upload incarico firmato -->
                     <div class="mb-2">
                         <label class="form-label">📎 Incarico Firmato (PDF)</label>
-                        <input type="file" name="IncaricoProfessionale" class="form-control form-control-sm" accept=".pdf" />
-                        <!-- Nome file caricato + Hidden per percorso -->
+                        <input type="file" id="inputFileIncarico" name="IncaricoProfessionale"
+                               class="form-control form-control-sm" accept=".pdf" />
                         <div class="mt-2">
-                            <strong>File già caricato:</strong> <span id="nomeFileIncarico" class="text-primary"></span>
+                            <strong>File già caricato:</strong>
+                            <span id="nomeFileIncarico" class="text-primary"></span>
                             <input type="hidden" name="PercorsoDocumentoEsistente" id="hiddenFileAllegato" />
                         </div>
-
+                        <div class="mt-1 text-muted small" id="fileIncaricoSelezionato"></div>
                         <small class="text-muted">Obbligatorio prima di passare allo stato "In lavorazione".</small>
                     </div>
-                </div>
 
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-success">💾 Salva</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
-                </div>
-                <!-- ✅ Hidden inputs generati dinamicamente da modali -->
-                @*<div id="hiddenCostiPracticeContainer"></div>*@
-                <div id="hiddenCostiPraticaContainer"></div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-success">💾 Salva</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                    </div>
 
+                    <!-- ✅ Hidden inputs generati dinamicamente da modali -->
+                    <div id="hiddenCostiPraticaContainer"></div>
+                </div>
             </form>
         </div>
     </div>
 </div>
-
 
 <!-- Modale Conferma Eliminazione Pratica -->
 <div class="modal fade" id="eliminaPraticaModal" tabindex="-1" aria-labelledby="eliminaPraticaModalLabel" aria-hidden="true">
@@ -580,51 +581,79 @@
 </div>
 
 
-@* MODALE COSTI DELLA PRATICA *@
+@* 🧾 MODALE COSTI DELLA PRATICA *@
 <div class="modal fade" id="modaleCostiPratica" tabindex="-1" aria-labelledby="modaleCostiPraticaLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Costi della Pratica</h5>
+            <div class="modal-header bg-light border-bottom">
+                <h5 class="modal-title">
+                    <i class="bi bi-cash-stack me-1"></i> Costi della Pratica
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
             </div>
+
             <div class="modal-body">
-                <div id="costiPraticaContainer" class="mb-2"></div>
-                <button type="button" class="btn btn-outline-primary btn-sm" onclick="aggiungiCostoPratica()">+ Aggiungi Costo Pratica</button>
+                <div id="costiPraticaContainer" class="mb-3"></div>
+
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="aggiungiCostoPratica()">
+                    <i class="bi bi-plus-circle"></i> Aggiungi Costo Pratica
+                </button>
             </div>
+
             <div class="modal-footer">
-                <button type="button" class="btn btn-success" onclick="salvaCostiPratica()">Salva</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-success" onclick="salvaCostiPratica()">
+                    <i class="bi bi-save"></i> Salva
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Chiudi
+                </button>
             </div>
         </div>
     </div>
 </div>
 
 
-<!-- Modale per anteprima Template -->
-<div class="modal fade" id="modaleAnteprimaTemplate" tabindex="-1" aria-labelledby="modaleAnteprimaTemplateLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <!-- ✅ ID nascosto -->
+<!-- 🔹 Modale per anteprima Template -->
+<div class="modal fade" id="modaleAnteprimaTemplate" tabindex="-1"
+     aria-labelledby="modaleAnteprimaTemplateLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content shadow-lg">
+
+            <!-- 🔸 Header -->
+            <div class="modal-header bg-light">
                 <input type="hidden" name="ID_Pratiche" />
-                <h5 class="modal-title">Anteprima Incarico</h5>
+                <h5 class="modal-title fw-bold text-primary" id="titoloTemplate">
+                    Anteprima Incarico
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
             </div>
-            <div class="modal-body">
+
+            <!-- 🔸 Corpo modale -->
+            <div class="modal-body bg-white">
                 <div id="contenutoTemplateGenerato"
                      contenteditable="true"
-                     style="border: 1px solid #ccc; padding: 20px; min-height: 300px; background-color: #fff;">
+                     style="border: 1px solid #ccc; padding: 20px; min-height: 400px; background-color: #fff; border-radius: 6px; overflow-y: auto;">
                 </div>
             </div>
-            <div class="modal-footer">
 
-                <div class="d-flex justify-content-end mt-3">
+            <!-- 🔸 Footer -->
+            <div class="modal-footer d-flex justify-content-between align-items-center">
+
+                <!-- 🔹 Navigazione tra template -->
+                <div class="d-flex align-items-center">
+                    <button id="btnIndietro" class="btn btn-outline-secondary me-2" onclick="indietroTemplate()">← Indietro</button>
+                    <button id="btnAvanti" class="btn btn-outline-primary me-2" onclick="avantiTemplate()">Avanti →</button>
+                    <span id="templateCounter" class="text-muted small"></span>
+                </div>
+
+                <!-- 🔹 Azioni finali -->
+                <div>
                     <button class="btn btn-primary me-2" onclick="stampaContenuto()">Stampa</button>
                     <button class="btn btn-success me-2" onclick="salvaComePDF()">Salva come PDF</button>
                     <button class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
                 </div>
             </div>
+
         </div>
     </div>
 </div>
@@ -633,7 +662,7 @@
 @* Modale Compenso dettaglio  *@
 
 <div class="modal fade" id="compensoModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="compensoModalTitle">Gestione Compensi</h5>
@@ -662,6 +691,25 @@
     </div>
 </div>
 
+@* Gestione Template definitiva  *@
+<div class="modal fade" id="modaleAnteprimaTemplate" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">Anteprima Incarico</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="contenutoTemplateGenerato" class="p-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 
 <script>
 
@@ -683,7 +731,9 @@
         $('#riepilogoCompensiTable tbody').html('');
 
         // 🧹 Reset file incarico
-        $('[name="IncaricoProfessionale"]').val("");
+        $('#inputFileIncarico').val("");
+        $('#nomeFileIncarico').text("");
+        $('#hiddenFileAllegato').val("");
 
         // 📊 Reset indici
         indiceCollaboratore = 0;
@@ -699,26 +749,40 @@
         caricaClienti().then(() => {
             const primoClienteID = $('#selectCliente').val();
 
-            if (primoClienteID) {
-                caricaResponsabiliCliente(primoClienteID).then(() => {
-                    const idOwner = $('#hiddenOwnerProfessionista').val();
-                    if (idOwner) {
-                        caricaUtentiAssociabili(idOwner).then(() => {
-                            // 👇 aggiorno subito intestatari disponibili
-                            aggiornaIntestatariDisponibili();
-                        });
+            // 1️⃣ carica responsabili cliente
+            if (primoClienteID && parseInt(primoClienteID) > 0) {
+                caricaResponsabiliCliente(primoClienteID);
+            }
+
+            // 2️⃣ carica collaboratori (sempre)
+            caricaUtentiAssociabili(primoClienteID);
+
+            // 3️⃣ carica intestatari → se passo idCliente bene, se no GetUtentiAttivi esclude da solo l’owner
+            fetch(`/Pratiche/GetUtentiAttivi${primoClienteID ? `?idCliente=${primoClienteID}` : ''}`)
+                .then(r => {
+                    if (!r.ok) throw new Error("Risposta non valida dal server");
+                    return r.json();
+                })
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        window.intestatariGlobali = data;
+                        console.log("✅ Intestatari disponibili (nuova pratica):", window.intestatariGlobali);
                     } else {
-                        caricaUtentiAssociabili().then(() => {
-                            aggiornaIntestatariDisponibili();
-                        });
+                        window.intestatariGlobali = [];
+                        console.warn("⚠️ Nessun intestatario disponibile");
                     }
-                });
-            } else {
-                caricaUtentiAssociabili().then(() => {
+                    aggiornaIntestatariDisponibili();
+                })
+                .catch(err => {
+                    console.error("❌ Errore caricamento intestatari nuova pratica:", err);
+                    window.intestatariGlobali = [];
                     aggiornaIntestatariDisponibili();
                 });
-            }
         });
+
+        // ⚠️ Nuova pratica → compensi vuoti (idPratica ancora non esiste)
+        $('#tabellaCompensi tbody').html('');
+        console.log("🆕 Nuova pratica → Compensi inizializzati vuoti");
 
         // Mostra modale
         new bootstrap.Modal(document.getElementById('praticaModal')).show();
@@ -762,7 +826,7 @@
             if (pratica.data.ID_UtenteResponsabile) {
                 const selected = $('#selectResponsabile').val();
                 if (!selected || selected !== pratica.data.ID_UtenteResponsabile.toString()) {
-                    console.warn("⚠️ Responsabile non trovato nella lista:", pratica.data.ID_UtenteResponsabile);
+                    console.warn("⚠️ Responsabile non trovato:", pratica.data.ID_UtenteResponsabile);
                     toastr.info("Il responsabile salvato non è presente tra quelli associati al cliente.");
                 }
             }
@@ -792,32 +856,39 @@
             $('[name="Stato"]').val(pratica.data.Stato);
             $('#tipologiaSelect').val(pratica.data.Tipologia).trigger("change");
 
-            // 7️⃣ Compensi JSON cumulativi
+            // 7️⃣ Compensi → chiamata dedicata a GetCompensiPratica
             $('#hiddenCompensiContainer').html('');
             $('#riepilogoCompensiTable tbody').html('');
 
-            if (Array.isArray(pratica.compensiRaw)) {
-                $('#hiddenCompensiContainer').html(
-                    `<input type="hidden" name="CompensiJSON" value='${JSON.stringify(pratica.compensiRaw)}'>`
-                );
+            try {
+                const respCompensi = await fetch(`/Pratiche/GetCompensiPratica?idPratica=${id}`);
+                const jsonCompensi = await respCompensi.json();
 
-                // 🔹 Salvo i compensi originali in una variabile globale
-                window.compensiOriginaliJSON = pratica.compensiRaw;
+                if (jsonCompensi && jsonCompensi.success && Array.isArray(jsonCompensi.raw)) {
+                    console.log("📌 Compensi caricati:", jsonCompensi.raw);
 
-                popolaRiepilogoCompensi(pratica.compensiRaw);
+                    $('#hiddenCompensiContainer').html(
+                        `<input type="hidden" name="CompensiJSON" value='${JSON.stringify(jsonCompensi.raw)}'>`
+                    );
 
-                // 👉 In MODIFICA, il budget resta quello salvato in DB.
-                //    Solo se è creazione o DB=0, allora calcoliamo dai compensi.
-                if (!pratica.data.ID_Pratiche || pratica.data.Budget == null || parseFloat(pratica.data.Budget) === 0) {
-                    try {
-                        aggiornaValoreStimato(pratica.compensiRaw);
-                    } catch (err) {
-                        console.warn("⚠️ Errore calcolo budget:", err);
+                    window.compensiOriginaliJSON = jsonCompensi.raw;
+
+                    popolaRiepilogoCompensi(jsonCompensi.raw);
+
+                    // 👉 aggiorna budget se non impostato
+                    if (!pratica.data.Budget || parseFloat(pratica.data.Budget) === 0) {
+                        try {
+                            aggiornaValoreStimato(jsonCompensi.raw);
+                        } catch (err) {
+                            console.warn("⚠️ Errore calcolo budget:", err);
+                        }
                     }
+                } else {
+                    window.compensiOriginaliJSON = [];
                 }
-            } else {
-                // Se non ci sono compensi → reset anche la variabile globale
-                window.compensiOriginaliJSON = [];
+            } catch (err) {
+                console.error("❌ Errore caricamento compensi:", err);
+                toastr.error("Errore nel caricamento dei compensi.");
             }
 
             // 8️⃣ Collaboratori
@@ -845,35 +916,72 @@
 
             if (Array.isArray(pratica.costi)) {
                 pratica.costi.forEach((costo, index) => {
-                    aggiungiCostoPratica(costo.ID_AnagraficaCosto, costo.Importo);
-                    const riga = containerPratica.querySelectorAll('.riga-costo-pratica')[index];
-                    const select = riga.querySelector('select');
-                    const inputImporto = riga.querySelector('input[type="number"]');
+                    // Passiamo anche il fornitore
+                    aggiungiCostoPratica(costo.ID_AnagraficaCosto, costo.Importo, costo.ID_Fornitore);
 
+                    const riga = containerPratica.querySelectorAll('.riga-costo-pratica')[index];
+                    const selectCosto = riga.querySelector('.select-costo-pratica');
+                    const inputImporto = riga.querySelector('input[type="number"]');
+                    const selectFornitore = riga.querySelector('.select-fornitore-pratica');
+
+                    // Se già caricata lista anagrafica (ottimizzazione)
                     if (window.listaCostiPraticaOptions) {
-                        select.innerHTML = '<option value="">-- Seleziona voce --</option>' + window.listaCostiPraticaOptions;
+                        selectCosto.innerHTML = '<option value="">-- Seleziona voce --</option>' + window.listaCostiPraticaOptions;
                     }
 
+                    // Se già caricata lista fornitori (ottimizzazione)
+                    if (window.listaFornitoriOptions) {
+                        selectFornitore.innerHTML = '<option value="">-- Fornitore (opzionale) --</option>' + window.listaFornitoriOptions;
+                    }
+
+                    // Imposta valori selezionati
                     setTimeout(() => {
-                        select.value = costo.ID_AnagraficaCosto?.toString() || "";
+                        selectCosto.value = costo.ID_AnagraficaCosto?.toString() || "";
+                        if (costo.ID_Fornitore) {
+                            selectFornitore.value = costo.ID_Fornitore.toString();
+                        }
                     }, 0);
 
+                    // Importo
                     inputImporto.value = costo.Importo;
 
+                    // 🔹 Recupero nome fornitore, se disponibile
+                    let nomeFornitore = "";
+                    if (costo.NomeFornitore) {
+                        nomeFornitore = costo.NomeFornitore;
+                    } else if (selectFornitore?.selectedOptions?.length > 0) {
+                        nomeFornitore = selectFornitore.selectedOptions[0].textContent.trim();
+                    }
+
+                    // 🔸 Salviamo nel buffer locale
                     costiPraticaCorrenti.push({
                         ID_AnagraficaCosto: costo.ID_AnagraficaCosto,
-                        Importo: costo.Importo
+                        Descrizione: costo.Descrizione || "Voce senza nome",
+                        Importo: costo.Importo,
+                        ID_Fornitore: costo.ID_Fornitore || null,
+                        NomeFornitore: nomeFornitore
                     });
                 });
             }
 
+            // 🔄 Rigenera hidden fields per il salvataggio
             rigeneraHiddenCostiPratica();
+            aggiornaStatoCostiCaricati();
+
 
             // 🔟 Incarico PDF
             if (pratica.incarico) {
-                $('#nomeFileIncarico').text(pratica.incarico.NomeOriginale || '');
-                $('#hiddenFileAllegato').val(pratica.incarico.Percorso || '');
+                $('#nomeFileIncarico').html(
+                    `📂 <a href="/Pratiche/DownloadDocumentoPratica?idDocumento=${pratica.incarico.ID_Documento}"
+        target="_blank">${pratica.incarico.NomeFile}</a>`
+                );
+                $('#hiddenFileAllegato').val(pratica.incarico.ID_Documento);
+                $('#inputFileIncarico').val("");
+            } else {
+                $('#nomeFileIncarico').html('<span class="text-muted">Nessun file caricato</span>');
+                $('#hiddenFileAllegato').val('');
             }
+
 
             // 🔥 Mostra modale
             $('#praticaModalLabel').text('Modifica Pratica');
@@ -893,32 +1001,32 @@
         const row = document.createElement('div');
         row.className = 'row align-items-center mb-2 collaboratore-row';
         row.innerHTML = `
-     <div class="col-md-6">
-         <select name="UtentiAssociati[${indiceCollaboratore}].ID_Utente" class="form-select form-select-sm" >
-             <option value="">-- Seleziona professionista --</option>
-             ${window.listaUtenti || ''}
-         </select>
-     </div>
-     <div class="col-md-4">
-         <input type="number" name="UtentiAssociati[${indiceCollaboratore}].PercentualePrevisione"
-                class="form-control form-control-sm"
-                value="${percentuale}" placeholder="% collaborazione" step="0.01" />
-     </div>
-     <div class="col-md-2 text-end">
-         <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.collaboratore-row').remove()">✕</button>
-     </div>
- `;
+        <div class="col-md-6">
+            <select name="UtentiAssociati[${indiceCollaboratore}].ID_Utente" class="form-select form-select-sm">
+                <option value="">-- Seleziona professionista --</option>
+                ${window.listaUtenti || ''}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <div class="input-group input-group-sm">
+                <input type="text"
+                       name="UtentiAssociati[${indiceCollaboratore}].PercentualePrevisione"
+                       class="form-control percentuale-input"
+                       value="${percentuale || ''}"
+                       placeholder="es. 33,33"
+                       oninput="this.value=this.value.replace(/[^0-9,\\.]/g,'')">
+                <span class="input-group-text">%</span>
+            </div>
+        </div>
+        <div class="col-md-2 text-end">
+            <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.collaboratore-row').remove()">✕</button>
+        </div>
+    `;
 
         container.appendChild(row);
-
-        // Seleziona il valore passato se presente
-        const select = row.querySelector('select');
-        if (idUtente && select) {
-            select.value = idUtente.toString();
-        }
-
         indiceCollaboratore++;
     }
+
 
     function parseDotNetDate(jsonDate) {
         const match = /\/Date\((\d+)\)\//.exec(jsonDate);
@@ -927,8 +1035,8 @@
         return date.toISOString().split('T')[0]; // "yyyy-MM-dd"
     }
 
-    function apriModaleUtentiAssociati() {
-        fetch('/Pratiche/GetUtentiAttivi')
+    function apriModaleUtentiAssociati(idCliente) {
+        fetch(`/Pratiche/GetUtentiAttivi?idCliente=${idCliente}`)
             .then(r => r.json())
             .then(data => {
                 const tbody = document.getElementById('utentiDisponibiliContainer');
@@ -937,11 +1045,11 @@
                 data.forEach(utente => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                 <td><input type="checkbox" class="form-check-input" value="${utente.ID_Utente}" data-nome="${utente.NomeCompleto}"></td>
-                 <td>${utente.NomeCompleto}</td>
-                 <td>${utente.Email || '-'}</td>
-                 <td>${utente.Ruolo || '-'}</td>
-             `;
+                    <td><input type="checkbox" class="form-check-input" value="${utente.ID_Utente}" data-nome="${utente.NomeCompleto}"></td>
+                    <td>${utente.NomeCompleto}</td>
+                    <td>${utente.Email || '-'}</td>
+                    <td>${utente.Ruolo || '-'}</td>
+                `;
                     tbody.appendChild(tr);
                 });
 
@@ -952,6 +1060,40 @@
                 toastr.error("Errore durante il caricamento utenti.");
             });
     }
+
+    function caricaUtentiAssociabili(idCliente, utentiDaEscludere = []) {
+        // 🔹 Costruisco la URL: se idCliente non valido, chiamo senza parametro
+        let url = "/Pratiche/GetUtentiAttivi";
+        if (idCliente && parseInt(idCliente) > 0) {
+            url += `?idCliente=${idCliente}`;
+        }
+
+        return fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error("Risposta non valida dal server");
+                return response.json();
+            })
+            .then(data => {
+                if (Array.isArray(data)) {
+                    const esclusi = new Set(utentiDaEscludere);
+
+                    const utentiFiltrati = data.filter(u => !esclusi.has(u.ID_Utente));
+
+                    window.listaUtenti = utentiFiltrati.map(u =>
+                        `<option value="${u.ID_Utente}">${u.NomeCompleto}</option>`
+                    ).join('');
+                } else {
+                    console.warn("⚠️ Nessun utente associabile ricevuto dal backend");
+                    window.listaUtenti = '';
+                }
+            })
+            .catch(err => {
+                console.error("Errore nel caricamento utenti associabili:", err);
+                toastr.error("Errore nel caricamento utenti.");
+                window.listaUtenti = '';
+            });
+    }
+
 
     function aggiornaListaUtentiAssociati() {
         const container = document.getElementById("collaboratoriContainer");
@@ -964,15 +1106,26 @@
 
         utentiAssociati.forEach((u, i) => {
             const div = document.createElement("div");
-            div.className = "row align-items-center mb-2";
+            div.className = "row align-items-center mb-2 collaboratore-row";
 
             div.innerHTML = `
             <div class="col-md-6">
-                <input type="text" class="form-control form-control-sm" value="${u.Nome}" readonly />
+                <input type="text"
+                       class="form-control form-control-sm"
+                       value="${u.Nome}"
+                       readonly />
                 <input type="hidden" name="UtentiAssociati[${i}].ID_Utente" value="${u.ID}" />
             </div>
             <div class="col-md-4">
-                <input type="number" class="form-control form-control-sm" name="UtentiAssociati[${i}].PercentualePrevisione" placeholder="% collaborazione" step="0.01" value="${u.Percentuale || ''}" required />
+                <div class="input-group input-group-sm">
+                    <input type="text"
+                           name="UtentiAssociati[${i}].PercentualePrevisione"
+                           class="form-control percentuale-input"
+                           placeholder="es. 33,33"
+                           oninput="this.value=this.value.replace(/[^0-9,\\.]/g,'')"
+                           value="${(u.Percentuale || '').toString().replace('.', ',')}" />
+                    <span class="input-group-text">%</span>
+                </div>
             </div>
             <div class="col-md-2 text-end">
                 <button type="button" class="btn btn-sm btn-danger" onclick="rimuoviUtenteAssociato(${i})">✕</button>
@@ -982,25 +1135,68 @@
             container.appendChild(div);
         });
     }
+
     function rimuoviUtenteAssociato(indice) {
         utentiAssociati.splice(indice, 1);
         aggiornaListaUtentiAssociati();
     }
-
     function caricaClienti() {
         return fetch('/Pratiche/GetClientiAttivi')
             .then(r => r.json())
             .then(data => {
                 const select = document.getElementById('selectCliente');
                 select.innerHTML = '<option value="">-- Seleziona cliente --</option>';
+
+                // ✅ Ordina per cognome poi nome (suddividendo il campo Nome)
+                data.sort((a, b) => {
+                    const [aCognome, aNome] = a.Nome.split(' ');
+                    const [bCognome, bNome] = b.Nome.split(' ');
+
+                    // confronto case-insensitive
+                    const cognomeComp = (aCognome || '').localeCompare(bCognome || '', 'it', { sensitivity: 'base' });
+                    if (cognomeComp !== 0) return cognomeComp;
+
+                    return (aNome || '').localeCompare(bNome || '', 'it', { sensitivity: 'base' });
+                });
+
+                // ✅ Popola la select
                 data.forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c.ID_Cliente;
                     opt.textContent = c.Nome;
                     select.appendChild(opt);
                 });
+
+                return true;
+            })
+            .catch(err => {
+                console.error("❌ Errore caricamento clienti:", err);
+                toastr.error("Errore nel caricamento della lista clienti.");
             });
     }
+
+    //  barra di ricerca carica clienti
+    document.addEventListener("DOMContentLoaded", function () {
+        const input = document.getElementById('searchCliente');
+        const select = document.getElementById('selectCliente');
+
+        if (input && select) {
+            input.addEventListener('keyup', function () {
+                const filtro = this.value.toLowerCase();
+                const opzioni = select.querySelectorAll('option');
+
+                opzioni.forEach(opt => {
+                    if (opt.value === "" || opt.text.toLowerCase().includes(filtro)) {
+                        opt.style.display = '';
+                    } else {
+                        opt.style.display = 'none';
+                    }
+                });
+            });
+        }
+    });
+
+
 
     // salvataggio modali crea e modifica
     $('#PraticaForm').on('submit', function (e) {
@@ -1018,7 +1214,7 @@
         // 📌 1. Controllo stato "In lavorazione" → serve incarico
         const stato = formData.get("Stato");
         const fileIncarico = document.getElementById('inputFileIncarico')?.files[0];
-        const incaricoEsistente = document.getElementById('hiddenFileAllegato')?.value;
+        const incaricoEsistente = document.getElementById('hiddenFileAllegato')?.value?.trim() || "";
 
         if (stato === "In lavorazione" && !fileIncarico && !incaricoEsistente) {
             toastr.warning("⚠️ Devi caricare un incarico firmato prima di passare allo stato 'In lavorazione'.");
@@ -1028,21 +1224,33 @@
         // 📌 2. Compensi JSON cumulativi (hidden) + ricalcolo budget
         const hiddenCompensi = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
         if (hiddenCompensi) {
-            formData.set("CompensiJSON", hiddenCompensi.value);
+            let compensi = [];
+            try {
+                compensi = JSON.parse(decodeURIComponent(hiddenCompensi.value || "[]"));
+            } catch (err) {
+                console.warn("⚠️ Errore nel parse di CompensiJSON:", err, hiddenCompensi.value);
+                compensi = [];
+            }
+
+            formData.set("CompensiJSON", JSON.stringify(compensi));
 
             const idPraticaCorrente = formData.get("ID_Pratiche");
-            const compensi = JSON.parse(hiddenCompensi.value || "[]");
-
-            // 👉 In creazione o se in modifica ma i compensi sono cambiati → ricalcola
             const compensiOriginali = window.compensiOriginaliJSON ? JSON.stringify(window.compensiOriginaliJSON) : null;
             const compensiAttuali = JSON.stringify(compensi);
 
+            // ✅ Calcolo budget SOLO in creazione o se i compensi cambiano davvero
             if (!idPraticaCorrente || parseInt(idPraticaCorrente) === 0 || compensiOriginali !== compensiAttuali) {
-                try {
-                    aggiornaValoreStimato(compensi); // aggiorna il campo [name="Budget"]
-                } catch (err) {
-                    console.warn("⚠️ Errore calcolo budget:", err);
+                if (compensi.length > 0) {
+                    try {
+                        aggiornaValoreStimato(compensi);
+                    } catch (err) {
+                        console.warn("⚠️ Errore calcolo budget:", err);
+                    }
+                } else {
+                    console.log("💡 Nessun compenso trovato: mantengo budget invariato");
                 }
+            } else {
+                console.log("💡 Nessuna variazione compensi: budget invariato");
             }
         }
 
@@ -1051,12 +1259,26 @@
         if (inputTrattenuta) {
             formData.set("TrattenutaPersonalizzata", inputTrattenuta.value);
         }
-
         // 📌 4. Documento incarico firmato (PDF)
         const fileIncaricoInput = document.getElementById('inputFileIncarico');
         if (fileIncaricoInput && fileIncaricoInput.files.length > 0) {
             formData.append("DocumentoIncarico", fileIncaricoInput.files[0]);
+        } else if (document.getElementById('hiddenFileAllegato')?.value) {
+            // Se c'è già un file salvato, lo includo per non perderlo
+            formData.set("PercorsoDocumentoEsistente", document.getElementById('hiddenFileAllegato').value);
         }
+
+        // 📍 3.1 NORMALIZZA percentuali collaboratori (33,33 → 33.33)
+        document.querySelectorAll('input[name*="PercentualePrevisione"]').forEach(input => {
+            let val = input.value.trim();
+            val = val.replace('%', '').replace(/\s+/g, ''); // rimuove simboli e spazi
+            val = val.replace(',', '.'); // converte la virgola in punto
+            let num = parseFloat(val);
+            if (isNaN(num)) num = 0;
+            formData.set(input.name, num);
+            console.log(`🔹 Percentuale normalizzata [${input.name}] = ${num}`);
+        });
+
 
         // 📌 5. Metodo di compenso (solo in creazione pratica)
         const idPratica = formData.get("ID_Pratiche");
@@ -1114,6 +1336,16 @@
                     el.setAttribute('readonly', true);
                 });
             });
+    });
+
+    // Mostra il nome del file selezionato
+    document.getElementById("inputFileIncarico")?.addEventListener("change", function () {
+        const fileIncaricoSelezionato = document.getElementById("fileIncaricoSelezionato");
+        if (this.files && this.files.length > 0) {
+            fileIncaricoSelezionato.textContent = "📂 File selezionato: " + this.files[0].name;
+        } else {
+            fileIncaricoSelezionato.textContent = "";
+        }
     });
 
 
@@ -1479,32 +1711,7 @@
         bootstrap.Modal.getInstance(document.getElementById('movimentoBancarioModal')).hide();
     }
 
-    function caricaUtentiAssociabili(idOwner = null, utentiDaEscludere = []) {
-        return fetch('/Pratiche/GetUtentiAttivi')
-            .then(response => response.json())
-            .then(data => {
-                if (Array.isArray(data)) {
-                    // Costruisci un Set con gli ID da escludere (owner + già associati)
-                    const esclusi = new Set([
-                        ...(idOwner ? [idOwner] : []),
-                        ...utentiDaEscludere
-                    ]);
 
-                    // Filtra solo gli utenti non esclusi
-                    const utentiFiltrati = data.filter(u => !esclusi.has(u.ID_Utente));
-
-                    // Costruisci la lista HTML per i dropdown
-                    window.listaUtenti = utentiFiltrati.map(u =>
-                        `<option value="${u.ID_Utente}">${u.NomeCompleto}</option>`
-                    ).join('');
-                }
-            })
-            .catch(err => {
-                console.error("Errore nel caricamento utenti associabili:", err);
-                toastr.error("Errore nel caricamento utenti.");
-                window.listaUtenti = ''; // fallback in caso di errore
-            });
-    }
 
     let indiceUtente = 0;
     function aggiungiUtentiSelezionati() {
@@ -1615,7 +1822,7 @@
             });
     }
 
-    // gestione costo pratica
+    /* gestione costo pratica*/
 
     function apriModaleCostiPratica() {
         const modal = new bootstrap.Modal(document.getElementById('modaleCostiPratica'));
@@ -1670,7 +1877,7 @@
     }
 
 
-    function aggiungiCostoPratica(idAnagrafica = null, importo = null) {
+    async function aggiungiCostoPratica(idAnagrafica = null, importo = null, idFornitore = null) {
         const container = document.getElementById('costiPraticaContainer');
         const index = container.querySelectorAll('.riga-costo-pratica').length;
 
@@ -1678,45 +1885,115 @@
         riga.className = 'row riga-costo-pratica align-items-center mb-2';
 
         riga.innerHTML = `
-        <div class="col-md-6">
-            <select name="CostiPratica[${index}].ID_AnagraficaCosto" class="form-select form-select-sm select-costo-pratica" required></select>
-        </div>
         <div class="col-md-4">
-            <input type="number" step="0.01" name="CostiPratica[${index}].Importo" class="form-control form-control-sm" placeholder="Importo €" required value="${importo ?? ''}" />
+            <select name="CostiPratica[${index}].ID_AnagraficaCosto"
+                    class="form-select form-select-sm select-costo-pratica"
+                    required>
+                <option value="">-- Seleziona voce --</option>
+            </select>
         </div>
-        <div class="col-md-2 text-end">
+
+        <div class="col-md-3">
+            <input type="number" step="0.01"
+                   name="CostiPratica[${index}].Importo"
+                   class="form-control form-control-sm"
+                   placeholder="Importo €"
+                   required
+                   value="${importo ?? ''}" />
+        </div>
+
+        <div class="col-md-4">
+            <select name="CostiPratica[${index}].ID_Fornitore"
+                    class="form-select form-select-sm select-fornitore-pratica">
+                <option value="">-- Fornitore (opzionale) --</option>
+            </select>
+        </div>
+
+        <div class="col-md-1 text-end">
             <button type="button" class="btn btn-danger btn-sm" onclick="rimuoviCostoPratica(this)">✕</button>
         </div>
     `;
 
         container.appendChild(riga);
 
-        const select = riga.querySelector('select');
-
-        // Carica opzioni da controller
-        fetch('/Pratiche/GetAnagraficaCostiPratica')
+        // ===============================
+        // 🔹 1️⃣ CARICA ANAGRAFICA COSTI
+        // ===============================
+        const selectCosto = riga.querySelector('.select-costo-pratica');
+        await fetch('/Pratiche/GetAnagraficaCostiPratica')
             .then(r => r.json())
             .then(response => {
                 if (!response.success || !Array.isArray(response.data)) return;
-
-                select.innerHTML = '<option value="">-- Seleziona voce --</option>';
+                selectCosto.innerHTML = '<option value="">-- Seleziona voce --</option>';
                 response.data.forEach(voce => {
                     const opt = document.createElement('option');
-                    opt.value = voce.ID_AnagraficaCosto; // ✅ questo è il nome corretto del campo
-                    opt.textContent = `${voce.Nome} - ${voce.Descrizione}`;
-                    select.appendChild(opt);
+                    opt.value = voce.ID_AnagraficaCosto;
+                    opt.textContent = `${voce.Nome ?? ""}${voce.Descrizione ? " - " + voce.Descrizione : ""}`;
+                    selectCosto.appendChild(opt);
                 });
+                if (idAnagrafica) selectCosto.value = idAnagrafica.toString();
+            })
+            .catch(err => console.error("❌ Errore caricamento anagrafica costi:", err));
 
-                if (idAnagrafica) {
-                    console.log("🎯 Selezione ID Anagrafica:", idAnagrafica);
-                    select.value = idAnagrafica.toString();
+        // ===============================
+        // 🔹 2️⃣ GESTIONE FORNITORI (dinamico per categoria)
+        // ===============================
+        const selectFornitore = riga.querySelector('.select-fornitore-pratica');
 
-                    if (select.value !== idAnagrafica.toString()) {
-                        console.warn(`⚠️ Valore ${idAnagrafica} NON trovato tra le opzioni!`);
+        // Funzione per caricare fornitori (filtrati o tutti)
+        function caricaFornitori(idCategoria = null, idFornitorePreselezionato = null) {
+            const url = idCategoria && idCategoria > 0
+                ? `/Pratiche/GetFornitoriByCategoria?idCategoria=${idCategoria}`
+                : `/Pratiche/GetFornitoriAttivi`;
+
+            fetch(url)
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.success || !Array.isArray(res.data)) {
+                        selectFornitore.innerHTML = '<option value="">-- Nessun fornitore disponibile --</option>';
+                        return;
                     }
-                }
-            });
+
+                    selectFornitore.innerHTML = '<option value="">-- Seleziona fornitore (opzionale) --</option>';
+                    res.data.forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = f.ID_Cliente;
+                        opt.textContent = f.Nome;
+                        selectFornitore.appendChild(opt);
+                    });
+
+                    // Se già presente un fornitore
+                    if (idFornitorePreselezionato) {
+                        selectFornitore.value = idFornitorePreselezionato.toString();
+                    }
+                })
+                .catch(err => console.error("❌ Errore caricamento fornitori:", err));
+        }
+
+        // Caricamento iniziale (tutti)
+        caricaFornitori(null, idFornitore);
+
+        // Quando cambia il costo → ricarica fornitori in base alla categoria
+        selectCosto.addEventListener('change', function () {
+            const idCosto = this.value;
+            if (!idCosto) {
+                caricaFornitori(null);
+                return;
+            }
+
+            fetch(`/Pratiche/GetCategoriaByCosto?idCosto=${idCosto}`)
+                .then(r => r.json())
+                .then(cat => {
+                    if (cat.success && cat.idCategoria) {
+                        caricaFornitori(cat.idCategoria);
+                    } else {
+                        caricaFornitori(null);
+                    }
+                })
+                .catch(err => console.error("❌ Errore GetCategoriaByCosto:", err));
+        });
     }
+
 
 
     function salvaCostiPratica() {
@@ -1732,26 +2009,41 @@
         costiPraticaCorrenti = [];
 
         righe.forEach((row, index) => {
-            const select = row.querySelector('select');
+            const selectCosto = row.querySelector('.select-costo-pratica');
+            const selectFornitore = row.querySelector('.select-fornitore-pratica');
             const inputImporto = row.querySelector('input[type="number"]');
 
-            const descrizione = select.selectedOptions[0]?.textContent || '';
+            const descrizione = selectCosto.selectedOptions[0]?.textContent?.trim() || '';
             const importo = parseFloat(inputImporto.value || "0");
+            const idAnagrafica = selectCosto.value || null;
+            const idFornitore = selectFornitore?.value || null;
+            const nomeFornitore = selectFornitore?.selectedOptions[0]?.textContent?.trim() || '';
 
+            // ✅ Salva solo se ha una descrizione e importo valido
             if (descrizione && !isNaN(importo) && importo > 0) {
-                costiPraticaCorrenti.push({ Descrizione: descrizione, Importo: importo });
+                costiPraticaCorrenti.push({
+                    Descrizione: descrizione,
+                    Importo: importo,
+                    ID_AnagraficaCosto: idAnagrafica,
+                    ID_Fornitore: idFornitore,
+                    NomeFornitore: (nomeFornitore && nomeFornitore !== "-- Fornitore (opzionale) --")
+                        ? nomeFornitore
+                        : ""
+                });
             }
 
-            // 🧩 Hidden per salvataggio
-            hiddenContainer.appendChild(creaHidden(`CostiPratica[${index}].ID_AnagraficaCosto`, select.value));
-            hiddenContainer.appendChild(creaHidden(`CostiPratica[${index}].Importo`, inputImporto.value));
+            // 🧩 Hidden per salvataggio nel form
+            hiddenContainer.appendChild(creaHidden(`CostiPratica[${index}].ID_AnagraficaCosto`, idAnagrafica));
+            hiddenContainer.appendChild(creaHidden(`CostiPratica[${index}].Importo`, importo));
+            hiddenContainer.appendChild(creaHidden(`CostiPratica[${index}].ID_Fornitore`, idFornitore));
         });
 
-        toastr.success("Costi della Pratica inseriti correttamente.");
+        toastr.success("💾 Costi della Pratica inseriti correttamente.");
         bootstrap.Modal.getInstance(document.getElementById('modaleCostiPratica')).hide();
 
         aggiornaStatoCostiCaricati();
     }
+
 
     // ✅ Funzione utility condivisa
     function creaHidden(name, value) {
@@ -1776,52 +2068,133 @@
         costiPraticaCorrenti.forEach((costo, index) => {
             container.appendChild(creaHidden(`CostiPratica[${index}].ID_AnagraficaCosto`, costo.ID_AnagraficaCosto));
             container.appendChild(creaHidden(`CostiPratica[${index}].Importo`, costo.Importo));
-            container.appendChild(creaHidden(`CostiPratica[${index}].IDCostoHidden`, costo.IDCostoHidden));
+            container.appendChild(creaHidden(`CostiPratica[${index}].IDCostoHidden`, costo.IDCostoHidden || ''));
+            container.appendChild(creaHidden(`CostiPratica[${index}].ID_Fornitore`, costo.ID_Fornitore || '')); // ✅ nuovo campo
         });
     }
 
 
-    // fine gestione costo pratica
+    // Gestione visualizzazione costi pratica se sono inseriti
+    let costiPraticaCorrenti = [];
+
+    function aggiornaStatoCostiCaricati() {
+        const iconeContainer = document.getElementById("riepilogoCostiIcone");
+        const tooltip = document.getElementById("riepilogoCostiTooltip");
+        const contenitore = document.getElementById("statoCostiCaricati");
+
+        let html = '';
+        let tooltipText = '';
+
+        if (costiPraticaCorrenti.length > 0) {
+            // ✅ Icona verde
+            html += `<i class="fas fa-check-circle text-success me-2" title="Costi Pratica caricati"></i>`;
+
+            // ✅ Riepilogo inline (prime 2 voci max, poi "…")
+            const riepilogoInline = costiPraticaCorrenti
+                .slice(0, 2)
+                .map(c => {
+                    const fornitore = c.NomeFornitore ? ` – ${c.NomeFornitore}` : '';
+                    return `${c.Descrizione}${fornitore} (${parseFloat(c.Importo).toFixed(2)}€)`;
+                })
+                .join(" • ");
+
+            html += `<span class="text-muted small">${riepilogoInline}${costiPraticaCorrenti.length > 2 ? " …" : ""}</span>`;
+
+            // Tooltip dettagliato con fornitore
+            tooltipText = `✅ Costi Pratica:\n` +
+                costiPraticaCorrenti.map(c => {
+                    const fornitore = c.NomeFornitore ? ` – ${c.NomeFornitore}` : '';
+                    return `• ${c.Descrizione}${fornitore}: ${parseFloat(c.Importo).toFixed(2)}€`;
+                }).join("\n");
+        } else {
+            // ❌ Icona rossa
+            html += `<i class="fas fa-times-circle text-danger me-2" title="Costi Pratica mancanti"></i>`;
+            html += `<span class="text-danger small">Nessun costo inserito</span>`;
+            tooltipText = `⚠️ Nessun costo Pratica aggiunto`;
+        }
+
+        // 🧩 Aggiorna box
+        iconeContainer.innerHTML = html;
+        tooltip.setAttribute("title", tooltipText);
+        new bootstrap.Tooltip(tooltip);
+        contenitore.style.display = "flex";
+    }
+
+    /*fine gestione costo pratica */
 
     // gestione template
 
+    //function caricaTemplateIncarico(idProfessionista) {
+    //    return fetch(`/Pratiche/GetTemplateByProfessionista?idProfessionista=${idProfessionista}`)
+    //        .then(r => r.json())
+    //        .then(data => {
+    //            if (!data.success) {
+    //                toastr.warning(data.message || "Nessun template disponibile.");
+    //                return null;
+    //            }
+    //            return data.data; // { IDTemplateIncarichi, NomeTemplate, ContenutoHtml }
+    //        })
+    //        .catch(() => {
+    //            toastr.error("Errore nel caricamento del template incarico.");
+    //            return null;
+    //        });
+    //}
+
     function generaIncaricoDiretto(idPratica) {
-        fetch(`/Pratiche/GeneraFoglioIncarico?idPratica=${idPratica}`)
-            .then(r => r.json())
-            .then(res => {
-                if (!res.success) {
-                    toastr.error(res.message || "Errore generazione incarico.");
+        $.ajax({
+            url: `/Pratiche/GeneraFoglioIncarico?idPratica=${idPratica}`,
+            type: 'GET',
+            success: function (res) {
+                if (!res.success || !res.templates || res.templates.length === 0) {
+                    toastr.warning("Nessun template disponibile per questa pratica.");
                     return;
                 }
 
-                const contenitore = document.getElementById("contenutoTemplateGenerato");
-                contenitore.innerHTML = res.html;
+                let currentIndex = 0;
 
-                // Salva ID pratica corrente (se serve poi nel bottone 'Salva')
-                window.ID_Pratica_Corrente = idPratica;
+                function mostraTemplate(index) {
+                    const tpl = res.templates[index];
+                    $('#AnteprimaIncaricoModal .modal-body').html(tpl.Html);
+                    $('#AnteprimaIncaricoModal .modal-title').text("Anteprima Incarico – " + tpl.TipoCompenso);
 
-                // Mostra modale
-                const modal = new bootstrap.Modal(document.getElementById("modaleAnteprimaTemplate"));
-                modal.show();
-            });
-    }
-
-    function caricaTemplateIncarico(idProfessionista) {
-        return fetch(`/Pratiche/GetTemplateByProfessionista?idProfessionista=${idProfessionista}`)
-            .then(r => r.json())
-            .then(data => {
-                if (!data.success) {
-                    toastr.warning(data.message || "Nessun template disponibile.");
-                    return null;
+                    // Gestione pulsanti
+                    $('#btnIndietro').prop('disabled', index === 0);
+                    $('#btnAvanti').prop('disabled', index === res.templates.length - 1);
                 }
-                return data.data; // { IDTemplateIncarichi, NomeTemplate, ContenutoHtml }
-            })
-            .catch(() => {
-                toastr.error("Errore nel caricamento del template incarico.");
-                return null;
-            });
+
+                // Mostra il primo template
+                mostraTemplate(currentIndex);
+                $('#AnteprimaIncaricoModal').modal('show');
+
+                // Navigazione avanti/indietro
+                $('#btnAvanti').off('click').on('click', function () {
+                    if (currentIndex < res.templates.length - 1) {
+                        currentIndex++;
+                        mostraTemplate(currentIndex);
+                    }
+                });
+
+                $('#btnIndietro').off('click').on('click', function () {
+                    if (currentIndex > 0) {
+                        currentIndex--;
+                        mostraTemplate(currentIndex);
+                    }
+                });
+            },
+            error: function () {
+                toastr.error("Errore durante la generazione dell’incarico.");
+            }
+        });
     }
 
+
+
+    // 🔹 Non serve più, ma la lasciamo "vuota" per compatibilità
+    function caricaTemplateIncarico(idProfessionista) {
+        return Promise.resolve(null);
+    }
+
+    // 🔹 Non serve più, ma la lasciamo "redirect" al metodo principale
     function generaFoglioIncarico(idPratica) {
         return fetch(`/Pratiche/GeneraFoglioIncarico?idPratica=${idPratica}`)
             .then(r => r.json())
@@ -1831,7 +2204,7 @@
                     return null;
                 }
 
-                return response.html; // HTML compilato da visualizzare o convertire in PDF
+                return response.html; // HTML già pronto
             })
             .catch(err => {
                 toastr.error("Errore durante la generazione del foglio incarico.");
@@ -1839,80 +2212,48 @@
             });
     }
 
-
     function stampaContenuto() {
         const contenuto = document.getElementById("contenutoTemplateGenerato").innerHTML;
         const win = window.open('', '', 'height=800,width=800');
         win.document.write('<html><head><title>Stampa Incarico</title>');
-        win.document.write('</head><body >');
+        win.document.write(`
+        <style>
+            @@page {
+                size: A4;
+                margin: 20mm;
+            }
+
+            body {
+                font-family: "Times New Roman", serif;
+                font-size: 12pt;
+                margin: 0;
+                padding: 0;
+            }
+
+            table {
+                border-collapse: collapse;
+                page-break-inside: avoid;
+                margin: auto; /* la lascia stretta come nel contenuto */
+            }
+
+            tr, td, th {
+                page-break-inside: avoid;
+                page-break-after: auto;
+                padding: 4px;
+                vertical-align: top;
+            }
+        </style>
+    `);
+        win.document.write('</head><body>');
         win.document.write(contenuto);
         win.document.write('</body></html>');
         win.document.close();
         win.print();
     }
 
-    function salvaComePDF() {
-        const contenutoHtml = document.getElementById("contenutoTemplateGenerato")?.innerHTML;
 
-        if (!contenutoHtml || contenutoHtml.trim() === "") {
-            toastr.warning("Contenuto vuoto. Inserisci il testo dell’incarico.");
-            return;
-        }
 
-        // ⬇️ Prendi dinamicamente l’ID pratica dal campo hidden
-        const idPratica = document.querySelector('[name="ID_Pratiche"]')?.value;
 
-        if (!idPratica || isNaN(idPratica)) {
-            toastr.error("ID pratica non valido.");
-            return;
-        }
-
-        const params = new URLSearchParams();
-        params.append("idPratica", idPratica);
-        params.append("html", contenutoHtml);
-
-        fetch('/Pratiche/GeneraPDFIncaricoDaHtml', {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: params
-        })
-            .then(r => r.json())
-            .then(res => {
-                if (res.success) {
-                    toastr.success("PDF generato e salvato correttamente.");
-                    const modal = bootstrap.Modal.getInstance(document.getElementById("modaleAnteprimaTemplate"));
-                    if (modal) modal.hide();
-
-                    // --- INIZIO: Aggiorna bottone in tabella ---
-                    const rows = document.querySelectorAll("#praticheTable tbody tr");
-                    rows.forEach(row => {
-                        // Qui assumo che ogni riga abbia un attributo data-id con l'id pratica, se no puoi adattare
-                        // oppure puoi cercare la cella con ID_Pratiche visibile (es. hidden input o altro)
-                        // Se hai nel markup <tr data-id="..."> è meglio
-                        const idRiga = row.getAttribute("data-id") || row.querySelector('td[data-pratica-id]')?.textContent.trim();
-                        if (idRiga == idPratica) {
-                            // Trova la cella azioni (assumiamo ultima cella)
-                            const azioniCell = row.cells[row.cells.length - 1];
-                            if (azioniCell) {
-                                azioniCell.innerHTML = `
-                                <button class="btn btn-primary btn-sm" onclick="apriModificaPratica(${idPratica})">Modifica</button>
-                                <button class="btn btn-danger btn-sm" onclick="eliminaPratica(${idPratica})">Elimina</button>
-                                <button class="btn btn-outline-primary btn-sm" onclick="visualizzaDocumentiIncarico(${idPratica})">📎 Visualizza Incarico</button>
-                                <!-- altri bottoni eventualmente -->
-                            `;
-                            }
-                        }
-                    });
-                    // --- FINE: Aggiorna bottone in tabella ---
-
-                } else {
-                    toastr.error(res.message || "Errore durante la generazione del PDF.");
-                }
-            })
-            .catch(() => toastr.error("Errore di rete durante il salvataggio del PDF"));
-    }
 
     function salvaFoglioIncaricoFirmato(idPratica) {
         const input = document.getElementById("inputFileIncarico");
@@ -1995,8 +2336,31 @@
     }
 
     function scaricaFoglioIncarico(idDocumento) {
-        window.open(`/Pratiche/ScaricaFoglioIncarico?idDocumento=${idDocumento}`, "_blank");
+        if (!idDocumento || isNaN(idDocumento)) {
+            toastr.warning("⚠️ Documento non valido o mancante.");
+            return;
+        }
+
+        // 🔍 Verifica che il documento esista prima di aprire
+        fetch(`/Pratiche/DownloadDocumentoPratica?idDocumento=${idDocumento}`, {
+            method: "HEAD"
+        })
+            .then(response => {
+                if (response.ok) {
+                    // ✅ Documento trovato → apri nuova scheda
+                    window.open(`/Pratiche/DownloadDocumentoPratica?idDocumento=${idDocumento}`, "_blank");
+                } else if (response.status === 404) {
+                    toastr.warning("📄 Documento non trovato o non più disponibile.");
+                } else {
+                    toastr.error("❌ Errore durante il download del documento.");
+                }
+            })
+            .catch(err => {
+                console.error("Errore durante la verifica del documento:", err);
+                toastr.error("Errore di connessione al server.");
+            });
     }
+
     function visualizzaDocumentiIncarico(idPratica) {
         fetch(`/Pratiche/GetDocumentiIncarico?idPratica=${idPratica}`)
             .then(r => r.json())
@@ -2011,37 +2375,345 @@
                     return;
                 }
 
-                // Prendi il primo documento
+                // ✅ Prendi il primo documento valido
                 const doc = data.documenti[0];
+                if (!doc.ID_Documento) {
+                    toastr.warning("Documento non valido o incompleto.");
+                    return;
+                }
 
-                // Apri PDF in nuova scheda/finestra
-                window.open(`/Pratiche/ScaricaFoglioIncarico?idDocumento=${doc.ID_Documento}`, '_blank');
+                // ✅ Apri il documento in una nuova scheda
+                window.open(`/Pratiche/DownloadDocumentoPratica?idDocumento=${doc.ID_Documento}`, '_blank');
             })
-            .catch(() => {
-                toastr.error("Errore nel caricamento dei documenti incarico.");
+            .catch(err => {
+                console.error("Errore durante il caricamento dei documenti incarico:", err);
+                toastr.error("Errore di connessione al server.");
             });
     }
+
+
+    let templatesCorrenti = [];
+    let indiceCorrente = 0;
 
     function apriAnteprimaIncarico(idPratica) {
         fetch(`/Pratiche/GeneraFoglioIncarico?idPratica=${idPratica}`)
             .then(r => r.json())
             .then(res => {
-                if (res.success) {
-                    document.getElementById("contenutoTemplateGenerato").innerHTML = res.html;
-                    // Imposta il valore nascosto dell'id pratica
-                    document.querySelector('[name="ID_Pratiche"]').value = idPratica;
-
-                    const modal = new bootstrap.Modal(document.getElementById("modaleAnteprimaTemplate"));
-                    modal.show();
-                } else {
+                if (!res.success || !res.templates || res.templates.length === 0) {
+                    // 🔴 Mostra il toast all’utente
                     toastr.error(res.message || "Errore nella generazione dell'incarico");
+
+                    // 🧠 Mostra il dettaglio tecnico completo in console
+                    console.error("🚨 ERRORE GeneraFoglioIncarico:", res.message || "(nessun messaggio ricevuto)");
+
+                    // (Facoltativo) mostra un alert modale se vuoi vederlo subito in produzione
+                    // alert(res.message || "Errore nella generazione dell'incarico");
+                    return;
                 }
+
+                // 🔹 Inizializza i template con copia modificabile
+                templatesCorrenti = res.templates.map(t => ({
+                    ...t,
+                    HtmlModificato: t.Html // inizialmente uguale all’originale
+                }));
+                indiceCorrente = 0;
+
+                mostraTemplateCorrente();
+                document.querySelector('[name="ID_Pratiche"]').value = idPratica;
+
+                const modal = new bootstrap.Modal(document.getElementById("modaleAnteprimaTemplate"));
+                modal.show();
             })
-            .catch(() => toastr.error("Errore di rete durante il caricamento dell'incarico"));
+            .catch(err => {
+                // 🔴 Gestione errori di rete o fetch bloccata
+                toastr.error("Errore di rete durante il caricamento dell'incarico");
+                console.error("🌐 Errore rete/fetch GeneraFoglioIncarico:", err);
+            });
     }
 
+
+    // ======================================================
+    // 🔹 Mostra un template alla volta (con supporto salto pagina logico)
+    // ======================================================
+  function mostraTemplateCorrente() {
+  const contenitore = document.getElementById("contenutoTemplateGenerato");
+  if (!contenitore) return;
+
+  // 🧹 Pulisce tutto prima di riscrivere
+  contenitore.innerHTML = "";
+
+  const t = templatesCorrenti[indiceCorrente];
+  if (!t) return;
+
+  // 🔹 Recupera l'HTML del template (solo corpo)
+  let html = t.HtmlModificato || t.Html || "";
+
+  // ✨ Rimuove marker o <hr> post-tabella
+  html = html
+    .replace(/<\/table>\s*<hr[^>]*class=['"]page-break['"][^>]*>/gi, "</table>")
+    .replace(/<!--PAGEBREAK-->/gi, ""); // rimuove i marker manuali
+
+  // 📄 Genera layout A4 per anteprima (modificabile)
+  contenitore.innerHTML = `
+    <div class="page-preview">
+      <div class="page-inner" id="anteprimaContenuto" contenteditable="true">
+        <h5 class="mb-3 text-primary text-center">
+          Compenso: ${t.TipoCompenso || "N/D"}
+        </h5>
+        ${html}
+      </div>
+    </div>
+  `;
+
+  // 📄 Aggiorna contatore in basso
+  document.getElementById("templateCounter").textContent =
+    `Template ${indiceCorrente + 1} di ${templatesCorrenti.length}`;
+
+  // ⏪⏩ Pulsanti di navigazione
+  document.getElementById("btnIndietro").disabled = indiceCorrente === 0;
+  document.getElementById("btnAvanti").disabled = indiceCorrente === templatesCorrenti.length - 1;
+
+  // 🎨 Impaginazione (solo grafica)
+  setTimeout(suddividiInPagineA4, 300);
+}
+
+
+
+  function suddividiInPagineA4() {
+    const area = document.getElementById("anteprimaContenuto");
+    if (!area) return;
+
+    // 🔹 Rimuovi eventuali marker precedenti
+    document.querySelectorAll(".page-break-marker").forEach(function(el) {
+        el.remove();
+    });
+
+    // 🔹 Calcolo layout reale dopo il rendering
+    requestAnimationFrame(function() {
+        const PAGE_HEIGHT = 1122; // ≈ 297mm 96dpi
+        const totalHeight = area.scrollHeight;
+        const numPages = Math.max(1, Math.ceil(totalHeight / PAGE_HEIGHT));
+
+        // 🔸 Aggiungi linee di riferimento visive (solo anteprima)
+        for (let i = 1; i < numPages; i++) {
+            const marker = document.createElement("div");
+            marker.classList.add("page-break-marker");
+            marker.style.position = "absolute";
+            marker.style.top = (i * PAGE_HEIGHT) + "px";
+            area.appendChild(marker);
+        }
+
+        console.log("📄 Impaginazione aggiornata:", numPages, "pagine reali trovate (senza numeri o linee post-tabella).");
+    });
+}
+
+    // ======================================================
+    // 📄 Impaginazione A4 fluida — nessun offset, nessun taglio, nessuna pagina bianca
+    // ======================================================
+    function impaginaAnteprima() {
+        // Trova l'interno della pagina
+        const contenuto = document.querySelector("#contenutoTemplateGenerato .page-inner");
+        if (!contenuto) return;
+
+        // 🔹 Rimuovi eventuali numeri di pagina precedenti
+        document.querySelectorAll(".page-number").forEach(n => n.remove());
+
+        // 🔹 Aggiungi solo la numerazione visiva (non toccare il contenuto!)
+        setTimeout(() => {
+            const pages = document.querySelectorAll(".page-preview");
+            pages.forEach((p, i) => {
+                const num = document.createElement("div");
+                num.classList.add("page-number");
+                num.textContent = `Pagina ${i + 1}`;
+                p.appendChild(num);
+            });
+        }, 100);
+    }
+
+    // ======================================================
+    // 📄 CSS di simulazione A4 per l'anteprima (iniettato via JS una sola volta)
+    // ======================================================
+    const styleAnteprima = document.createElement("style");
+    styleAnteprima.innerHTML =
+        ".page-preview {" +
+        "  position: relative;" +
+        "  width: 210mm;" +
+        "  min-height: 297mm;" +
+        "  margin: 0 auto;" +
+        "  background: #ffffff;" +
+        "  border: 1px solid #ddd;" +
+        "  box-sizing: border-box;" +
+        "}" +
+
+    ".page-inner {" +
+    "  position: relative;" +
+    "  min-height: 257mm;" +
+    "  padding: 20mm;" +
+    "  overflow: visible;" +
+    "  background: #fff;" +
+    "  color: #000;" +
+    "  white-space: pre-wrap;" + // 👈 aggiungi questa riga
+    "}" +
+
+
+        ".page-break-marker {" +
+        "  position: absolute;" +
+        "  left: 0;" +
+        "  width: 100%;" +
+        "  border-top: 1px dashed rgba(255,0,0,0.25);" +
+        "  pointer-events: none;" +
+        "  z-index: 5;" +
+        "}" +
+
+        ".page-number {" +
+        "  position: absolute;" +
+        "  right: 15mm;" +
+        "  font-size: 10pt;" +
+        "  color: #777;" +
+        "  font-style: italic;" +
+        "  z-index: 5;" +
+        "}" +
+
+        "#contenutoTemplateGenerato {" +
+        "  background: #f4f4f4;" +
+        "  padding: 10px 0;" +
+        "}";
+
+
+
+    document.head.appendChild(styleAnteprima);
+
+
+    // ======================================================
+    // 🔸 Salva modifiche correnti prima di cambiare template
+    // ======================================================
+    function salvaModificheTemplateCorrente() {
+        const contenuto = document.querySelector("#anteprimaContenuto");
+        if (!contenuto || !templatesCorrenti[indiceCorrente]) return;
+
+        // 🔹 Clona il contenuto per manipolarlo senza toccare il DOM reale
+        const clone = contenuto.cloneNode(true);
+
+        // 🔹 Rimuovi eventuali titoli <h5> "Compenso: ..."
+        clone.querySelectorAll("h5.text-primary").forEach(el => el.remove());
+
+        // 🔹 Salva solo l'HTML interno senza il titolo
+        const htmlPulito = clone.innerHTML.trim();
+        templatesCorrenti[indiceCorrente].HtmlModificato = htmlPulito;
+
+        toastr.info(`💾 Modifiche salvate per "${templatesCorrenti[indiceCorrente].TipoCompenso}"`, "", { timeOut: 1200 });
+    }
+
+
+    // ======================================================
+    // 🔸 Navigazione tra template
+    // ======================================================
+    function avantiTemplate() {
+        salvaModificheTemplateCorrente();
+        if (indiceCorrente < templatesCorrenti.length - 1) {
+            indiceCorrente++;
+            mostraTemplateCorrente();
+        }
+    }
+
+    function indietroTemplate() {
+        salvaModificheTemplateCorrente();
+        if (indiceCorrente > 0) {
+            indiceCorrente--;
+            mostraTemplateCorrente();
+        }
+    }
+
+    // ======================================================
+    // 🔸 Salvataggio e generazione PDF di tutti i template
+    // ======================================================
+    function salvaComePDF() {
+        if (!templatesCorrenti || templatesCorrenti.length === 0) {
+            toastr.warning("Nessun template da salvare.");
+            return;
+        }
+
+        const idPratica = document.querySelector('[name="ID_Pratiche"]')?.value;
+        if (!idPratica || isNaN(idPratica)) {
+            toastr.error("ID pratica non valido.");
+            return;
+        }
+
+        // ✅ Salva eventuali modifiche non ancora registrate (ultimo template aperto)
+        salvaModificheTemplateCorrente();
+
+        const btn = event.target;
+        btn.disabled = true;
+        const testoOriginale = btn.innerHTML;
+        btn.innerHTML = "Generazione in corso...";
+
+        let completati = 0;
+
+        templatesCorrenti.forEach((t, index) => {
+            const tipoCompenso = t.TipoCompenso || "Generico";
+            const tipoSanificato = tipoCompenso.replace(/\s+/g, "_").replace(/[^\w_-]/g, "");
+            const nomeTemplate = `Incarico_${tipoSanificato}_${new Date().toISOString().slice(0, 10)}`;
+
+            // ✅ Usa il contenuto modificato dell’utente se presente
+            const htmlDaUsare = t.HtmlModificato && t.HtmlModificato.trim() !== "" ? t.HtmlModificato : t.Html;
+
+            // ✅ Ogni template sarà una pagina separata nel PDF (pulito)
+            const htmlSingolo = `
+        <div class="pagina-template" style="page-break-after: always; padding: 30px; background-color: #ffffff; color: #000;">
+            <h4 style="text-align:center; color:#007bff; margin-bottom:20px;">
+                Compenso: ${t.TipoCompenso}
+            </h4>
+
+            ${htmlDaUsare}
+        </div>`;
+
+            $.ajax({
+                url: "/Pratiche/GeneraPDFIncaricoDaHtml",
+                type: "POST",
+                data: {
+                    idPratica: idPratica,
+                    html: htmlSingolo,
+                    tipoCompenso: tipoCompenso,
+                    nomeFileCustom: nomeTemplate
+                },
+                success: function (result) {
+                    completati++;
+                    if (result.success) {
+                        toastr.success(`✅ PDF ${t.TipoCompenso} generato (${completati}/${templatesCorrenti.length})`);
+                    } else {
+                        toastr.error(`❌ Errore PDF ${t.TipoCompenso}: ${result.message}`);
+                    }
+
+                    if (completati === templatesCorrenti.length) {
+                        fineGenerazione();
+                    }
+                },
+                error: function () {
+                    completati++;
+                    toastr.error(`❌ Errore di rete durante la generazione del PDF (${t.TipoCompenso})`);
+
+                    if (completati === templatesCorrenti.length) {
+                        fineGenerazione();
+                    }
+                }
+            });
+        });
+
+        function fineGenerazione() {
+            const modalEl = document.getElementById('modaleAnteprimaTemplate');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            setTimeout(() => location.reload(), 1000);
+            btn.disabled = false;
+            btn.innerHTML = testoOriginale;
+        }
+    }
+
+
+
     function visualizzaPdf(idDocumento) {
-        window.open(`/Pratiche/ScaricaFoglioIncarico?idDocumento=${idDocumento}`, '_blank');
+        window.open(`/Pratiche/DownloadDocumentoPratica?idDocumento=${idDocumento}`, '_blank');
     }
 
 
@@ -2072,34 +2744,6 @@
 
     // fine gestione
 
-    // gestione visualizzazzione costi practice o pratica se sono inseriti
-    let costiPraticaCorrenti = [];
-
-    function aggiornaStatoCostiCaricati() {
-        const iconeContainer = document.getElementById("riepilogoCostiIcone");
-        const tooltip = document.getElementById("riepilogoCostiTooltip");
-        const contenitore = document.getElementById("statoCostiCaricati");
-
-        let html = '';
-        let tooltipText = '';
-
-        // ✅ Costi Pratica (con array JS)
-        if (costiPraticaCorrenti.length > 0) {
-            html += `<i class="fas fa-check-circle text-success me-2" title="Costi Pratica caricati"></i>`;
-            tooltipText += `✅ Costi Pratica:\n` +
-                costiPraticaCorrenti.map(c => `• ${c.Descrizione}: ${parseFloat(c.Importo).toFixed(2)}€`).join("\n");
-        } else {
-            html += `<i class="fas fa-times-circle text-danger me-2" title="Costi Pratica mancanti"></i>`;
-            tooltipText += `⚠️ Nessun costo Pratica aggiunto`;
-        }
-
-        // 🧩 Mostra tooltip e icone
-        iconeContainer.innerHTML = html;
-        tooltip.setAttribute("title", tooltipText);
-        new bootstrap.Tooltip(tooltip); // 🔁 Riattiva tooltip aggiornato
-        contenitore.style.display = "flex";
-    }
-
 
     //function aggiornaCompensiCalcolati() {
     //    const tariffa = parseFloat(document.querySelector('[name="TariffaOraria"]').value) || 0;
@@ -2121,139 +2765,344 @@
     //    }
     //});
 
-    //// Se vuoi eseguire all'apertura della modale
+    // Se vuoi eseguire all'apertura della modale
     //document.addEventListener('DOMContentLoaded', aggiornaCompensiCalcolati);
     // fine
 
+    // 🔹 Variabile globale (accessibile ovunque)
+    window.intestatariGlobali = [];
 
-    function apriCompensoModal() {
+    // ============================================================
+    // 🧩 Normalizza e ripulisce testi da accenti e apici tipografici
+    // ============================================================
+    function sanitizeText(value) {
+        if (!value) return "";
+        return value
+            .normalize("NFC")                    // uniforma lettere accentate
+            .replace(/[\u2018\u2019]/g, "'")     // converte apici tipografici in '
+            .replace(/[\u201C\u201D]/g, '"')     // converte doppi apici tipografici in "
+            .replace(/[\r\n]+/g, ' ')            // rimuove newline
+            .trim();
+    }
+
+
+    function apriCompensoModal(idPratica) {
+        console.log("🚀 apriCompensoModal CHIAMATA con idPratica:", idPratica, "Stack:", new Error().stack);
+
         const metodo = document.getElementById('metodoCompensoSelect').value;
         const header = document.getElementById('tabellaCompensiHeader');
         const tbody = document.querySelector('#tabellaCompensi tbody');
         const campiAggiuntivi = document.getElementById('campiAggiuntivi');
+        const budgetInput = document.getElementById('BudgetInput');
 
         header.innerHTML = '';
         tbody.innerHTML = '';
         campiAggiuntivi.innerHTML = '';
 
-        // Campi aggiuntivi dinamici
+        // 🔹 Gestione dinamica Budget
+        if (metodo === 'A ore') {
+            budgetInput.removeAttribute('readonly');
+            budgetInput.placeholder = "Inserisci budget stimato manualmente";
+        } else {
+            budgetInput.setAttribute('readonly', true);
+            budgetInput.placeholder = "";
+        }
+
+        // 🔹 Campi aggiuntivi dinamici
         if (metodo === 'Giudiziale') {
             campiAggiuntivi.innerHTML = `
-          <a href="https://www.avvocatoandreani.it/servizi/calcolo-compenso-avvocati-parametri-civili-2014.php" 
-             target="_blank" class="btn btn-outline-info btn-sm mb-2">
-            🔗 Calcolatore parametri civili
-          </a>
-          <input type="text" class="form-control form-control-sm mb-2" 
-                 id="EstremiGiudizio" 
-                 name="EstremiGiudizio" 
-                 placeholder="Estremi giudizio oggetto dell’incarico" />
+            <a href="https://www.avvocatoandreani.it/servizi/calcolo-compenso-avvocati-parametri-civili-2014.php"
+               target="_blank" class="btn btn-outline-info btn-sm mb-2">
+               🔗 Calcolatore parametri civili
+            </a>
+            <input type="text" class="form-control form-control-sm mb-2"
+                   id="EstremiGiudizio"
+                   name="EstremiGiudizio"
+                   placeholder="Estremi giudizio oggetto dell’incarico" />
         `;
         } else if (metodo === 'A ore') {
             campiAggiuntivi.innerHTML = `
-          <input type="text" class="form-control form-control-sm" 
-                 id="OggettoIncarico" 
-                 name="OggettoIncarico" 
-                 placeholder="Oggetto dell’incarico" />
+            <input type="text" class="form-control form-control-sm"
+                   id="OggettoIncarico"
+                   name="OggettoIncarico"
+                   placeholder="Oggetto dell’incarico" />
         `;
         }
 
-        // Intestazioni tabella dinamiche
-        // Intestazioni tabella dinamiche
+        // 🔹 Intestazioni tabella dinamiche
         switch (metodo) {
             case 'Fisso':
                 header.innerHTML = `
-          <th>#</th>
-          <th>Descrizione</th>
-          <th>Importo (€)</th>
-          <th>Tipologia</th>
-          <th>Unità/Valore stimato</th>
-          <th>Intestatario</th>   <!-- 👈 nuova colonna -->
-          <th>Azioni</th>`;
+                <th>#</th>
+                <th>Descrizione</th>
+                <th>Importo (€)</th>
+                <th>Tipologia</th>
+                <th>Unità/Valore stimato</th>
+                <th>Intestatario</th>
+                <th>Azioni</th>`;
                 break;
 
             case 'Giudiziale':
                 header.innerHTML = `
-          <th>#</th>
-          <th>Fase Giudizio</th>
-          <th>Importo (€)</th>
-          <th>Intestatario</th>   <!-- 👈 nuova colonna -->
-          <th class="text-center">Azioni</th>`;
+                <th>#</th>
+                <th>Fase Giudizio</th>
+                <th>Importo (€)</th>
+                <th>Intestatario</th>
+                <th class="text-center">Azioni</th>`;
                 break;
 
             case 'A ore':
                 header.innerHTML = `
-          <th>#</th>
-          <th>Ruolo</th>
-          <th>Tariffa Oraria (€)</th>
-          <th>Intestatario</th>   <!-- 👈 nuova colonna -->
-          <th class="text-center">Azioni</th>`;
+                <th>#</th>
+                <th>Ruolo</th>
+                <th>Tariffa Oraria (€)</th>
+                <th>Intestatario</th>
+                <th class="text-center">Azioni</th>`;
                 break;
         }
 
+        // ⚠️ NUOVA PRATICA → idPratica nullo o 0
+        if (!idPratica || idPratica === "0" || idPratica === 0) {
+            console.log("🆕 Nuova pratica → compensi inizializzati vuoti");
 
-        // 🔹 Se Giudiziale → sempre 4 fasi standard
-        if (metodo === 'Giudiziale') {
-            ['Fase di Studio', 'Fase Introduttiva', 'Fase Istruttoria', 'Fase Decisionale']
-                .forEach(fase => aggiungiRigaCompenso(fase, true));
+            const idCliente = $('#selectCliente').val();
+            if (idCliente) {
+                fetch(`/Pratiche/GetIntestatariPratica?idCliente=${idCliente}`)
+                    .then(r => r.json())
+                    .then(json => {
+                        if (json.success) {
+                            window.intestatariGlobali = json.intestatari || [];
+                            console.log("✅ Intestatari caricati (nuova pratica):", window.intestatariGlobali);
+                        } else {
+                            console.warn("⚠️ Nessun intestatario disponibile:", json.message);
+                            window.intestatariGlobali = [];
+                        }
+                        aggiornaIntestatariDisponibili();
+                    })
+                    .catch(err => {
+                        console.error("❌ Errore caricamento intestatari nuova pratica:", err);
+                        window.intestatariGlobali = [];
+                        aggiornaIntestatariDisponibili();
+                    });
+            } else {
+                console.warn("⚠️ Nessun cliente selezionato → intestatari vuoti");
+                window.intestatariGlobali = [];
+                aggiornaIntestatariDisponibili();
+            }
+
+            tbody.innerHTML = '';
+
+            if (metodo === 'Giudiziale') {
+                ['Fase di Studio', 'Fase Introduttiva', 'Fase Istruttoria', 'Fase Decisionale']
+                    .forEach(fase => aggiungiRigaCompenso(fase, true));
+            }
+
+            new bootstrap.Modal('#compensoModal').show();
+            return;
         }
 
-        // 🔹 Se esiste JSON cumulativo → carica SOLO righe di quel metodo (anche aggiuntive)
-        const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
-        if (hidden) {
-            const dati = JSON.parse(hidden.value);
-            dati.filter(r => r.Metodo === metodo)
-                .forEach(riga => aggiungiRigaDaJSON(riga, metodo));
-        }
+        // 🔄 Caso MODIFICA → fetch compensi dal backend
+        fetch(`/Pratiche/GetCompensiPratica?idPratica=${idPratica}`)
+            .then(r => r.json())
+            .then(json => {
+                console.log("📥 Risposta backend:", json);
 
-        new bootstrap.Modal('#compensoModal').show();
+                if (!json.success) {
+                    toastr.error("Errore nel caricamento compensi.");
+                    return;
+                }
+
+                window.intestatariGlobali = json.intestatari || [];
+                console.log("✅ Intestatari ricevuti:", window.intestatariGlobali);
+
+                let cumulativo = [];
+                const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
+
+                // ✅ Lettura sicura
+                if (hidden && hidden.value) {
+                    try {
+                        const decoded = decodeURIComponent(hidden.value);
+                        cumulativo = JSON.parse(decoded);
+                    } catch {
+                        cumulativo = [];
+                    }
+                    console.log("📦 Cumulativo recuperato dall’hidden:", cumulativo);
+                } else {
+                    cumulativo = json.raw || [];
+                    document.getElementById('hiddenCompensiContainer').innerHTML =
+                        `<input type="hidden" name="CompensiJSON" value="${encodeURIComponent(JSON.stringify(cumulativo))}">`;
+                    console.log("🆕 Nessun cumulativo trovato, inizializzo con backend:", cumulativo);
+                }
+
+                // 🔹 Filtra righe per metodo
+                let righeMetodo = cumulativo.filter(r => r.Metodo === metodo);
+                if (righeMetodo.length === 0 && json.raw) {
+                    righeMetodo = json.raw.filter(r => r.Metodo === metodo);
+                    console.log("📥 Uso dati backend perché cumulativo è vuoto:", righeMetodo);
+                }
+
+                console.log("📌 Righe caricate (finali):", righeMetodo);
+
+                // 🔹 Crea righe nella tabella
+                if (righeMetodo.length > 0) {
+                    righeMetodo.forEach(riga => aggiungiRigaDaJSON(riga, metodo));
+                } else if (metodo === 'Giudiziale') {
+                    ['Fase di Studio', 'Fase Introduttiva', 'Fase Istruttoria', 'Fase Decisionale']
+                        .forEach(fase => aggiungiRigaCompenso(fase, true));
+                }
+
+                // ✅ Ripristina campi aggiuntivi
+                if (metodo === "A ore" && json.raw?.length > 0) {
+                    const oggetto = json.raw.find(c => c.OggettoIncarico)?.OggettoIncarico;
+                    if (oggetto && document.getElementById("OggettoIncarico")) {
+                        document.getElementById("OggettoIncarico").value = oggetto;
+                    }
+                }
+
+                if (metodo === "Giudiziale" && json.raw?.length > 0) {
+                    const estremi = json.raw.find(c => c.EstremiGiudizio)?.EstremiGiudizio;
+                    if (estremi && document.getElementById("EstremiGiudizio")) {
+                        document.getElementById("EstremiGiudizio").value = estremi;
+                    }
+                }
+
+                new bootstrap.Modal('#compensoModal').show();
+            })
+            .catch(err => {
+                console.error("❌ Errore caricamento compensi:", err);
+                toastr.error("Errore imprevisto nel caricamento compensi.");
+            });
     }
 
+
     function aggiungiRigaDaJSON(riga, metodo) {
-        aggiungiRigaCompenso(); // crea la riga
+        let lastRow;
 
-        const tbody = document.querySelector('#tabellaCompensi tbody');
-        const lastRow = tbody.lastElementChild;
-
-        if (metodo === 'Fisso') {
-            for (const key in riga) {
-                if (key.startsWith("Descrizione_")) lastRow.querySelector('textarea[name^="Descrizione_"]').value = riga[key];
-                if (key.startsWith("Importo_")) lastRow.querySelector('input[name^="Importo_"]').value = riga[key];
-                if (key.startsWith("Tipologia_")) lastRow.querySelector('select[name^="Tipologia_"]').value = riga[key];
-                if (key.startsWith("ValoreStimato_") && riga[key]) {
-                    const valInput = lastRow.querySelector('input[name^="ValoreStimato_"]');
-                    valInput.value = riga[key];
-                    valInput.classList.remove('d-none');
-                    valInput.disabled = false;
-                }
-            }
+        // 🔹 Crea la riga base
+        if (metodo === 'Fisso' || metodo === 'A ore') {
+            aggiungiRigaCompenso();
+            const tbody = document.querySelector('#tabellaCompensi tbody');
+            lastRow = tbody.lastElementChild;
         }
         else if (metodo === 'Giudiziale') {
-            for (const key in riga) {
-                if (key.startsWith("Fase_")) lastRow.querySelector('input[name^="Fase_"]').value = riga[key];
-                if (key.startsWith("Importo_")) lastRow.querySelector('input[name^="Importo_"]').value = riga[key];
-            }
+            const tbody = document.querySelector('#tabellaCompensi tbody');
+            let row = document.createElement('tr');
+            row.innerHTML = `
+        <td><strong></strong></td>
+        <td>
+          <input type="text" class="form-control form-control-sm"
+                 name="Fase_temp"
+                 value="${riga.Descrizione || ''}"
+                 placeholder="Descrizione fase giudizio">
+        </td>
+        <td>
+          <input type="text" class="form-control form-control-sm importo-input"
+                 name="Importo_temp"
+                 inputmode="decimal"
+                 placeholder="Importo (€)">
+        </td>
+        <td>
+          <select class="form-select form-select-sm intestatario-select" name="Intestatario_temp">
+            <option value="">-- Seleziona intestatario --</option>
+          </select>
+          <div class="collaboratori-riga mt-2"></div>
+          <button type="button" class="btn btn-sm btn-outline-secondary mt-1"
+                  onclick="aggiungiCollaboratoreRiga(this)">➕ Collaboratore</button>
+        </td>
+        <td class="text-center">
+          <button type="button" class="btn btn-sm btn-danger"
+                  onclick="this.closest('tr').remove(); aggiornaNumeri()">🗑</button>
+        </td>`;
+            tbody.appendChild(row);
+            lastRow = row;
         }
+
+        if (!lastRow) return;
+
+        // 🔹 Campi per "Fisso"
+        if (metodo === 'Fisso') {
+            (lastRow.querySelector('textarea[name="Descrizione_temp"]') || lastRow.querySelector('textarea[name^="Descrizione_"]'))
+                .value = riga.Descrizione || "";
+
+            const inputImporto = (lastRow.querySelector('input[name="Importo_temp"]') || lastRow.querySelector('input[name^="Importo_"]'));
+            if (inputImporto) {
+                const num = parseFloat(riga.Importo?.toString().replace(',', '.'));
+                inputImporto.value = !isNaN(num)
+                    ? num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : (riga.Importo || '');
+                inputImporto.dataset.raw = !isNaN(num) ? num : riga.Importo;
+            }
+
+            (lastRow.querySelector('select[name="Tipologia_temp"]') || lastRow.querySelector('select[name^="Tipologia_"]'))
+                .value = riga.Tipologia || "Fisso";
+
+            (lastRow.querySelector('input[name="ValoreStimato_temp"]') || lastRow.querySelector('input[name^="ValoreStimato_"]'))
+                .value = riga.ValoreStimato || "";
+        }
+
+        // 🔹 Campi per "A ore"
         else if (metodo === 'A ore') {
-            for (const key in riga) {
-                if (key.startsWith("Ruolo_")) lastRow.querySelector('input[name^="Ruolo_"]').value = riga[key];
-                if (key.startsWith("Tariffa_")) lastRow.querySelector('input[name^="Tariffa_"]').value = riga[key];
+            (lastRow.querySelector('input[name="Ruolo_temp"]') || lastRow.querySelector('input[name^="Ruolo_"]'))
+                .value = riga.Descrizione || "";
+
+            const inputTariffa = (lastRow.querySelector('input[name="Tariffa_temp"]') || lastRow.querySelector('input[name^="Tariffa_"]'));
+            if (inputTariffa) {
+                const num = parseFloat(riga.Importo?.toString().replace(',', '.'));
+                inputTariffa.value = !isNaN(num)
+                    ? num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : (riga.Importo || '');
+                inputTariffa.dataset.raw = !isNaN(num) ? num : riga.Importo;
             }
         }
 
-        // 👇 Imposta intestatario salvato (se esiste nel JSON)
+        // 🔹 Campi per "Giudiziale"
+        else if (metodo === 'Giudiziale') {
+            (lastRow.querySelector('input[name="Fase_temp"]') || lastRow.querySelector('input[name^="Fase_"]'))
+                .value = riga.Descrizione || "";
+
+            const inputImporto = (lastRow.querySelector('input[name="Importo_temp"]') || lastRow.querySelector('input[name^="Importo_"]'));
+            if (inputImporto) {
+                const num = parseFloat(riga.Importo?.toString().replace(',', '.'));
+                inputImporto.value = !isNaN(num)
+                    ? num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : (riga.Importo || '');
+                inputImporto.dataset.raw = !isNaN(num) ? num : riga.Importo;
+            }
+        }
+
+        // 👤 Intestatario (Owner/Responsabile/Collaboratori principali)
         const selectIntestatario = lastRow.querySelector('.intestatario-select');
         if (selectIntestatario) {
-            popolaSelectIntestatari(selectIntestatario);
-
+            popolaSelectIntestatari(selectIntestatario, riga.ID_ProfessionistaIntestatario);
             if (riga.ID_ProfessionistaIntestatario) {
-                selectIntestatario.value = riga.ID_ProfessionistaIntestatario;
                 selectIntestatario.dataset.savedValue = riga.ID_ProfessionistaIntestatario;
             }
+        }
 
+        // 👥 Collaboratori (se presenti nel JSON)
+        if (riga.Collaboratori && Array.isArray(riga.Collaboratori)) {
+            const container = lastRow.querySelector(".collaboratori-riga");
+            riga.Collaboratori.forEach(col => {
+                const div = document.createElement("div");
+                div.classList.add("row-collaboratore", "input-group", "input-group-sm", "mb-1");
+                div.innerHTML = `
+            <select name="Collaboratore_temp" class="form-select form-select-sm col-6">
+                ${getUtentiDisponibili().map(u =>
+                    `<option value="${u.ID}" ${u.ID == col.ID_Collaboratore ? 'selected' : ''}>${u.Nome}</option>`
+                ).join("")}
+            </select>
+            <input name="PercentualeCollaboratore_temp" type="number"
+                   class="form-control form-control-sm col-3 ms-1"
+                   value="${col.Percentuale}" min="0" max="100">
+            <button type="button" class="btn btn-sm btn-danger ms-1"
+                    onclick="this.parentElement.remove()">🗑</button>`;
+                container.appendChild(div);
+            });
         }
 
         aggiornaNumeri();
     }
+
 
     function aggiungiRigaCompenso(valorePredefinito = '', isStandard = false) {
         const metodo = document.getElementById('metodoCompensoSelect').value;
@@ -2261,20 +3110,26 @@
         let row = document.createElement('tr');
 
         switch (metodo) {
+            // ======================================================
+            // 🔹 CASO: COMPENSO FISSO
+            // ======================================================
             case 'Fisso':
                 row.innerHTML = `
-                <td><strong></strong></td>
-                <td>
-                  <textarea class="form-control form-control-sm" 
-                            name="Descrizione_temp" 
-                            rows="2"
-                            placeholder="Descrizione servizio/attività"></textarea>
-                </td>
-                <td>
-                  <input type="number" class="form-control form-control-sm" name="Importo_temp" step="0.01">
-                </td>
-                <td>
-                  <select class="form-select form-select-sm" name="Tipologia_temp" onchange="mostraCampoValoreStimato(this)">
+            <td><strong></strong></td>
+            <td>
+                <textarea class="form-control form-control-sm"
+                          name="Descrizione_temp"
+                          rows="2"
+                          placeholder="Descrizione servizio/attività"></textarea>
+            </td>
+            <td>
+                <input type="text" class="form-control form-control-sm importo-input"
+                       name="Importo_temp"
+                       inputmode="decimal"
+                       placeholder="Importo (€)">
+            </td>
+            <td>
+                <select class="form-select form-select-sm" name="Tipologia_temp" onchange="mostraCampoValoreStimato(this)">
                     <option value="Fisso">Fisso</option>
                     <option value="Mensile">Mensile</option>
                     <option value="Trimestrale">Trimestrale</option>
@@ -2284,51 +3139,61 @@
                     <option value="Per unità/trimestre">Per unità/trimestre</option>
                     <option value="Per unità/anno">Per unità/anno</option>
                     <option value="Percentuale">Percentuale</option>
-                  </select>
-                </td>
-                <td>
-                  <input type="number" 
-                         class="form-control form-control-sm d-none" 
-                         name="ValoreStimato_temp" 
-                         step="0.01" 
-                         disabled 
-                         placeholder="Unità o valore stimato">
-                </td>
-                <td>
-                  <select class="form-select form-select-sm intestatario-select" name="Intestatario_temp">
+                </select>
+            </td>
+            <td>
+                <input type="number"
+                       class="form-control form-control-sm d-none"
+                       name="ValoreStimato_temp"
+                       step="0.01"
+                       disabled
+                       placeholder="Unità o valore stimato">
+            </td>
+            <td>
+                <select class="form-select form-select-sm intestatario-select" name="Intestatario_temp">
                     <option value="">-- Seleziona intestatario --</option>
-                  </select>
-                </td>
-                <td class="text-center">
-                  <button type="button" class="btn btn-sm btn-danger" 
-                          onclick="this.closest('tr').remove(); aggiornaNumeri()">🗑</button>
-                </td>`;
+                </select>
+                <div class="collaboratori-riga mt-2"></div>
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-1"
+                        onclick="aggiungiCollaboratoreRiga(this)">➕ Collaboratore</button>
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-danger"
+                        onclick="this.closest('tr').remove(); aggiornaNumeri()">🗑</button>
+            </td>`;
                 tbody.appendChild(row);
                 break;
 
+            // ======================================================
+            // 🔹 CASO: COMPENSO GIUDIZIALE
+            // ======================================================
             case 'Giudiziale':
                 if (isStandard) row.dataset.standard = "true";
                 row.innerHTML = `
-                <td><strong></strong></td>
-                <td>
-                  <input type="text" class="form-control form-control-sm" 
-                         name="Fase_temp" 
-                         value="${valorePredefinito}" 
-                         placeholder="Descrizione fase giudizio">
-                </td>
-                <td>
-                  <input type="number" class="form-control form-control-sm" 
-                         name="Importo_temp" 
-                         step="0.01" placeholder="Importo pattuito">
-                </td>
-                <td>
-                  <select class="form-select form-select-sm intestatario-select" name="Intestatario_temp">
+            <td><strong></strong></td>
+            <td>
+                <input type="text" class="form-control form-control-sm"
+                       name="Fase_temp"
+                       value="${valorePredefinito}"
+                       placeholder="Descrizione fase giudizio">
+            </td>
+            <td>
+                <input type="text" class="form-control form-control-sm importo-input"
+                       name="Importo_temp"
+                       inputmode="decimal"
+                       placeholder="Importo pattuito (€)">
+            </td>
+            <td>
+                <select class="form-select form-select-sm intestatario-select" name="Intestatario_temp">
                     <option value="">-- Seleziona intestatario --</option>
-                  </select>
-                </td>
-                <td class="text-center">
-                  ${isStandard ? '' : '<button type="button" class="btn btn-sm btn-danger" onclick="this.closest(\'tr\').remove(); aggiornaNumeri()">🗑</button>'}
-                </td>`;
+                </select>
+                <div class="collaboratori-riga mt-2"></div>
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-1"
+                        onclick="aggiungiCollaboratoreRiga(this)">➕ Collaboratore</button>
+            </td>
+            <td class="text-center">
+                ${isStandard ? '' : '<button type="button" class="btn btn-sm btn-danger" onclick="this.closest(\'tr\').remove(); aggiornaNumeri()">🗑</button>'}
+            </td>`;
                 if (isStandard) {
                     tbody.appendChild(row);
                 } else {
@@ -2341,29 +3206,38 @@
                 }
                 break;
 
+            // ======================================================
+            // 🔹 CASO: COMPENSO A ORE
+            // ======================================================
             case 'A ore':
                 row.innerHTML = `
-                <td><strong></strong></td>
-                <td>
-                  <input type="text" class="form-control form-control-sm" name="Ruolo_temp">
-                </td>
-                <td>
-                  <input type="number" class="form-control form-control-sm" name="Tariffa_temp" step="0.01">
-                </td>
-                <td>
-                  <select class="form-select form-select-sm intestatario-select" name="Intestatario_temp">
+            <td><strong></strong></td>
+            <td>
+                <input type="text" class="form-control form-control-sm" name="Ruolo_temp" placeholder="Ruolo o mansione">
+            </td>
+            <td>
+                <input type="text" class="form-control form-control-sm importo-input"
+                       name="Tariffa_temp"
+                       inputmode="decimal"
+                       placeholder="Tariffa oraria (€)">
+            </td>
+            <td>
+                <select class="form-select form-select-sm intestatario-select" name="Intestatario_temp">
                     <option value="">-- Seleziona intestatario --</option>
-                  </select>
-                </td>
-                <td class="text-center">
-                  <button type="button" class="btn btn-sm btn-danger" 
-                          onclick="this.closest('tr').remove(); aggiornaNumeri()">🗑</button>
-                </td>`;
+                </select>
+                <div class="collaboratori-riga mt-2"></div>
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-1"
+                        onclick="aggiungiCollaboratoreRiga(this)">➕ Collaboratore</button>
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-danger"
+                        onclick="this.closest('tr').remove(); aggiornaNumeri()">🗑</button>
+            </td>`;
                 tbody.appendChild(row);
                 break;
         }
 
-        // 👇 Popola subito la select intestatario con gli utenti disponibili
+        // 👤 Popola subito la select intestatario
         const selectIntestatario = row.querySelector('.intestatario-select');
         if (selectIntestatario) {
             popolaSelectIntestatari(selectIntestatario);
@@ -2371,6 +3245,7 @@
 
         aggiornaNumeri();
     }
+
 
     function aggiornaNumeri() {
         document.querySelectorAll('#tabellaCompensi tbody tr').forEach((tr, i) => {
@@ -2395,73 +3270,174 @@
             if (valoreInput) valoreInput.name = 'ValoreStimato_' + index;
             if (ruoloInput) ruoloInput.name = 'Ruolo_' + index;
             if (tariffaInput) tariffaInput.name = 'Tariffa_' + index;
-            if (intestatarioSelect) intestatarioSelect.name = 'Intestatario_' + index; // 👈 nuovo
+            if (intestatarioSelect) intestatarioSelect.name = 'Intestatario_' + index;
+
+            // 👥 Collaboratori → rinumerazione annidata
+            tr.querySelectorAll('.row-collaboratore').forEach((colRow, j) => {
+                const collabSelect = colRow.querySelector('select[name="Collaboratore_temp"], select[name^="Collaboratore_"]');
+                const percInput = colRow.querySelector('input[name="PercentualeCollaboratore_temp"], input[name^="PercentualeCollaboratore_"]');
+
+                if (collabSelect) collabSelect.name = `Collaboratore_${index}_${j + 1}`;
+                if (percInput) percInput.name = `PercentualeCollaboratore_${index}_${j + 1}`;
+            });
         });
     }
 
+    // 🔹 Salvataggio compensi dal modal (versione con fix accenti/apostrofi)
     function salvaCompensi() {
         const metodo = document.getElementById('metodoCompensoSelect').value;
-
+        const budgetInput = document.getElementById('BudgetInput');
         let righeMetodo = [];
+
         document.querySelectorAll('#tabellaCompensi tbody tr').forEach(tr => {
             let obj = { Metodo: metodo };
 
+            // Campi dinamici generali
             tr.querySelectorAll('input, textarea, select').forEach(c => {
                 if (!c.disabled) {
-                    obj[c.name] = c.value;
+                    obj[c.name] = sanitizeText(c.value?.trim() || "");
                 }
             });
 
-            // 🔹 Normalizzazione
+            // =====================================================
+            // 🔹 Normalizzazione per tipo metodo
+            // =====================================================
             if (metodo === "A ore") {
-                const tariffa = tr.querySelector('input[name^="Tariffa_"]')?.value;
-                if (tariffa) obj["Importo"] = tariffa;
                 obj["Tipologia"] = "A ore";
+
+                const oggettoInput = document.getElementById("OggettoIncarico");
+                if (oggettoInput)
+                    obj["OggettoIncarico"] = sanitizeText(oggettoInput.value?.trim() || "");
+
+                // ✅ Ruolo e tariffa (lettura con normalizzazione)
+                obj["Descrizione"] = sanitizeText(tr.querySelector('input[name^="Ruolo_"]')?.value || "");
+
+                const tariffaInput = tr.querySelector('input[name^="Tariffa_"]');
+                let tariffa = tariffaInput?.dataset.raw ?? tariffaInput?.value;
+                tariffa = parseFloat((tariffa || "0").toString().replace(',', '.')) || 0;
+                obj["Importo"] = tariffa;
+
+                // ✅ Budget manuale
+                if (budgetInput && budgetInput.value) {
+                    const val = parseFloat(budgetInput.value.replace('.', '').replace(',', '.'));
+                    obj["BudgetManuale"] = isNaN(val) ? 0 : val;
+                }
             }
 
             if (metodo === "Fisso") {
                 obj["Tipologia"] = tr.querySelector('select[name^="Tipologia_"]')?.value || "Fisso";
-                obj["Importo"] = tr.querySelector('input[name^="Importo_"]')?.value || 0;
-                obj["ValoreStimato"] = tr.querySelector('input[name^="ValoreStimato_"]')?.value || 1;
+                obj["Descrizione"] = sanitizeText(tr.querySelector('textarea[name^="Descrizione_"]')?.value || "");
+
+                const importoInput = tr.querySelector('input[name^="Importo_"]');
+                let importo = importoInput?.dataset.raw ?? importoInput?.value;
+                importo = parseFloat((importo || "0").toString().replace(',', '.')) || 0;
+                obj["Importo"] = importo;
+
+                const valStimato = tr.querySelector('input[name^="ValoreStimato_"]')?.value || 1;
+                obj["ValoreStimato"] = parseFloat(valStimato.toString().replace(',', '.')) || 1;
             }
 
             if (metodo === "Giudiziale") {
                 obj["Tipologia"] = "Giudiziale";
-                obj["Importo"] = tr.querySelector('input[name^="Importo_"]')?.value || 0;
+
+                const estremiInput = document.getElementById("EstremiGiudizio");
+                if (estremiInput)
+                    obj["EstremiGiudizio"] = sanitizeText(estremiInput.value?.trim() || "");
+
+                obj["Descrizione"] = sanitizeText(tr.querySelector('input[name^="Fase_"]')?.value || "");
+
+                const importoInput = tr.querySelector('input[name^="Importo_"]');
+                let importo = importoInput?.dataset.raw ?? importoInput?.value;
+                importo = parseFloat((importo || "0").toString().replace(',', '.')) || 0;
+                obj["Importo"] = importo;
             }
 
-            // 👤 Intestatario (nuovo campo con ID + Nome)
+            // =====================================================
+            // 👤 Intestatario
+            // =====================================================
             const intestatarioSelect = tr.querySelector('select[name^="Intestatario_"]');
             if (intestatarioSelect) {
                 obj["ID_ProfessionistaIntestatario"] = intestatarioSelect.value || "";
-                obj["IntestatarioNome"] = intestatarioSelect.options[intestatarioSelect.selectedIndex]?.text || "";
+                obj["IntestatarioNome"] = sanitizeText(
+                    intestatarioSelect.options[intestatarioSelect.selectedIndex]?.text || ""
+                );
             }
 
+            // =====================================================
+            // 👥 Collaboratori
+            // =====================================================
+            let collaboratori = [];
+            tr.querySelectorAll('.collaboratori-riga .row-collaboratore').forEach(rowCol => {
+                const collabSelect = rowCol.querySelector('select[name="Collaboratore_temp"], select[name^="Collaboratore_"]');
+                const percInput = rowCol.querySelector('input[name="PercentualeCollaboratore_temp"], input[name^="PercentualeCollaboratore_"]');
+                if (collabSelect && percInput && collabSelect.value) {
+                    collaboratori.push({
+                        ID_Collaboratore: collabSelect.value,
+                        NomeCollaboratore: sanitizeText(collabSelect.options[collabSelect.selectedIndex]?.text || ""),
+                        Percentuale: parseFloat(percInput.value.replace(',', '.')) || 0
+                    });
+                }
+            });
+            if (collaboratori.length > 0) obj["Collaboratori"] = collaboratori;
 
             righeMetodo.push(obj);
         });
 
-        // 🔹 Leggi JSON cumulativo
+        // =====================================================
+        // 🔄 Aggiorna JSON cumulativo
+        // =====================================================
         let cumulativo = [];
         const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
-        if (hidden) cumulativo = JSON.parse(hidden.value);
 
-        // 🔹 Elimina righe stesso metodo
+        if (hidden && hidden.value) {
+            try {
+                cumulativo = JSON.parse(decodeURIComponent(hidden.value));
+            } catch (e) {
+                console.warn("⚠️ Errore nel parse del JSON esistente, resetto:", e);
+                cumulativo = [];
+            }
+        }
+
         cumulativo = cumulativo.filter(r => r.Metodo !== metodo);
-
-        // 🔹 Aggiungi righe nuove
         cumulativo = cumulativo.concat(righeMetodo);
 
-        // 🔹 Salva hidden
-        document.getElementById('hiddenCompensiContainer').innerHTML =
-            `<input type="hidden" name="CompensiJSON" value='${JSON.stringify(cumulativo)}'>`;
+        // ✅ Scrittura sicura
+        const jsonString = JSON.stringify(cumulativo);
+        console.log("💾 JSON finale salvato:", jsonString);
 
-        // 🔹 Aggiorna riepilogo e budget
+        const container = document.getElementById('hiddenCompensiContainer');
+        container.innerHTML = "";
+        const hiddenInput = document.createElement("input");
+        hiddenInput.type = "hidden";
+        hiddenInput.name = "CompensiJSON";
+        hiddenInput.value = encodeURIComponent(JSON.stringify(cumulativo));
+        container.appendChild(hiddenInput);
+
+
+        // =====================================================
+        // 🔁 Aggiornamento UI
+        // =====================================================
         popolaRiepilogoCompensi(cumulativo);
-        aggiornaValoreStimato(cumulativo);
+
+        if (metodo !== "A ore") {
+            aggiornaValoreStimato(cumulativo);
+        }
 
         bootstrap.Modal.getInstance(document.getElementById('compensoModal')).hide();
     }
+
+    document.addEventListener('blur', e => {
+        if (e.target.classList.contains('importo-input')) {
+            let val = e.target.value.trim().replace(/\./g, '').replace(',', '.');
+            const num = parseFloat(val);
+            if (!isNaN(num)) {
+                e.target.dataset.raw = num; // 🔹 valore pulito
+                e.target.value = num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+        }
+    }, true);
+
+
 
 // 📌 Funzione calcolo Valore Stimato
     function aggiornaValoreStimato(compensi) {
@@ -2477,7 +3453,12 @@
                 const importo = parseFloat(c.Importo) || 0;
                 totale += importo;
             }
-            // "A ore" escluso
+            else if (c.Metodo === "A ore") {
+                // 👇 Se esiste BudgetManuale nel JSON, usalo senza ricalcolare
+                if (c.BudgetManuale) {
+                    totale += parseFloat(c.BudgetManuale) || 0;
+                }
+            }
         });
 
         const budgetInput = document.getElementById("BudgetInput");
@@ -2488,114 +3469,97 @@
         }
     }
 
+    // 🔹 Formatta numeri in stile italiano con due decimali e virgola
+    function formattaImportoItaliano(valore) {
+        if (valore === null || valore === undefined || valore === "") return "";
+        const numero = parseFloat(valore.toString().replace(',', '.'));
+        if (isNaN(numero)) return valore;
+        return numero.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+
+    // 🔹 Popola riepilogo con debug esteso
     function popolaRiepilogoCompensi(compensi) {
+        console.log("🖊 [DEBUG] Compensi ricevuti per riepilogo:", compensi);
+
         const tbody = document.querySelector('#riepilogoCompensiTable tbody');
         tbody.innerHTML = '';
 
         compensi.forEach((c, i) => {
-            const metodo = c.Metodo || '';
+            // Nome intestatario → fallback multiplo
+            const intestatarioNome = c.IntestatarioNome || c.NomeProfessionistaIntestatario || "(sconosciuto)";
 
-            // 🔹 Ruolo / Descrizione
-            let ruolo = '';
-            let descrizione = '';
+            // 🔎 Debug dettagliato
+            console.log(`➡️ Riga ${i + 1}`, {
+                ID_Intestatario: c.ID_ProfessionistaIntestatario,
+                IntestatarioNome: c.IntestatarioNome,
+                NomeProfessionistaIntestatario: c.NomeProfessionistaIntestatario,
+                NomeUsatoNelRiepilogo: intestatarioNome,
+                CollaboratoriRaw: c.Collaboratori
+            });
 
-            if (metodo === "A ore") {
-                for (const key in c) {
-                    if (key.startsWith("Ruolo_")) {
-                        ruolo = c[key];
-                        break;
-                    }
-                }
-                if (!ruolo && c.Descrizione) ruolo = c.Descrizione;
-                if (!ruolo) {
-                    for (const key in c) {
-                        if (key.startsWith("Descrizione_")) {
-                            ruolo = c[key];
-                            break;
-                        }
-                    }
-                }
-            } else {
-                for (const key in c) {
-                    if (key.startsWith("Descrizione_") || key.startsWith("Fase_")) {
-                        descrizione = c[key];
-                        break;
-                    }
-                }
-                if (!descrizione && c.Descrizione) descrizione = c.Descrizione;
+            // 🔎 Debug collaboratori singoli
+            if (c.Collaboratori && Array.isArray(c.Collaboratori)) {
+                c.Collaboratori.forEach((col, j) => {
+                    console.log(`   👥 Collaboratore ${j + 1}:`, {
+                        ID: col.ID_Collaboratore,
+                        NomeCollaboratore: col.NomeCollaboratore,
+                        Percentuale: col.Percentuale
+                    });
+                });
             }
 
-            // 🔹 Importo
-            let importo = '';
-            for (const key in c) {
-                if (key.startsWith("Importo_") || key.startsWith("Tariffa_")) {
-                    importo = c[key];
-                    break;
-                }
-            }
-            if (!importo && c.Importo) importo = c.Importo;
-
-            // 🔹 Tipologia
-            let tipologia = '';
-            for (const key in c) {
-                if (key.startsWith("Tipologia_")) {
-                    tipologia = c[key];
-                    break;
-                }
-            }
-            if (!tipologia && c.Categoria) tipologia = c.Categoria;
-
-            // 🔹 Valore stimato
-            let valore = '';
-            for (const key in c) {
-                if (key.startsWith("ValoreStimato_")) {
-                    valore = c[key];
-                    break;
-                }
-            }
-            if (!valore && c.ValoreStimato) valore = c.ValoreStimato;
-
-            // 🔹 Intestatario → preferisci il nome, fallback su ID
-            let intestatario = '';
-            if (c.IntestatarioNome) {
-                intestatario = c.IntestatarioNome;   // ✅ Nome leggibile
-            } else if (c.Intestatario) {
-                intestatario = c.Intestatario;      // fallback → ID
-            }
-
-            // 🔹 Costruzione riga
             const tr = document.createElement('tr');
             tr.innerHTML = `
-        <td>${i + 1}</td>
-        <td>${metodo}</td>
-        <td>${ruolo || descrizione || ''}</td>
-        <td>${importo || ''}</td>
-        <td>${tipologia || ''}</td>
-        <td>${valore || ''}</td>
-        <td>${intestatario || ''}</td> <!-- 👈 ora mostra Nome Cognome -->
-        <td class="text-center">
-            <button type="button" class="btn btn-sm btn-danger" onclick="eliminaRigaRiepilogo(${i})">🗑</button>
-        </td>`;
+            <td>${i + 1}</td>
+            <td>${c.Metodo}</td>
+            <td>${c.Descrizione || c.Ruolo || ""}</td>
+            <td>${formattaImportoItaliano(c.Importo)}</td>
+            <td>${c.Tipologia || ""}</td>
+            <td>${c.ValoreStimato || ""}</td>
+            <td>
+                ${intestatarioNome ? `<div><strong>${intestatarioNome}</strong></div>` : ""}
+                ${c.Collaboratori && c.Collaboratori.length > 0
+                    ? `<ul class="mb-0 ps-3 small text-muted">` +
+                    c.Collaboratori.map(col =>
+                        `<li>${col.NomeCollaboratore || "(sconosciuto)"} (${col.Percentuale}%)</li>`
+                    ).join('') +
+                    `</ul>`
+                    : ""}
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-danger" onclick="eliminaRigaRiepilogo(${i})">🗑</button>
+            </td>`;
             tbody.appendChild(tr);
         });
     }
 
-
+    // 🔹 Elimina una riga dal riepilogo
     function eliminaRigaRiepilogo(index) {
         let cumulativo = [];
         const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
-        if (hidden) cumulativo = JSON.parse(hidden.value);
 
-        // rimuovo la riga con indice scelto
+        if (hidden && hidden.value) {
+            try {
+                const decoded = decodeURIComponent(hidden.value); // ✅ decodifica prima
+                cumulativo = JSON.parse(decoded);                 // ✅ poi parse
+            } catch (e) {
+                console.error("❌ Errore nel parsing JSON durante eliminazione:", e);
+                cumulativo = [];
+            }
+        }
+
+        // ✂️ Rimuove la riga selezionata
         cumulativo.splice(index, 1);
 
-        // salvo nuovo JSON
+        // ✅ risalva in formato codificato
+        const nuovoJson = encodeURIComponent(JSON.stringify(cumulativo));
         document.getElementById('hiddenCompensiContainer').innerHTML =
-            `<input type="hidden" name="CompensiJSON" value='${JSON.stringify(cumulativo)}'>`;
+            `<input type="hidden" name="CompensiJSON" value="${nuovoJson}">`;
 
-        // ricostruisco riepilogo
         popolaRiepilogoCompensi(cumulativo);
     }
+
 
     function mostraCampoValoreStimato(select) {
         const tipologia = select.value;
@@ -2616,28 +3580,20 @@
     function getUtentiDisponibili() {
         const utenti = [];
 
-        // Owner
-        const ownerId = $('#hiddenOwnerProfessionista').val();
-        const ownerNome = $('#inputOwnerProfessionista').val();
-        if (ownerId) utenti.push({ ID: ownerId, Nome: ownerNome });
-
-        // Responsabile
-        const respId = $('#selectResponsabile').val();
-        const respNome = $('#selectResponsabile option:selected').text();
-        if (respId) utenti.push({ ID: respId, Nome: respNome });
-
-        // Collaboratori
-        $('#collaboratoriContainer .row-collaboratore').each(function () {
-            const id = $(this).find('select[name="Collaboratore"]').val();
-            const nome = $(this).find('select[name="Collaboratore"] option:selected').text();
-            if (id) utenti.push({ ID: id, Nome: nome });
-        });
+        // 🔹 Usa sempre quelli dal backend
+        if (Array.isArray(window.intestatariGlobali)) {
+            window.intestatariGlobali.forEach(u => {
+                utenti.push({ ID: u.ID, Nome: u.Nome });
+            });
+        }
 
         return utenti;
     }
 
-    function popolaSelectIntestatari(selectElement) {
-        const utenti = getUtentiDisponibili();
+
+    function popolaSelectIntestatari(selectElement, valoreSelezionato = null) {
+        const utenti = window.intestatariGlobali || [];
+        console.log("🔄 Popolo intestatari da globale:", utenti);
 
         selectElement.innerHTML = '<option value="">-- Seleziona intestatario --</option>';
         utenti.forEach(u => {
@@ -2646,6 +3602,12 @@
             opt.textContent = u.Nome;
             selectElement.appendChild(opt);
         });
+
+        // 👇 prova prima col parametro passato, altrimenti col dataset
+        const valore = valoreSelezionato || selectElement.dataset.savedValue;
+        if (valore) {
+            selectElement.value = valore;
+        }
     }
 
 
@@ -2660,6 +3622,44 @@
             }
         });
     }
+
+    function controllaAbilitazioneCompensi() {
+        const cliente = document.getElementById("selectCliente")?.value;
+        const metodo = document.getElementById("metodoCompensoSelect")?.value;
+        const btn = document.getElementById("btnGestisciCompensi");
+
+        if (cliente && metodo) {
+            btn.removeAttribute("disabled");
+        } else {
+            btn.setAttribute("disabled", "disabled");
+        }
+    }
+
+    function aggiungiCollaboratoreRiga(button) {
+        const container = button.closest("td").querySelector(".collaboratori-riga");
+
+        const div = document.createElement("div");
+        div.classList.add("row-collaboratore", "input-group", "input-group-sm", "mb-1");
+
+        div.innerHTML = `
+        <select name="Collaboratore_temp" class="form-select form-select-sm col-6">
+            ${getUtentiDisponibili().map(u => `<option value="${u.ID}">${u.Nome}</option>`).join("")}
+        </select>
+        <input name="PercentualeCollaboratore_temp" type="number"
+               class="form-control form-control-sm col-3 ms-1"
+               placeholder="%" min="0" max="100">
+        <button type="button" class="btn btn-sm btn-danger ms-1"
+                onclick="this.parentElement.remove()">🗑</button>
+    `;
+
+        container.appendChild(div);
+    }
+
+
+    // 🔄 Collego i change
+    document.getElementById("selectCliente")?.addEventListener("change", controllaAbilitazioneCompensi);
+    document.getElementById("metodoCompensoSelect")?.addEventListener("change", controllaAbilitazioneCompensi);
+
 
 
     // trattenuta sinergia personalizzata

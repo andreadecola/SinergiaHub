@@ -11,7 +11,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@ViewBag.Title - Sinergia</title>
-    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logo col PNG.png">
+    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logo Nuovo.png">
 
     <!-- Bootstrap -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
@@ -145,7 +145,7 @@
     <!-- Navbar -->
     <nav class="navbar navbar-expand-sm navbar-light px-3 border-bottom " style="background-color: #d6d8db;">
         <a class="navbar-brand d-flex align-items-center" href="@Url.Action("Cruscotto", "Home")">
-            <img src="~/Content/img/Icons/Logo col PNG.png" alt="Logo" style="height: 28px; margin-right: 10px;">
+            <img src="~/Content/img/Icons/Logo Nuovo.png" alt="Logo" style="height: 28px; margin-right: 10px;">
             <span class="fw-bold">Sinergia</span>
         </a>
 
@@ -342,17 +342,15 @@
 
 
     function selezionaCliente(id) {
-        if (id && id !== "") {
-            fetch('/Home/SelezionaClientiDisponibili', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: 'idCliente=' + encodeURIComponent(id)
-            }).then(() => {
-                location.reload();
-            });
-        }
+        fetch('/Home/SelezionaClientiDisponibili', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: 'idCliente=' + encodeURIComponent(id || "")
+        }).then(() => {
+            location.reload();
+        });
     }
 </script>
 

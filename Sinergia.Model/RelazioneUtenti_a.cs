@@ -11,7 +11,7 @@ namespace Sinergia.Model
         [Key]
         public int ID_Relazione { get; set; }
 
-        public int ID_Utente { get; set; }
+        public int? ID_Utente { get; set; }
 
         public int ID_UtenteAssociato { get; set; }
 
@@ -38,5 +38,7 @@ namespace Sinergia.Model
         public int NumeroVersione { get; set; }
 
         public string ModificheTestuali { get; set; }
+
+        public int? ID_Team { get; set; }
     }
 }

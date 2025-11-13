@@ -24,6 +24,8 @@ namespace Sinergia.Models
 
         public string NomeProfessione { get; set; } // opzionale, utile per visualizzare
 
+        public string TipoCompenso { get; set; }
+
         [StringLength(20)]
         public string Stato { get; set; }
 

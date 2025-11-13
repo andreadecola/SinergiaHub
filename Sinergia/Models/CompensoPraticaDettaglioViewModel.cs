@@ -31,6 +31,10 @@ namespace Sinergia.Models
         public int? ID_ProfessionistaIntestatario { get; set; }
         public string NomeProfessionistaIntestatario { get; set; } // opzionale, join con Utenti
 
+        public decimal? ImportoInviatoAllaFatturazione { get; set; } // parziale o totale
+        public decimal? ImportoResiduo { get; set; }                 // calcolato lato DB
+
+
         // Campo extra per la view
         public string NomeCreatore { get; set; }          // opzionale, join con tabella Utenti
     }

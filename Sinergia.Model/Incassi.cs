@@ -28,5 +28,48 @@ namespace Sinergia.Model
         public bool? VersaInPlafond { get; set; }
 
         public int? ID_AvvisoParcella { get; set; }
+
+        public decimal? ImportoTotale { get; set; }
+
+        public decimal? ImportoNetto { get; set; }
+
+        public decimal? ImportoVersatoPlafond { get; set; }
+
+        [StringLength(50)]
+        public string StatoIncasso { get; set; }
+
+        [StringLength(255)]
+        public string Note { get; set; }
+
+        public DateTime? DataCompetenzaEconomica { get; set; }
+
+        public DateTime? DataCompetenzaFinanziaria { get; set; }
+
+        public int? ID_Responsabile { get; set; }
+
+        public decimal? PercentualeResponsabile { get; set; }
+
+        public decimal? ImportoResponsabile { get; set; }
+
+        public int? ID_OwnerCliente { get; set; }
+
+        public decimal? PercentualeOwner { get; set; }
+
+        public decimal? ImportoOwner { get; set; }
+
+        [StringLength(255)]
+        public string ID_Collaboratori { get; set; }
+
+        [StringLength(255)]
+        public string PercentualiCollaboratori { get; set; }
+
+        [StringLength(255)]
+        public string ImportiCollaboratori { get; set; }
+
+        [StringLength(20)]
+        public string TipoMovimento { get; set; }
+
+        [StringLength(50)]
+        public string Categoria { get; set; }
     }
 }

@@ -1,68 +1,449 @@
 ﻿@model Sinergia.Models.DashboardViewModel
-  @{ViewBag.Title = "Cruscotto";} 
+@{
+    ViewBag.Title = "Cruscotto";
+
+    // ✅ Calcola l'anno selezionato
+    int annoCorrente = DateTime.Now.Year;
+    int annoSelezionato = annoCorrente;
+
+    var annoRequest = Request["annoSelezionato"];
+    if (!string.IsNullOrEmpty(annoRequest))
+    {
+        int parsed;
+        if (int.TryParse(annoRequest, out parsed))
+        {
+            annoSelezionato = parsed;
+        }
+    }
+}
 
 
-<!-- ✅ Aggiungi nel <head> -->
+<style>
+    .kpi-card {
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+    }
+
+        .kpi-card:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 10px rgba(0,0,0,0.15);
+        }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
 
 
 <div class="container-fluid px-3">
 
+    <!-- Intestazione -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
-        <h4 class="mb-2 mb-md-0">Benvenuto, @Model.NomeUtente</h4>
+        <h4 class="mb-2 mb-md-0">
+            Benvenuto, @Model.NomeUtente
+        </h4>
 
-        @using (Html.BeginForm("Cruscotto", "Home", FormMethod.Get, new { @class = "d-flex flex-column flex-md-row gap-2 align-items-start align-items-md-center" }))
+        @using (Html.BeginForm("Cruscotto", "Home", FormMethod.Get,
+            new { @class = "d-flex flex-row flex-wrap gap-2 align-items-center" }))
         {
-            @Html.DropDownList("intervalloGiorni",
-                new SelectList(new[] { 15, 30, 60, 90, 120, 180, 365 }, Model.IntervalloGiorni),
-                new { @class = "form-select form-select-sm shadow-sm", style = "width: 90px;", onchange = "this.form.submit();" })
+            <!-- 🗓️ Anno -->
+            @Html.DropDownList("annoSelezionato",
+              new SelectList(
+                  Enumerable.Range(DateTime.Now.Year - 5, 6)
+                            .Reverse()
+                            .Select(y => new { Value = y, Text = y }),
+                  "Value", "Text",
+                  annoSelezionato
+              ),
+              new
+              {
+                  @class = "form-select form-select-sm shadow-sm",
+                  style = "width: 150px;",
+                  onchange = "this.form.submit();"
+              })
+
+            <!-- 📅 Trimestre -->
+            @Html.DropDownList("filtroTrimestre",
+                new SelectList(new[]
+                {
+                    new { Value="Q1", Text="1° Trimestre (Gen - Mar)" },
+                    new { Value="Q2", Text="2° Trimestre (Apr - Giu)" },
+                    new { Value="Q3", Text="3° Trimestre (Lug - Set)" },
+                    new { Value="Q4", Text="4° Trimestre (Ott - Dic)" },
+                    new { Value="anno", Text="Anno completo" }
+                }, "Value", "Text", Model.FiltroTrimestre),
+                new
+                {
+                    @class = "form-select form-select-sm shadow-sm",
+                    style = "width: 220px;",
+                    onchange = "this.form.submit();"
+                })
+
+            <!-- 🔍 Sottofiltro -->
+            @Html.DropDownList("sottoFiltro",
+                new SelectList(new[]
+                {
+                    new { Value="completo", Text="Tutto il trimestre" },
+                    new { Value="mese1", Text="1° mese" },
+                    new { Value="mese2", Text="2° mese" },
+                    new { Value="mese3", Text="3° mese" }
+                }, "Value", "Text", Model.SottoFiltro),
+                new
+                {
+                    @class = "form-select form-select-sm shadow-sm",
+                    style = "width: 180px;",
+                    onchange = "this.form.submit();"
+                })
         }
     </div>
-</div>
 
-@if (Model.ID_ClienteSelezionato == 0 || string.IsNullOrWhiteSpace(Model.NomeCliente))
-{
-    <div class="alert alert-warning">
-        Nessun cliente selezionato. Seleziona un cliente dal menu in alto per visualizzare i dati.
-    </div>
-}
-else
-{
-    <p class="text-muted">
-        Stai operando per il cliente: <strong>@Model.NomeCliente</strong> |
-        Dati ultimi <strong>@Model.IntervalloGiorni</strong> giorni
-    </p>
 
-    if (Model.CollaboratoriAssegnati?.Any() == true)
+    @* 🏢 BLOCCO ADMIN PER VEDERE GESTIONE UTILE E COSTI SINERGIA *@
+    @if (Model.IsAdmin && (Model.ID_ClienteSelezionato == null || Model.ID_ClienteSelezionato == 0))
     {
-        <div class="mb-3 ms-3">
-            <strong>Collaboratori assegnati:</strong>
-            <ul class="list-unstyled small mt-1">
-                @foreach (var c in Model.CollaboratoriAssegnati)
-                {
-                    <li>- @c.Nome @c.Cognome (ID: @c.ID_Utente)</li>
-                }
-            </ul>
+        <hr class="my-4" />
+
+        <!-- 🏢 KPI SINERGIA + GRAFICO SINISTRA + LEGENDA DESTRA -->
+        <div class="row g-3 align-items-center text-center">
+
+            <!-- 🔹 CARD 1 -->
+            <div class="col-md-2 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="entrate">
+                    <div class="card-body p-3">
+                        <i class="bi bi-cash-stack fs-4 text-success"></i>
+                        <h6 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.EntrateTotaliSinergia)</h6>
+                        <p class="mb-0 small text-muted">Entrate</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔹 CARD 2 -->
+            <div class="col-md-2 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="uscite">
+                    <div class="card-body p-3">
+                        <i class="bi bi-wallet2 fs-4 text-danger"></i>
+                        <h6 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.UsciteTotaliSinergia)</h6>
+                        <p class="mb-0 small text-muted">Uscite</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔹 CARD 3 -->
+            <div class="col-md-2 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="trattenute">
+                    <div class="card-body p-3">
+                        <i class="bi bi-percent fs-4 text-warning"></i>
+                        <h6 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.TrattenuteSinergiaTotali)</h6>
+                        <p class="mb-0 small text-muted">Trattenute</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔹 CARD 4 -->
+            <div class="col-md-2 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="utile">
+                    <div class="card-body p-3">
+                        <i class="bi bi-bar-chart-line-fill fs-4 text-primary"></i>
+                        <h6 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.UtileAziendale)</h6>
+                        <p class="mb-0 small text-muted">Utile</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📊 GRAFICO SINISTRA + LEGENDA DESTRA -->
+            <div class="col-md-4 col-sm-12">
+                <div class="card shadow-sm border-0 h-100 p-3 d-flex flex-row align-items-center justify-content-between">
+
+                    <!-- GRAFICO A SINISTRA -->
+                    <div style="width: 50%; height: 140px;">
+                        <canvas id="graficoTortaSinergia"></canvas>
+                    </div>
+
+                    <!-- LEGENDA A DESTRA -->
+                    <div class="text-start small text-muted ms-3" style="width: 45%;">
+                        <h6 class="text-secondary mb-1">Ripartizione Sinergia</h6>
+                        <p class="small text-muted mb-2">
+                            Periodo: <strong id="lblPeriodo">@Model.FiltroTrimestre</strong>
+                            @if (Model.SottoFiltro != "completo")
+                            {
+                                <span> · <strong id="lblSotto">@Model.SottoFiltro.ToUpper()</strong></span>
+                            }
+                        </p>
+                        <div><i class="bi bi-circle-fill text-success"></i> <strong>Entrate</strong> – Ricavi totali generati</div>
+                        <div><i class="bi bi-circle-fill text-danger"></i> <strong>Uscite</strong> – Costi e spese operative</div>
+                        <div><i class="bi bi-circle-fill text-warning"></i> <strong>Trattenute</strong> – Quote trattenute Sinergia</div>
+                        <div><i class="bi bi-circle-fill text-primary"></i> <strong>Utile</strong> – Margine netto finale</div>
+                    </div>
+                </div>
+            </div>
         </div>
+
+        <!-- 🌙 MODALE KPI SINERGIA -->
+        <div class="modal fade" id="modaleDettaglioKPI" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content shadow-lg">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title" id="titoloModaleKPI">Dettaglio KPI</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                    </div>
+                    <div class="modal-body p-3" id="contenutoDettaglioKPI">
+                        <div class="text-center text-muted py-4">
+                            <div class="spinner-border text-primary"></div>
+                            <p class="mt-2 small">Caricamento in corso...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <script>
+        // ============================
+        // 🧩 GESTIONE GRAFICO SINERGIA
+        // ============================
+        let chartSinergia = null;
+        const mapPeriodi = {
+            "Q1": "1° Trimestre (Gen - Mar)",
+            "Q2": "2° Trimestre (Apr - Giu)",
+            "Q3": "3° Trimestre (Lug - Set)",
+            "Q4": "4° Trimestre (Ott - Dic)",
+            "Anno": "Anno Completo"
+        };
+
+        function aggiornaGraficoSinergia(entrate, uscite, trattenute, utile, trimestre, sottofiltro) {
+            const ctx = document.getElementById('graficoTortaSinergia').getContext('2d');
+            if (chartSinergia) chartSinergia.destroy();
+
+            const data = {
+                labels: ['Entrate', 'Uscite', 'Trattenute', 'Utile'],
+                datasets: [{
+                    data: [entrate, uscite, trattenute, utile],
+                    backgroundColor: ['#198754', '#dc3545', '#ffc107', '#0d6efd'],
+                    borderColor: '#fff',
+                    borderWidth: 1
+                }]
+            };
+
+            chartSinergia = new Chart(ctx, {
+                type: 'pie',
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return context.label + ': ' + context.parsed.toLocaleString('it-IT', {
+                                        style: 'currency', currency: 'EUR'
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            document.getElementById("lblPeriodo").innerText = mapPeriodi[trimestre] || trimestre;
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const trimestre = "@Model.FiltroTrimestre" || "Anno";
+            const sotto = "@Model.SottoFiltro" || "completo";
+            const entrate = parseFloat("@Model.EntrateTotaliSinergia".replace(",", ".") || 0);
+            const uscite = parseFloat("@Model.UsciteTotaliSinergia".replace(",", ".") || 0);
+            const trattenute = parseFloat("@Model.TrattenuteSinergiaTotali".replace(",", ".") || 0);
+            const utile = parseFloat("@Model.UtileAziendale".replace(",", ".") || 0);
+            aggiornaGraficoSinergia(entrate, uscite, trattenute, utile, trimestre, sotto);
+        });
+
+        // ============================
+        // ⚡ GESTIONE MODALE DETTAGLIO
+        // ============================
+        document.addEventListener("click", function (e) {
+            const card = e.target.closest(".kpi-card");
+            if (!card) return;
+
+            const tipo = card.getAttribute("data-tipo");
+            const titolo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
+
+            const modal = new bootstrap.Modal(document.getElementById("modaleDettaglioKPI"));
+            document.getElementById("titoloModaleKPI").innerText = `Dettaglio KPI: ${titolo}`;
+            document.getElementById("contenutoDettaglioKPI").innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <div class="spinner-border text-primary"></div>
+                    <p class="mt-2 small">Caricamento dati ${titolo}...</p>
+                </div>`;
+
+            modal.show();
+
+            fetch(`/Home/GetDettaglioKPISinergia?tipo=${tipo}`)
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById("contenutoDettaglioKPI").innerHTML = html;
+                })
+                .catch(err => {
+                    console.error("❌ Errore caricamento KPI:", err);
+                    document.getElementById("contenutoDettaglioKPI").innerHTML =
+                        `<div class='alert alert-danger mb-0'>Errore nel caricamento: ${err.message}</div>`;
+                });
+        });
+        </script>
     }
 
-    <hr />
+
+    @if ((Model.ID_ClienteSelezionato == 0 || string.IsNullOrWhiteSpace(Model.NomeCliente))
+        && (Model.ID_UtenteImpers == null || Model.ID_UtenteImpers == 0))
+    {
+        <div class="alert alert-warning mt-4">
+            Seleziona un cliente dal menu per visualizzare i dati.
+        </div>
+        return;
+    }
+
+
+    <p class="text-muted small mb-4">
+        Cliente attivo: <strong>@Model.NomeCliente</strong> · Periodo: <strong>@Model.FiltroTrimestre</strong> @if (Model.SottoFiltro != "completo")
+        {<span>– @Model.SottoFiltro.ToUpper()</span>}
+    </p>
+
+    <!-- KPI principali -->
+    <div class="row g-3 mb-4 text-center">
+        <!-- Pratiche attive -->
+        <div class="col-md-2 col-sm-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <i class="bi bi-kanban-fill fs-3 text-primary"></i>
+                    <h5 class="mt-2 fw-bold">@(Model.Pratiche?.Count() ?? 0)</h5>
+                    <p class="mb-0 small text-muted">Pratiche attive</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Avvisi emessi -->
+        <div class="col-md-2 col-sm-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <i class="bi bi-receipt fs-3 text-success"></i>
+                    <h5 class="mt-2 fw-bold">@(Model.AvvisiParcella?.Count() ?? 0)</h5>
+                    <p class="mb-0 small text-muted">Avvisi emessi</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Incassi totali -->
+        <div class="col-md-2 col-sm-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <i class="bi bi-cash-coin fs-3 text-info"></i>
+                    <h5 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.IncassiTotali)</h5>
+                    <p class="mb-0 small text-muted">Incassi totali</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Costi totali -->
+        <div class="col-md-2 col-sm-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <i class="bi bi-wallet2 fs-3 text-danger"></i>
+                    <h5 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.CostiTotali)</h5>
+                    <p class="mb-0 small text-muted">Costi totali</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Utile incassato -->
+        <div class="col-md-2 col-sm-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <i class="bi bi-graph-up-arrow fs-3 text-warning"></i>
+                    <h5 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.UtilePersonale ?? 0)</h5>
+                    <p class="mb-0 small text-muted">Utile incassato</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- GRAFICO A TORTA -->
+        <div class="col-md-2 col-sm-12">
+            <div class="card shadow-sm border-0 h-100 p-3">
+                <h6 class="text-secondary mb-2 text-center">📊 Ripartizione</h6>
+                <div class="chart-container" style="position: relative; height: 150px; width: 100%;">
+                    <canvas id="graficoTortaPrincipale"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+document.addEventListener("DOMContentLoaded", function () {
+    const ctx = document.getElementById('graficoTortaPrincipale').getContext('2d');
+
+    // Dati principali del professionista
+    const incassi = parseFloat("@(Model.IncassiTotali)".replace(",", "."));
+    const costi = parseFloat("@(Model.CostiTotali)".replace(",", "."));
+    const utile = parseFloat("@(Model.UtilePersonale ?? 0)".replace(",", "."));
+
+    console.log("📊 Dati grafico principale (professionista):", { incassi, costi, utile });
+
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Incassi Totali', 'Costi Totali', 'Utile Incassato'],
+            datasets: [{
+                data: [incassi, costi, utile],
+                backgroundColor: ['#198754', '#dc3545', '#0d6efd'],
+                borderColor: '#fff',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12,
+                        font: { size: 10 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return context.label + ': ' +
+                                context.parsed.toLocaleString('it-IT', {
+                                    style: 'currency',
+                                    currency: 'EUR'
+                                });
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+    </script>
+
+
 
     <div class="row g-3">
 
-        <!-- ✅ Pratiche Attive -->
+        <!-- Pratiche Attive -->
         <div class="col-md-4 col-sm-6">
-            <div class="card h-100">
+            <div class="card h-100 shadow-sm border-0">
                 <div class="card-header bg-primary text-white">
                     <i class="bi bi-folder-fill me-1"></i> Pratiche Attive
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     @if (Model.Pratiche?.Any() == true)
                     {
-                        <ul class="list-group list-group-sm">
-                            @foreach (var p in Model.Pratiche)
+                        <ul class="list-group list-group-flush">
+                            @foreach (var p in Model.Pratiche.Take(5))
                             {
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <li class="list-group-item small d-flex justify-content-between">
                                     <span>@p.Titolo</span>
                                     <a href="@Url.Action("DettaglioPratica", "Pratiche", new { id = p.ID_Pratiche })" class="text-primary">
                                         <i class="bi bi-box-arrow-up-right"></i>
@@ -73,27 +454,27 @@ else
                     }
                     else
                     {
-                        <div class="text-muted small">Nessuna pratica attiva.</div>
+                        <div class="text-muted small p-2">Nessuna pratica attiva.</div>
                     }
                 </div>
             </div>
         </div>
 
-        <!-- ✅ Avvisi Parcella -->
+        <!-- Avvisi Parcella -->
         <div class="col-md-4 col-sm-6">
-            <div class="card h-100">
+            <div class="card h-100 shadow-sm border-0">
                 <div class="card-header bg-success text-white">
                     <i class="bi bi-receipt-cutoff me-1"></i> Avvisi Parcella
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     @if (Model.AvvisiParcella?.Any() == true)
                     {
-                        <ul class="list-group list-group-sm">
-                            @foreach (var avv in Model.AvvisiParcella)
+                        <ul class="list-group list-group-flush">
+                            @foreach (var av in Model.AvvisiParcella.Take(5))
                             {
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>@avv.NomePratica </span>
-                                    <a href="@Url.Action("GestioneParcelle", "Pratiche", new { id = avv.ID_AvvisoParcelle })" class="text-success">
+                                <li class="list-group-item small d-flex justify-content-between">
+                                    <span>@av.TitoloAvviso</span>
+                                    <a href="@Url.Action("GestioneParcelle", "Pratiche", new { id = av.ID_AvvisoParcelle })" class="text-success">
                                         <i class="bi bi-box-arrow-up-right"></i>
                                     </a>
                                 </li>
@@ -102,7 +483,7 @@ else
                     }
                     else
                     {
-                        <div class="text-muted small">Nessun avviso disponibile.</div>
+                        <div class="text-muted small p-2">Nessun avviso disponibile.</div>
                     }
                 </div>
             </div>
@@ -123,11 +504,6 @@ else
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     <span>@n.Titolo</span>
                                     <div class="d-flex gap-2">
-                                        <!-- Segna come letta -->
-                                        @*<a href="@Url.Action("SegnaComeLetta", "Home", new { id = n.ID_Notifica })"
-                                               class="text-muted" title="Segna come letta">
-                                                <i class="bi bi-check-circle"></i>
-                                            </a>*@
                                         <!-- Vai alla pratica -->
                                         @if (!string.IsNullOrEmpty(n.LinkPratica))
                                         {
@@ -154,131 +530,19 @@ else
             </div>
         </div>
 
-
-
-        @*✅ Operazioni Previsionali*@
-        <div class="col-md-4 col-sm-6">
-            <div class="card h-100 shadow-sm border-0">
-                <div class="card-header bg-secondary text-white fw-bold">
-                    <i class="bi bi-lightbulb-fill me-1"></i> Operazioni Previsionali
-                </div>
-                <div class="card-body p-0">
-                    @if (Model.OperazioniPrevisionali?.Any() == true)
-                    {
-                        <ul class="list-group list-group-flush">
-                            @foreach (var op in Model.OperazioniPrevisionali)
-                            {
-                                <li class="list-group-item d-flex justify-content-between align-items-center small">
-                                    <span>
-                                        <strong>@op.TipoOperazione:</strong> @op.Descrizione
-                                    </span>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="fw-bold @(op.ImportoPrevisto < 0 ? "text-danger" : "text-success")">
-                                            @string.Format("{0:C}", op.ImportoPrevisto)
-                                        </span>
-                                        <a class="btn btn-sm btn-outline-primary"
-                                           href="@Url.Action("OperazioniPrevisionaliList", "Home", new { id = op.ID_Previsione })">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                    </div>
-                                </li>
-                            }
-                        </ul>
-                    }
-                    else
-                    {
-                        <div class="text-muted small p-3">Nessuna operazione previsionale.</div>
-                    }
-                </div>
-            </div>
-        </div>
-
-
-
-        @*✅ Operazioni Economiche*@
-        <div class="col-md-4 col-sm-6">
-            <div class="card h-100 shadow-sm border-0">
-                <div class="card-header bg-info text-white fw-bold">
-                    <i class="bi bi-bar-chart-fill me-1"></i> Operazioni Economiche
-                </div>
-                <div class="card-body p-0">
-                    @if (Model.OperazioniEconomiche?.Any() == true)
-                    {
-                        <ul class="list-group list-group-flush">
-                            @foreach (var oe in Model.OperazioniEconomiche)
-                            {
-                                var isEntrata = oe.Importo >= 0;
-                                <li class="list-group-item d-flex justify-content-between align-items-center small">
-                                    <span>
-                                        <strong>@(isEntrata ? "Entrata" : "Uscita"):</strong> @oe.Descrizione
-                                    </span>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="fw-bold @(isEntrata ? "text-success" : "text-danger")">
-                                            @oe.Importo.ToString("C")
-                                        </span>
-                                        <a class="btn btn-sm btn-outline-primary"
-                                           href='@Url.Action("OperazioniEconomicheList", "Home", new { tipo = "Tutte" })'>
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                    </div>
-                                </li>
-                            }
-                        </ul>
-                    }
-                    else
-                    {
-                        <div class="text-muted small p-3">Nessuna operazione economica.</div>
-                    }
-                </div>
-            </div>
-        </div>
-
-
-        @*✅ Operazioni Finanziarie*@
-        <div class="col-md-4 col-sm-6">
-            <div class="card h-100 shadow-sm border-0">
-                <div class="card-header bg-dark text-white fw-bold">
-                    <i class="bi bi-cash-coin me-1"></i> Operazioni Finanziarie
-                </div>
-                <div class="card-body p-0">
-                    @if (Model.OperazioniFinanziarie?.Any() == true)
-                    {
-                        <ul class="list-group list-group-flush">
-                            @foreach (var of in Model.OperazioniFinanziarie)
-                            {
-                                var isEntrata = string.Equals(of.TipoOperazione, "Entrata", StringComparison.OrdinalIgnoreCase);
-                                <li class="list-group-item d-flex justify-content-between align-items-center small">
-                                    <span>
-                                        <strong>@(isEntrata ? "Entrata" : "Uscita"):</strong> @of.Descrizione
-                                        @if (!string.IsNullOrWhiteSpace(of.NomePratica))
-                                        {
-                                            <span class="text-muted"> · @of.NomePratica</span>
-                                        }
-                                    </span>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="fw-bold @(isEntrata ? "text-success" : "text-danger")">
-                                            @of.Importo.ToString("C")
-                                        </span>
-                                        <a class="btn btn-sm btn-outline-primary"
-                                           href='@Url.Action("OperazioniFinanziarieList", "Home", new { tipo = "Tutte" })'
-                                           title="Vedi tutte le operazioni">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                    </div>
-                                </li>
-                            }
-                        </ul>
-                    }
-                    else
-                    {
-                        <div class="text-muted small p-3">Nessuna operazione finanziaria.</div>
-                    }
-                </div>
-            </div>
-        </div>
-
     </div>
+</div>
 
-}
 
-
+<script>
+    /*funzione per richiamare dettaglio per admin sinergia utile e */ 
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll(".kpi-card").forEach(card => {
+            card.addEventListener("click", function () {
+                const tipo = this.dataset.tipo;
+                console.log("📊 KPI cliccata:", tipo);
+                window.location.href = `/Home/GetDettaglioKPISinergia?tipo=${tipo}`;
+            });
+        });
+    });
+</script>

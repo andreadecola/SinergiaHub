@@ -94,6 +94,7 @@
                 <tr>
                     <th class="d-none d-md-table-cell">ID</th>
                     <th>Nome</th>
+                    <th>Cognome</th>
                     <th class="d-none d-md-table-cell">Partita IVA</th>
                     <th class="d-none d-md-table-cell">Codice Fiscale</th>
                     <th class="d-none d-md-table-cell">Email</th>
@@ -114,6 +115,7 @@
                     <tr data-stato="@prof.Stato" data-ruolo="@prof.TipoRuolo" data-nome="@($"{prof.Nome} {prof.Email} {prof.PartitaIVA}")">
                         <td class="d-none d-md-table-cell">@prof.ID_Professionista</td>
                         <td>@prof.Nome</td>
+                        <td>@prof.Cognome</td>
                         <td class="d-none d-md-table-cell">@prof.PartitaIVA</td>
                         <td class="d-none d-md-table-cell">@prof.CodiceFiscale</td>
                         <td class="d-none d-md-table-cell">@prof.Email</td>
@@ -150,7 +152,7 @@
              data-id="@prof.ID_Professionista"
              data-stato="@prof.Stato"
              data-ruolo="@prof.TipoRuolo"
-             data-nome="@($"{prof.Nome} {prof.Email} {prof.PartitaIVA}")">
+             data-nome="@($"{prof.Nome} {prof.Cognome} {prof.Email} {prof.PartitaIVA}")">
 
             <div class="fw-bold text-primary">@prof.Nome</div>
             <div class="small text-muted"><strong>Email:</strong> @prof.Email</div>
@@ -315,11 +317,15 @@
                             <small class="text-muted d-none" data-prev="Stato"></small>
                         </div>
 
-                        <div class="col-md-4">
+                        <div class="mb-2">
                             <label class="form-label fw-semibold">Carica Documenti</label>
                             <input type="file" name="Documenti" multiple class="form-control form-control-sm" />
                             <small class="text-muted d-none" data-prev="Documenti"></small>
+
+                            <!-- 🔹 Qui lista documenti caricati -->
+                            <div id="listaDocumentiProfessionista" class="mt-2"></div>
                         </div>
+
 
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Tipo Professionista *</label>
@@ -554,9 +560,6 @@
     </div>
 </div>
 
-
-
-
 <script>
 
     let datiBancariTemporaneiProfessionista = null;
@@ -690,6 +693,45 @@
                             selectCitta.value = p.ID_CittaResidenza;
                         }
                     });
+
+                // 📂 Carica documenti già esistenti
+                fetch(`/Utenti/GetDocumentiProfessionista?idProfessionista=${id}`)
+                    .then(r => r.json())
+                    .then(res => {
+                        const container = document.getElementById("listaDocumentiProfessionista");
+                        container.innerHTML = "";
+
+                        if (res.success && res.documenti.length > 0) {
+                            let html = "<ul class='list-group list-group-sm'>";
+                            res.documenti.forEach(doc => {
+                                html += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="fa fa-file me-2"></i>
+                            <strong>${doc.NomeDocumento}</strong><br/>
+                            <small class="text-muted">${doc.DataCaricamento} · ${doc.UtenteCaricamento || ''}</small>
+                        </span>
+                        <div>
+                            <a href="/Utenti/DownloadDocumentoProfessionista?id=${doc.ID_Documento}" 
+                               class="btn btn-sm btn-outline-primary me-1" title="Scarica">
+                               <i class="fa fa-download"></i>
+                            </a>
+                            <button type="button" 
+                                    class="btn btn-sm btn-outline-danger" 
+                                    onclick="EliminaDocumentoProfessionista(${doc.ID_Documento})" 
+                                    title="Elimina">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                    </li>`;
+                            });
+                            html += "</ul>";
+                            container.innerHTML = html;
+                        } else {
+                            container.innerHTML = "<p class='text-muted small'>Nessun documento caricato.</p>";
+                        }
+                    });
+
 
                 // 🛡️ Permessi
                 const checkboxGestionePermessi = form.querySelector('[name="PuoGestirePermessi"]');

@@ -35,5 +35,10 @@ namespace Sinergia.Model
 
         [StringLength(20)]
         public string Stato { get; set; }
+
+        [StringLength(100)]
+        public string CategoriaDocumento { get; set; }
+
+        public int? ID_RiferimentoAvvisoParcella { get; set; }
     }
 }

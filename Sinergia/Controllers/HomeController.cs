@@ -8,6 +8,7 @@ using System.Linq;
 using Sinergia.ActionFilters;
 using System.Collections.Generic;
 using System.Text;
+using OpenXmlPowerTools;
 
 namespace Sinergia.Controllers
 {
@@ -16,332 +17,712 @@ namespace Sinergia.Controllers
     {
         private SinergiaDB db = new SinergiaDB();
         #region Cruscotto
-        public ActionResult Cruscotto(string idCliente = null, int? intervalloGiorni = 30)
+        public ActionResult Cruscotto(string idCliente = null, string filtroTrimestre = null, string sottoFiltro = "completo", int? annoSelezionato = null)
         {
             ViewData["controller"] = ControllerContext.RouteData.Values["controller"].ToString();
             ViewData["azione"] = ControllerContext.RouteData.Values["action"].ToString();
 
             int idUtente = UserManager.GetIDUtenteCollegato();
             int idUtenteAttivo = UserManager.GetIDUtenteAttivo();
-            if (idUtente <= 0) return RedirectToAction("Login", "Account");
+            if (idUtente <= 0)
+                return RedirectToAction("Login", "Account");
 
-            RicorrenzeHelper.EseguiRicorrenzeCostiSeNecessario();
-            CostiHelper.EseguiGenerazioneCosti();
+            // ✅ Esegui eventuali ricorrenze costi automatiche solo per Admin
+            if (IsAdminUser_Dashboard())
+            {
+                RicorrenzeHelper.EseguiRicorrenzeCostiSeNecessario();
+                CostiHelper.EseguiGenerazioneCosti();
+
+                // ==========================================================
+                // 🔔 Controlli periodici per notifiche automatiche
+                // ==========================================================
+                NotificheHelper.CreaNotificaPraticaFerma(30);           // Pratiche senza aggiornamenti da 30 giorni
+                NotificheHelper.CreaNotificaPraticaSenzaAvviso();       // Pratiche chiuse/completate senza avviso parcella
+                NotificheHelper.CreaNotificaPraticaScadenzaImminente(); // Pratiche con scadenza prossima
+                NotificheHelper.VerificaCostiNonPagati(1);              // Costi non pagati da oltre 1 mese
+            }
 
             using (var db = new SinergiaDB())
             {
                 var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteAttivo);
-                if (utente == null) return RedirectToAction("Login", "Account");
+                if (utente == null)
+                    return RedirectToAction("Login", "Account");
 
                 var clientiDisponibili = DashboardHelper.GetClientiDisponibiliPerNavbar(idUtente, UserManager.GetTipoUtente());
                 Session["ClientiDisponibili"] = clientiDisponibili;
-                if (clientiDisponibili == null || !clientiDisponibili.Any()) return View("NessunProfessionistaAssegnato");
+                if (clientiDisponibili == null || !clientiDisponibili.Any())
+                    return View("NessunProfessionistaAssegnato");
 
-                string nomeCliente = "";
+                // ==========================================================
+                // 📌 MAPPING PROFESSIONISTA CORRENTE
+                // ==========================================================
+                var operatore = db.OperatoriSinergia
+                    .FirstOrDefault(o => o.ID_UtenteCollegato == idUtenteAttivo && o.TipoCliente == "Professionista");
+
                 int idClienteProfessionista = 0;
-
-                var operatore = db.OperatoriSinergia.FirstOrDefault(o => o.ID_UtenteCollegato == idUtenteAttivo);
+                string nomeCliente = "";
                 if (operatore != null)
                 {
                     idClienteProfessionista = operatore.ID_Cliente;
-                    nomeCliente = operatore.Nome + " " + (operatore.Cognome ?? "");
+                    nomeCliente = $"{operatore.Nome} {operatore.Cognome}";
                     idCliente = "P_" + idClienteProfessionista;
-
                     Session["ID_ClienteSelezionato"] = idCliente;
+
                     var cookie = new HttpCookie("Cliente", idCliente) { Expires = DateTime.Now.AddDays(7) };
                     Response.Cookies.Add(cookie);
                 }
 
-                var praticheNonRegistrate = db.Pratiche
-                    .Where(p => p.ID_UtenteResponsabile == idClienteProfessionista && p.Stato != "Eliminato")
-                    .ToList()
-                    .Where(p => !db.BilancioProfessionista.Any(b => b.ID_Pratiche == p.ID_Pratiche && b.Origine == "Pratica"))
+                // ==========================================================
+                // 📆 RANGE DI ANALISI PER TRIMESTRE
+                // ==========================================================
+                // 🩵 💡 👉 METTILO QUI SUBITO
+                if (!string.IsNullOrEmpty(filtroTrimestre) && filtroTrimestre.All(char.IsDigit))
+                    filtroTrimestre = "auto";
+
+                DateTime oggi = DateTime.Today;
+                int anno = annoSelezionato ?? oggi.Year;
+                DateTime inizio;
+                DateTime fine;
+
+               
+                if (string.IsNullOrEmpty(filtroTrimestre) || filtroTrimestre == "auto")
+                {
+                    if (oggi.Month >= 1 && oggi.Month <= 3)
+                        filtroTrimestre = "Q1";
+                    else if (oggi.Month >= 4 && oggi.Month <= 6)
+                        filtroTrimestre = "Q2";
+                    else if (oggi.Month >= 7 && oggi.Month <= 9)
+                        filtroTrimestre = "Q3";
+                    else
+                        filtroTrimestre = "Q4";
+                }
+
+                switch (filtroTrimestre)
+                {
+                    case "Q1":
+                        inizio = new DateTime(anno, 1, 1);
+                        fine = new DateTime(anno, 3, 31);
+                        break;
+                    case "Q2":
+                        inizio = new DateTime(anno, 4, 1);
+                        fine = new DateTime(anno, 6, 30);
+                        break;
+                    case "Q3":
+                        inizio = new DateTime(anno, 7, 1);
+                        fine = new DateTime(anno, 9, 30);
+                        break;
+                    case "Q4":
+                        inizio = new DateTime(anno, 10, 1);
+                        fine = new DateTime(anno, 12, 31);
+                        break;
+                    case "anno":
+                    default:
+                        inizio = new DateTime(anno, 1, 1);
+                        fine = new DateTime(anno, 12, 31);
+                        break;
+                }
+
+                // 🔹 Gestione sottofiltri
+                if (sottoFiltro == "mese1") fine = inizio.AddMonths(1).AddDays(-1);
+                else if (sottoFiltro == "mese2") { inizio = inizio.AddMonths(1); fine = inizio.AddMonths(1).AddDays(-1); }
+                else if (sottoFiltro == "mese3") { inizio = inizio.AddMonths(2); fine = inizio.AddMonths(1).AddDays(-1); }
+
+                // ==========================================================
+                // 📁 PRATICHE VISIBILI (Cluster + Compensi)
+                // ==========================================================
+                var idUtenteCollegato = db.OperatoriSinergia
+                    .Where(o => o.ID_Cliente == idClienteProfessionista)
+                    .Select(o => o.ID_UtenteCollegato)
+                    .FirstOrDefault();
+
+                var praticheCluster = db.Cluster
+                    .Where(c =>
+                        c.TipoCluster == "Collaboratore" &&
+                        (c.ID_Utente == idUtenteAttivo || c.ID_Utente == idUtenteCollegato))
+                    .Select(c => c.ID_Pratiche)
+                    .Distinct()
                     .ToList();
 
-                foreach (var pratica in praticheNonRegistrate)
-                    RicorrenzeHelper.EseguiRegistrazioniDaPratica(pratica.ID_Pratiche);
+                string idUtenteJson = $"\"ID_Collaboratore\":{idUtenteAttivo}";
+                string idCollegatoJson = $"\"ID_Collaboratore\":{idUtenteCollegato}";
 
-                // ⏱ range: ultimi N giorni (default 30)
-                DateTime fine = DateTime.Today.AddDays(1).AddTicks(-1); // fine giornata inclusa
-                DateTime inizio = fine.AddDays(-(intervalloGiorni ?? 30));
+                var praticheCompensi = db.CompensiPraticaDettaglio
+                    .Where(cd => (cd.Collaboratori.Contains(idUtenteJson) || cd.Collaboratori.Contains(idCollegatoJson)))
+                    .Select(cd => cd.ID_Pratiche)
+                    .Distinct()
+                    .ToList();
 
-                // ✅ pratiche per dashboard (con filtro date)
+                var idPraticheVisibili = praticheCluster.Union(praticheCompensi).Distinct().ToList();
+
                 var pratiche = db.Pratiche
-                    .Where(p => p.ID_UtenteResponsabile == idClienteProfessionista
-                             && p.Stato != "Eliminato"
-                             && p.DataCreazione >= inizio && p.DataCreazione <= fine)
+                    .Where(p =>
+                        p.Stato != "Eliminato" &&
+                        p.DataCreazione >= inizio && p.DataCreazione <= fine &&
+                        (
+                            p.ID_UtenteResponsabile == idUtenteAttivo ||
+                            p.ID_Owner == idClienteProfessionista ||
+                            idPraticheVisibili.Contains(p.ID_Pratiche)
+                        ))
                     .ToList();
-
-                // 👉 ID pratiche (serve per Economico/Finanziario)
-                var idPratiche = pratiche.Select(x => x.ID_Pratiche).ToList();
 
                 var listaPratiche = pratiche.Select(p => new PraticaViewModel
                 {
                     ID_Pratiche = p.ID_Pratiche,
                     Titolo = p.Titolo,
                     Stato = p.Stato,
-                    Descrizione = p.Descrizione,
-                    DataInizioAttivitaStimata = p.DataInizioAttivitaStimata,
-                    DataFineAttivitaStimata = p.DataFineAttivitaStimata,
-                    Collaboratori = (
-                        from r in db.RelazionePraticheUtenti
-                        join u in db.Utenti on r.ID_Utente equals u.ID_Utente
-                        where r.ID_Pratiche == p.ID_Pratiche
-                        select new CollaboratorePraticaViewModel
-                        {
-                            ID_Utente = u.ID_Utente,
-                            Nome = u.Nome + " " + u.Cognome,
-                            Percentuale = 0
-                        }).ToList()
+                    Descrizione = p.Descrizione
                 }).ToList();
 
-                var documentiRecenti = (from d in db.DocumentiPratiche
-                                        join p in db.Pratiche on d.ID_Pratiche equals p.ID_Pratiche
-                                        where p.ID_UtenteResponsabile == idClienteProfessionista && d.Stato != "Eliminato"
-                                        orderby d.DataCaricamento descending
-                                        select new DocumentiPraticaViewModel
-                                        {
-                                            ID_Documento = d.ID_Documento,
-                                            NomeFile = d.NomeFile,
-                                            DataCaricamento = d.DataCaricamento,
-                                            ID_Pratiche = d.ID_Pratiche
-                                        }).Take(10).ToList();
+                // ==========================================================
+                // 🧾 AVVISI PARCELLA
+                // ==========================================================
+                var idPraticheVisibiliPerAvvisi = pratiche.Select(p => p.ID_Pratiche).ToList();
+                idPraticheVisibiliPerAvvisi.AddRange(praticheCluster);
+                idPraticheVisibiliPerAvvisi.AddRange(praticheCompensi);
+                idPraticheVisibiliPerAvvisi = idPraticheVisibiliPerAvvisi.Distinct().ToList();
 
-                // 📌 Recupero ID cliente corrente
-                int idClienteCorrente = GetIDClienteCorrente(idUtenteAttivo);
-                bool isAdmin = IsAdminUser();
-
-                // 📌 Query di base: solo notifiche non lette
-                IQueryable<Notifiche> queryNotifiche = db.Notifiche
-                    .Where(n => n.DataLettura == null);
-
-                // 📌 Gestione visibilità in base al ruolo
-                if (isAdmin && idClienteCorrente == idUtenteAttivo)
-                {
-                    // Admin NON impersonificato → vede tutte le notifiche
-                }
-                else if (isAdmin && idClienteCorrente != idUtenteAttivo)
-                {
-                    // Admin impersonificato → notifiche cliente + proprie
-                    queryNotifiche = queryNotifiche.Where(n =>
-                        n.ID_Utente == idClienteCorrente ||
-                        n.ID_Utente == idUtenteAttivo);
-                }
-                else
-                {
-                    // Utente normale (professionista o collaboratore)
-                    queryNotifiche = queryNotifiche.Where(n => n.ID_Utente == idClienteCorrente);
-                }
-
-                // 📌 Caricamento effettivo notifiche
-                var notifiche = queryNotifiche
-                    .OrderByDescending(n => n.DataCreazione)
-                    .Take(5)
-                    .Select(n => new NotificaViewModel
-                    {
-                        ID_Notifica = n.ID_Notifica,
-                        Titolo = n.Titolo,
-                        Descrizione = n.Descrizione,
-                        DataCreazione = n.DataCreazione,
-                        Stato = n.Stato,
-                        Tipo = n.Tipo
-                    }).ToList();
-
-                var Operatore = db.OperatoriSinergia
-                    .FirstOrDefault(o => o.ID_UtenteCollegato == idUtenteAttivo && o.TipoCliente == "Professionista");
-
-                var collaboratoriAssegnati = new List<UtenteViewModel>();
-                if (operatore != null)
-                {
-                    int IdClienteProfessionista = operatore.ID_Cliente;
-                    collaboratoriAssegnati = (
-                        from ru in db.RelazioneUtenti
-                        join u in db.Utenti on ru.ID_UtenteAssociato equals u.ID_Utente
-                        where ru.ID_Utente == IdClienteProfessionista && ru.Stato == "Attivo"
-                        select new UtenteViewModel
-                        {
-                            ID_Utente = u.ID_Utente,
-                            Nome = u.Nome,
-                            Cognome = u.Cognome,
-                            TipoUtente = u.TipoUtente,
-                            Stato = ru.Stato
-                        }).ToList();
-                }
-
-                // 📌 Recupero ID cliente corrente (professionista o collaboratore)
-                int iDClienteCorrente = GetIDClienteCorrente(idUtenteAttivo);
-
-                // 📌 Query Avvisi Parcella
                 var avvisiParcella = (
                     from a in db.AvvisiParcella
                     join p in db.Pratiche on a.ID_Pratiche equals p.ID_Pratiche
                     where a.Stato != "Annullato"
-                          && (p.ID_UtenteResponsabile == idClienteCorrente || a.ID_UtenteCreatore == idClienteCorrente)
+                          && idPraticheVisibiliPerAvvisi.Contains(p.ID_Pratiche)
                           && a.DataAvviso >= inizio && a.DataAvviso <= fine
                     orderby a.DataAvviso descending
                     select new AvvisoParcellaViewModel
                     {
                         ID_AvvisoParcelle = a.ID_AvvisoParcelle,
-                        ID_Pratiche = (int)a.ID_Pratiche,
-                        DataAvviso = a.DataAvviso,
+                        TitoloAvviso = !string.IsNullOrEmpty(a.TitoloAvviso)
+                            ? a.TitoloAvviso
+                            : (string.IsNullOrEmpty(p.Titolo) ? "(Senza titolo)" : p.Titolo),
                         Importo = a.Importo,
-                        MetodoPagamento = a.MetodoPagamento,
-                        Stato = a.Stato,
-                        ContributoIntegrativoPercentuale = a.ContributoIntegrativoPercentuale,
-                        ContributoIntegrativoImporto = a.ContributoIntegrativoImporto,
-                        AliquotaIVA = a.AliquotaIVA,
-                        ImportoIVA = a.ImportoIVA,
-                        NomePratica = p.Titolo
-                    }
-                ).Take(5).ToList();
+                        Stato = a.Stato
+                    }).Take(5).ToList();
 
-                // ⚙️ Popola/aggiorna il PREVISIONALE
-                if (idClienteProfessionista > 0)
-                {
-                    GiornaliHelper.GeneraPrevisionale(db, idClienteProfessionista, inizio, fine, idUtenteAttivo);
-                }
+                // ==========================================================
+                // 🔔 NOTIFICHE
+                // ==========================================================
+                var notifiche = db.Notifiche
+                    .Where(n => n.ID_Utente == idUtenteAttivo && n.DataLettura == null)
+                    .OrderByDescending(n => n.DataCreazione)
+                    .Take(5)
+                    .Select(n => new NotificaViewModel
+                    {
+                        ID_Notifica = n.ID_Notifica,
+                        Titolo = n.Titolo
+                    }).ToList();
 
-                // ⚙️ Popola/aggiorna l’ECONOMICO
-                if (idClienteProfessionista > 0)
-                {
-                    GiornaliHelper.GeneraEconomicoDaAvvisiNetto(db, idClienteProfessionista, inizio, fine, idUtenteAttivo);
-                }
+                // ==========================================================
+                // 💰 KPI PERSONALI: Incassi / Costi / Utile
+                // ==========================================================
+                decimal incassiTotali = db.PlafondUtente
+                    .Where(p =>
+                        p.TipoPlafond == "Incasso" &&
+                        (p.ID_Utente == idClienteProfessionista || p.ID_Utente == idUtenteCollegato) &&
+                        p.DataVersamento >= inizio && p.DataVersamento <= fine)
+                    .Sum(p => (decimal?)p.ImportoTotale) ?? 0;
 
-                // ⚙️ Popola/aggiorna il FINANZIARIO
-                if (idClienteProfessionista > 0)
-                {
-                    GiornaliHelper.GeneraFinanziario(db, inizio, fine, idUtenteAttivo);
-                }
+                decimal costiTotali = db.GenerazioneCosti
+                    .Where(c =>
+                        (c.ID_Utente == idClienteProfessionista || c.ID_Utente == idUtenteCollegato) &&
+                        c.Stato == "Pagato" &&
+                        c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine)
+                    .Sum(c => (decimal?)c.Importo) ?? 0;
 
-                // 📌 Operazioni Previsionali
-                var operazioniPrevisionali = (from o in db.Previsione
-                                              join p in db.Pratiche on o.ID_Pratiche equals p.ID_Pratiche
-                                              where o.Stato == "Previsionale"
-                                                    && p.ID_UtenteResponsabile == idClienteProfessionista
-                                                    && o.DataPrevisione >= inizio && o.DataPrevisione <= fine
-                                              orderby o.DataPrevisione descending
-                                              select new OperazioniPrevisionaliViewModel
-                                              {
-                                                  ID_Previsione = o.ID_Previsione,
-                                                  ID_Pratiche = o.ID_Pratiche,
-                                                  ID_Professionista = o.ID_Professionista,
-                                                  TipoOperazione = o.TipoOperazione,
-                                                  Descrizione = o.Descrizione,
-                                                  ImportoPrevisto = o.ImportoPrevisto ?? 0,
-                                                  DataPrevisione = o.DataPrevisione,
-                                                  Stato = o.Stato,
-                                                  ID_UtenteCreatore = o.ID_UtenteCreatore ?? 0,
-                                                  DataArchiviazione = o.DataArchiviazione,
-                                                  ID_UtenteArchiviazione = o.ID_UtenteArchiviazione,
-                                                  NomeCliente = p.Titolo
-                                              })
-                                              .Take(5)
-                                              .ToList();
+                decimal utileNetto = incassiTotali - costiTotali;
 
-                // Esempio semplice: se non ho pratiche, liste vuote
-                var operazioniEconomiche = new List<OperazioniEconomicheViewModel>();
-                var operazioniFinanziarie = new List<OperaziomoFinanziarieViewModel>();
-
-                if (idPratiche.Any())
-                {
-                    // Entrate
-                    var entrate = (
-                        from avv in db.AvvisiParcella
-                        where avv.Stato != "Annullato"
-                              && avv.ID_Pratiche.HasValue
-                              && idPratiche.Contains(avv.ID_Pratiche.Value)
-                              && avv.DataAvviso >= inizio && avv.DataAvviso <= fine
-                        select new OperazioniEconomicheViewModel
-                        {
-                            ID_Transazione = avv.ID_AvvisoParcelle,
-                            ID_Pratiche = avv.ID_Pratiche,
-                            Importo = avv.Importo ?? 0,
-                            Descrizione = "Avviso di Parcella",
-                            DataOperazione = avv.DataAvviso
-                        });
-
-                    // Uscite
-                    var statiPagati = new[] { "pagato", "pagata", "pagati" };
-                    var uscite = (
-                        from g in db.GenerazioneCosti
-                        where statiPagati.Contains(g.Stato.Trim().ToLower())
-                              && (!g.ID_Pratiche.HasValue || idPratiche.Contains(g.ID_Pratiche.Value))
-                              && g.DataRegistrazione >= inizio && g.DataRegistrazione <= fine
-                        select new OperazioniEconomicheViewModel
-                        {
-                            ID_Transazione = g.ID_GenerazioneCosto,
-                            ID_Pratiche = g.ID_Pratiche,
-                            Importo = -(g.Importo ?? 0),
-                            Descrizione = g.Descrizione,
-                            DataOperazione = g.DataRegistrazione
-                        });
-
-                    operazioniEconomiche = entrate
-                        .Union(uscite)
-                        .OrderByDescending(o => o.DataOperazione)
-                        .Take(5)
-                        .ToList();
-
-                    // Operazioni Finanziarie
-                    var idUtenteProfessionista = UserManager.GetIDUtenteAttivo();
-
-                    var idsProfessionista = db.OperatoriSinergia
-                        .Where(os => os.ID_UtenteCollegato == idUtenteProfessionista || os.ID_Cliente == idClienteProfessionista)
-                        .Select(os => os.ID_Cliente)
-                        .ToList();
-
-                    if (!idsProfessionista.Contains(idClienteProfessionista))
-                        idsProfessionista.Add(idClienteProfessionista);
-                    if (!idsProfessionista.Contains(idUtenteProfessionista))
-                        idsProfessionista.Add(idUtenteProfessionista);
-
-                    operazioniFinanziarie = (
-                        from o in db.Finanziario
-                        join p in db.Pratiche on o.ID_Pratiche equals p.ID_Pratiche into pj
-                        from pratica in pj.DefaultIfEmpty()
-                        where o.Stato == "Finanziario"
-                              && o.DataIncasso >= inizio && o.DataIncasso <= fine
-                              && idsProfessionista.Contains((int)o.ID_Professionista)
-                        orderby o.DataIncasso descending, o.ID_Finanziario descending
-                        select new OperaziomoFinanziarieViewModel
-                        {
-                            ID_Finanza = o.ID_Finanziario,
-                            ID_Pratiche = o.ID_Pratiche,
-                            TipoOperazione = o.TipoOperazione,
-                            Importo = o.ImportoFinanziario ?? 0,
-                            Descrizione = o.Descrizione,
-                            DataOperazione = o.DataIncasso,
-                            NomePratica = (pratica != null ? pratica.Titolo : "Generale")
-                        }
-                    ).Take(5).ToList();
-                }
-
+                // ==========================================================
+                // 📦 COSTRUZIONE MODEL
+                // ==========================================================
                 var model = new DashboardViewModel
                 {
                     NomeUtente = utente.Nome,
                     NomeCliente = nomeCliente,
                     ID_ClienteSelezionato = idClienteProfessionista,
-                    IntervalloGiorni = intervalloGiorni ?? 30,
                     ClientiDisponibili = clientiDisponibili,
                     Pratiche = listaPratiche,
-                    DocumentiRecenti = documentiRecenti,
-                    Notifiche = notifiche,
-                    CollaboratoriAssegnati = collaboratoriAssegnati,
                     AvvisiParcella = avvisiParcella,
-                    OperazioniPrevisionali = operazioniPrevisionali,
-                    OperazioniEconomiche = operazioniEconomiche,
-                    OperazioniFinanziarie = operazioniFinanziarie
+                    Notifiche = notifiche,
+                    IncassiTotali = incassiTotali,
+                    CostiTotali = costiTotali,
+                    UtilePersonale = utileNetto,
+                    FiltroTrimestre = filtroTrimestre,
+                    SottoFiltro = sottoFiltro,
+                    IsAdmin = IsAdminUser_Dashboard()
                 };
 
-                Session["ID_Cliente"] = idClienteProfessionista;
-                Session["ID_ClienteSelezionato"] = idCliente;
-                ViewBag.IDUtenteCollegato = idUtenteAttivo;
+                // ==========================================================
+                // 📈 MINI-GRAFICO (ultimi 6 mesi)
+                // ==========================================================
+                DateTime seiMesiFa = oggi.AddMonths(-5);
+                var serieIncassi = db.PlafondUtente
+                    .Where(p => p.TipoPlafond == "Incasso" &&
+                                (p.ID_Utente == idClienteProfessionista || p.ID_Utente == idUtenteCollegato) &&
+                                p.DataVersamento >= seiMesiFa)
+                    .GroupBy(p => new { Mese = p.DataVersamento.Value.Month, Anno = p.DataVersamento.Value.Year })
+                    .Select(g => new { g.Key.Mese, g.Key.Anno, Totale = g.Sum(x => x.ImportoTotale) })
+                    .OrderBy(g => g.Anno).ThenBy(g => g.Mese)
+                    .ToList();
+
+                var serieCosti = db.GenerazioneCosti
+                    .Where(c => (c.ID_Utente == idClienteProfessionista || c.ID_Utente == idUtenteCollegato) &&
+                                c.Stato == "Pagato" &&
+                                c.DataRegistrazione >= seiMesiFa)
+                    .GroupBy(c => new { Mese = c.DataRegistrazione.Value.Month, Anno = c.DataRegistrazione.Value.Year })
+                    .Select(g => new { g.Key.Mese, g.Key.Anno, Totale = g.Sum(x => x.Importo ?? 0) })
+                    .OrderBy(g => g.Anno).ThenBy(g => g.Mese)
+                    .ToList();
+
+                var mesi = Enumerable.Range(0, 6).Select(i => oggi.AddMonths(-5 + i)).ToList();
+
+                model.MesiGrafico = mesi.Select(m => m.ToString("MMM yyyy")).ToList();
+                model.AndamentoIncassi = mesi.Select(m =>
+                {
+                    var item = serieIncassi.FirstOrDefault(s => s.Mese == m.Month && s.Anno == m.Year);
+                    return item?.Totale ?? 0;
+                }).ToList();
+
+                model.AndamentoCosti = mesi.Select(m =>
+                {
+                    var item = serieCosti.FirstOrDefault(s => s.Mese == m.Month && s.Anno == m.Year);
+                    return item?.Totale ?? 0;
+                }).ToList();
+
+                // ==========================================================
+                // 🏢 KPI SINERGIA (solo per Admin)
+                // ==========================================================
+                if (IsAdminUser_Dashboard())
+                {
+                    System.Diagnostics.Trace.WriteLine("========== [CRUSCOTTO ADMIN - KPI SINERGIA] ==========");
+
+                    try
+                    {
+                        // ✅ Usa l’intervallo del trimestre già calcolato sopra
+                        System.Diagnostics.Trace.WriteLine($"📅 Calcolo KPI Sinergia per periodo selezionato: {inizio:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+
+                        // ======================================================
+                        // 💰 ENTRATE (solo costi pagati, reali)
+                        // ======================================================
+                        var entrateQuery = db.GenerazioneCosti
+                            .Where(c =>
+                                c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine &&
+                                c.Stato == "Pagato" &&
+                                (c.Categoria == "Costo Generale" ||
+                                 c.Categoria == "Costo Team" ||
+                                 c.Categoria == "Costo Professionista" ||
+                                 c.Categoria == "Costo Pratica") &&
+                                !c.Descrizione.Contains("Owner Fee"))
+                            .ToList();
+
+                        decimal entrateTotali = entrateQuery.Sum(c => c.Importo ?? 0);
+                        System.Diagnostics.Trace.WriteLine($"💰 Entrate effettive (Pagato): {entrateTotali:N2} € ({entrateQuery.Count} record)");
+
+                        // ======================================================
+                        // 💸 USCITE (ancora previsionali)
+                        // ======================================================
+                        var usciteQuery = db.GenerazioneCosti
+                            .Where(c =>
+                                c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine &&
+                                c.Stato == "Previsionale" &&
+                                (c.Categoria == "Costo Generale" ||
+                                 c.Categoria == "Costo Team" ||
+                                 c.Categoria == "Costo Professionista" ||
+                                 c.Categoria == "Costo Pratica") &&
+                                !c.Descrizione.Contains("Owner Fee"))
+                            .ToList();
+
+                        decimal usciteTotali = usciteQuery.Sum(c => c.Importo ?? 0);
+                        System.Diagnostics.Trace.WriteLine($"💸 Uscite previsionali: {usciteTotali:N2} € ({usciteQuery.Count} record)");
+
+                        // ======================================================
+                        // 🏦 TRATTENUTE SINERGIA (solo Finanziarie)
+                        // ======================================================
+                        decimal trattenuteSinergia = db.BilancioProfessionista
+                            .Where(b =>
+                                b.Categoria == "Trattenuta Sinergia" &&
+                                b.Stato == "Finanziario" &&
+                                b.DataRegistrazione >= inizio && b.DataRegistrazione <= fine)
+                            .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                        System.Diagnostics.Trace.WriteLine($"🏦 Trattenute Finanziarie: {trattenuteSinergia:N2} €");
+
+                        // ======================================================
+                        // 📈 UTILE AZIENDALE
+                        // ======================================================
+                        decimal utileAziendale = (entrateTotali + trattenuteSinergia) - usciteTotali;
+                        System.Diagnostics.Trace.WriteLine($"📈 Utile aziendale calcolato: {utileAziendale:N2} €");
+
+                        // ======================================================
+                        // 💾 Assegna ai KPI del model
+                        // ======================================================
+                        model.EntrateTotaliSinergia = entrateTotali;
+                        model.UsciteTotaliSinergia = usciteTotali;
+                        model.TrattenuteSinergiaTotali = trattenuteSinergia;
+                        model.UtileAziendale = utileAziendale;
+
+                        // ======================================================
+                        // 📊 Andamento mensile (solo 3 mesi del trimestre)
+                        // ======================================================
+                        var andamentoMensile = db.GenerazioneCosti
+                            .Where(c =>
+                                c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine &&
+                                (c.Categoria == "Costo Generale" ||
+                                 c.Categoria == "Costo Team" ||
+                                 c.Categoria == "Costo Professionista" ||
+                                 c.Categoria == "Costo Pratica") &&
+                                !c.Descrizione.Contains("Owner Fee"))
+                            .ToList()
+                            .GroupBy(c => new { c.DataRegistrazione.Value.Year, c.DataRegistrazione.Value.Month })
+                            .Select(g => new
+                            {
+                                MeseAnno = $"{g.Key.Month:D2}/{g.Key.Year}",
+                                Entrate = g.Where(x => x.Stato == "Pagato").Sum(x => x.Importo ?? 0),
+                                Uscite = g.Where(x => x.Stato == "Previsionale").Sum(x => x.Importo ?? 0)
+                            })
+                            .Select(x => new
+                            {
+                                x.MeseAnno,
+                                Utile = (x.Entrate) - (x.Uscite)
+                            })
+                            .OrderBy(x => x.MeseAnno)
+                            .ToList();
+
+                        model.MesiUtile = andamentoMensile.Select(x => x.MeseAnno).ToList();
+                        model.UtileMensile = andamentoMensile.Select(x => x.Utile).ToList();
+
+                        System.Diagnostics.Trace.WriteLine("✅ [KPI Sinergia] Calcolo trimestrale completato senza errori.");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.WriteLine("❌ [ERRORE KPI SINERGIA]");
+                        System.Diagnostics.Trace.WriteLine($"Messaggio: {ex.Message}");
+                        if (ex.InnerException != null)
+                            System.Diagnostics.Trace.WriteLine($"InnerException: {ex.InnerException.Message}");
+                        System.Diagnostics.Trace.WriteLine($"StackTrace: {ex.StackTrace}");
+
+                        // fallback
+                        model.MesiUtile = Enumerable.Range(0, 3)
+                            .Select(i => DateTime.Today.AddMonths(-2 + i).ToString("MM/yyyy"))
+                            .ToList();
+                        model.UtileMensile = Enumerable.Repeat(0m, model.MesiUtile.Count).ToList();
+                    }
+
+                    System.Diagnostics.Trace.WriteLine("========== [FINE KPI SINERGIA] ==========");
+                }
+
 
                 return View("Cruscotto", model);
+
             }
         }
 
 
+
+        [HttpGet]
+        public JsonResult AggiornaGraficoSinergia(string filtroTrimestre, string sottoFiltro, int? annoSelezionato = null)
+        {
+            using (var db = new SinergiaDB())
+            {
+                // ==========================================================
+                // 🧩 Normalizza filtro e sottofiltro
+                // ==========================================================
+
+                // 🔒 Se arriva un numero tipo "3620", forza "auto"
+                if (!string.IsNullOrEmpty(filtroTrimestre) && filtroTrimestre.All(char.IsDigit))
+                {
+                    System.Diagnostics.Trace.WriteLine($"⚠️ [AggiornaGraficoSinergia] Ricevuto valore numerico anomalo: {filtroTrimestre}, imposto 'auto'");
+                    filtroTrimestre = "auto";
+                }
+
+                DateTime oggi = DateTime.Today;
+                int anno = annoSelezionato ?? oggi.Year;
+                DateTime inizio;
+                DateTime fine;
+
+                // ✅ Determina trimestre
+                if (string.IsNullOrEmpty(filtroTrimestre) || filtroTrimestre == "auto")
+                {
+                    if (oggi.Month >= 1 && oggi.Month <= 3) filtroTrimestre = "Q1";
+                    else if (oggi.Month >= 4 && oggi.Month <= 6) filtroTrimestre = "Q2";
+                    else if (oggi.Month >= 7 && oggi.Month <= 9) filtroTrimestre = "Q3";
+                    else filtroTrimestre = "Q4";
+                }
+
+                // ✅ Calcolo intervallo del trimestre
+                switch (filtroTrimestre)
+                {
+                    case "Q1":
+                        inizio = new DateTime(anno, 1, 1);
+                        fine = new DateTime(anno, 3, 31);
+                        break;
+                    case "Q2":
+                        inizio = new DateTime(anno, 4, 1);
+                        fine = new DateTime(anno, 6, 30);
+                        break;
+                    case "Q3":
+                        inizio = new DateTime(anno, 7, 1);
+                        fine = new DateTime(anno, 9, 30);
+                        break;
+                    case "Q4":
+                        inizio = new DateTime(anno, 10, 1);
+                        fine = new DateTime(anno, 12, 31);
+                        break;
+                    default:
+                        filtroTrimestre = "Anno";
+                        inizio = new DateTime(anno, 1, 1);
+                        fine = new DateTime(anno, 12, 31);
+                        break;
+                }
+
+                // ✅ Applica sottofiltro (mese1, mese2, mese3)
+                if (sottoFiltro == "mese1") fine = inizio.AddMonths(1).AddDays(-1);
+                else if (sottoFiltro == "mese2") { inizio = inizio.AddMonths(1); fine = inizio.AddMonths(1).AddDays(-1); }
+                else if (sottoFiltro == "mese3") { inizio = inizio.AddMonths(2); fine = inizio.AddMonths(1).AddDays(-1); }
+
+                // ==========================================================
+                // 💰 Calcolo KPI Sinergia SOLO PER IL PERIODO
+                // ==========================================================
+                decimal entrate = db.GenerazioneCosti
+                    .Where(c =>
+                        (c.Origine == "Ricorrenza" || c.Origine == "Progetto") &&
+                        (c.Approvato == true || c.Stato == "Pagato") &&
+                        (c.Categoria == "Costo Generale" ||
+                         c.Categoria == "Costo Team" ||
+                         c.Categoria == "Costo Professionista" ||
+                         c.Categoria == "Costo Pratica") &&
+                        c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine)
+                    .Sum(c => (decimal?)c.Importo) ?? 0;
+
+                decimal uscite = db.GenerazioneCosti
+                    .Where(c =>
+                        (c.Origine == "Ricorrenza" || c.Origine == "Progetto") &&
+                        (c.Approvato == false || c.Stato == "Previsionale") &&
+                        (c.Categoria == "Costo Generale" ||
+                         c.Categoria == "Costo Team" ||
+                         c.Categoria == "Costo Professionista" ||
+                         c.Categoria == "Costo Pratica") &&
+                        c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine)
+                    .Sum(c => (decimal?)c.Importo) ?? 0;
+
+                decimal trattenute = db.BilancioProfessionista
+                    .Where(b =>
+                        b.Categoria == "Trattenuta Sinergia" && b.Importo > 0 &&
+                        b.DataRegistrazione >= inizio && b.DataRegistrazione <= fine)
+                    .Sum(b => (decimal?)b.Importo) ?? 0;
+
+                decimal utile = (entrate - uscite) + trattenute;
+
+                // ==========================================================
+                // 🧾 Log diagnostico
+                // ==========================================================
+                System.Diagnostics.Trace.WriteLine("========== [AggiornaGraficoSinergia] ==========");
+                System.Diagnostics.Trace.WriteLine($"📅 Periodo calcolato: {filtroTrimestre} | {inizio:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+                System.Diagnostics.Trace.WriteLine($"💰 Entrate: {entrate:N2} €");
+                System.Diagnostics.Trace.WriteLine($"💸 Uscite: {uscite:N2} €");
+                System.Diagnostics.Trace.WriteLine($"🏦 Trattenute: {trattenute:N2} €");
+                System.Diagnostics.Trace.WriteLine($"📈 Utile: {utile:N2} €");
+                System.Diagnostics.Trace.WriteLine("===============================================");
+
+                // ✅ Restituisce il JSON al grafico
+                return Json(new
+                {
+                    entrate,
+                    uscite,
+                    trattenute,
+                    utile,
+                    filtroTrimestre
+                }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
+
+         [HttpGet]
+                    public ActionResult GetDettaglioKPISinergia(string tipo)
+            {
+                System.Diagnostics.Trace.WriteLine("========== [GetDettaglioKPISinergia] AVVIO ==========");
+                System.Diagnostics.Trace.WriteLine($"🟢 Tipo KPI richiesto: {tipo}");
+
+                try
+                {
+                    using (var db = new SinergiaDB())
+                    {
+                        tipo = (tipo ?? "").Trim().ToLower();
+
+                        // ======================================================
+                        // 📅 Calcolo periodo del trimestre corrente
+                        // (puoi poi sostituire con periodo scelto in dashboard)
+                        // ======================================================
+                        DateTime oggi = DateTime.Today;
+                        int trimestre = (oggi.Month - 1) / 3 + 1;
+                        DateTime inizio, fine;
+
+                        switch (trimestre)
+                        {
+                            case 1: inizio = new DateTime(oggi.Year, 1, 1); fine = new DateTime(oggi.Year, 3, 31); break;
+                            case 2: inizio = new DateTime(oggi.Year, 4, 1); fine = new DateTime(oggi.Year, 6, 30); break;
+                            case 3: inizio = new DateTime(oggi.Year, 7, 1); fine = new DateTime(oggi.Year, 9, 30); break;
+                            default: inizio = new DateTime(oggi.Year, 10, 1); fine = new DateTime(oggi.Year, 12, 31); break;
+                        }
+
+                        System.Diagnostics.Trace.WriteLine($"📆 Periodo KPI Sinergia: {inizio:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+
+                        var dati = new List<dynamic>();
+
+                        // ======================================================
+                        // 💰 ENTRATE SINERGIA (effettive - solo Pagato)
+                        // ======================================================
+                        if (tipo == "entrate")
+                        {
+                            dati = db.GenerazioneCosti
+                                .Where(c =>
+                                    c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine &&
+                                    c.Stato == "Pagato" &&
+                                    (c.Categoria == "Costo Generale" ||
+                                     c.Categoria == "Costo Team" ||
+                                     c.Categoria == "Costo Professionista" ||
+                                     c.Categoria == "Costo Pratica") &&
+                                    !c.Descrizione.Contains("Owner Fee"))
+                                .OrderByDescending(c => c.DataRegistrazione)
+                                .Take(300)
+                                .Select(c => new
+                                {
+                                    Data = c.DataRegistrazione,
+                                    c.Descrizione,
+                                    c.Categoria,
+                                    c.Origine,
+                                    Stato = c.Stato,
+                                    Importo = c.Importo ?? 0
+                                })
+                                .ToList<dynamic>();
+
+                            System.Diagnostics.Trace.WriteLine($"📗 Entrate (Pagato) trovate: {dati.Count}");
+                        }
+
+                        // ======================================================
+                        // 💸 USCITE SINERGIA (ancora previsionali)
+                        // ======================================================
+                        else if (tipo == "uscite")
+                        {
+                            dati = db.GenerazioneCosti
+                                .Where(c =>
+                                    c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine &&
+                                    c.Stato == "Previsionale" &&
+                                    (c.Categoria == "Costo Generale" ||
+                                     c.Categoria == "Costo Team" ||
+                                     c.Categoria == "Costo Professionista" ||
+                                     c.Categoria == "Costo Pratica") &&
+                                    !c.Descrizione.Contains("Owner Fee"))
+                                .OrderByDescending(c => c.DataRegistrazione)
+                                .Take(300)
+                                .Select(c => new
+                                {
+                                    Data = c.DataRegistrazione,
+                                    c.Descrizione,
+                                    c.Categoria,
+                                    c.Origine,
+                                    Stato = c.Stato,
+                                    Importo = c.Importo ?? 0
+                                })
+                                .ToList<dynamic>();
+
+                            System.Diagnostics.Trace.WriteLine($"📕 Uscite (Previsionali) trovate: {dati.Count}");
+                        }
+
+                        // ======================================================
+                        // 🏦 TRATTENUTE SINERGIA (solo finanziarie)
+                        // ======================================================
+                        else if (tipo == "trattenute")
+                        {
+                            dati = db.BilancioProfessionista
+                                .Where(b =>
+                                    b.Categoria == "Trattenuta Sinergia" &&
+                                    b.Stato == "Finanziario" &&
+                                    b.DataRegistrazione >= inizio && b.DataRegistrazione <= fine)
+                                .OrderByDescending(b => b.DataRegistrazione)
+                                .Take(300)
+                                .Select(b => new
+                                {
+                                    Data = b.DataRegistrazione,
+                                    b.Descrizione,
+                                    b.Categoria,
+                                    b.Origine,
+                                    Stato = b.Stato,
+                                    Importo = b.Importo
+                                })
+                                .ToList<dynamic>();
+
+                            System.Diagnostics.Trace.WriteLine($"🏦 Trattenute Finanziarie trovate: {dati.Count}");
+                        }
+
+                        // ======================================================
+                        // 📈 UTILE (spiegazione)
+                        // ======================================================
+                        else if (tipo == "utile")
+                        {
+                            return Content(
+                                "<div class='alert alert-info mb-0'>" +
+                                "L'utile aziendale è calcolato come <b>(Entrate + Trattenute) − Uscite</b>.<br>" +
+                                "Non esistono record diretti in tabella.</div>"
+                            );
+                        }
+                        else
+                        {
+                            return Content($"<div class='alert alert-warning mb-0'>Tipo KPI non riconosciuto: {tipo}</div>");
+                        }
+
+                        // ======================================================
+                        // 🧱 TABELLA HTML RISULTATI
+                        // ======================================================
+                        if (!dati.Any())
+                            return Content("<div class='alert alert-light text-center mb-0'>Nessun dato disponibile per questo KPI.</div>");
+
+                        decimal totale = dati.Sum(x => (decimal)x.Importo);
+
+                        var sb = new System.Text.StringBuilder();
+                        sb.Append("<div class='table-responsive'>");
+                        sb.Append("<table class='table table-sm table-striped align-middle mb-0'>");
+                        sb.Append("<thead class='table-primary'><tr>");
+                        sb.Append("<th>Data</th><th>Descrizione</th><th>Categoria</th><th>Origine</th><th>Stato</th><th class='text-end'>Importo (€)</th>");
+                        sb.Append("</tr></thead><tbody>");
+
+                        foreach (var r in dati)
+                        {
+                                    string importoColor = "text-secondary";
+                                    switch (tipo)
+                                    {
+                                        case "entrate":
+                                            importoColor = "text-success";
+                                            break;
+                                        case "uscite":
+                                            importoColor = "text-danger";
+                                            break;
+                                        case "trattenute":
+                                            importoColor = "text-warning";
+                                            break;
+                                    }
+
+                                    sb.Append("<tr>");
+                            sb.Append($"<td>{r.Data:dd/MM/yyyy}</td>");
+                            sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Descrizione)}</td>");
+                            sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Categoria)}</td>");
+                            sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Origine)}</td>");
+                            sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Stato)}</td>");
+                            sb.Append($"<td class='text-end {importoColor}'><b>{r.Importo:N2}</b></td>");
+                            sb.Append("</tr>");
+                        }
+
+                        sb.Append($"<tr class='fw-bold table-secondary'><td colspan='5' class='text-end'>Totale</td><td class='text-end'>{totale:N2} €</td></tr>");
+                        sb.Append("</tbody></table></div>");
+
+                        System.Diagnostics.Trace.WriteLine($"✅ Totale {tipo}: {totale:N2} €");
+                        return Content(sb.ToString(), "text/html");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine($"❌ Errore generale GetDettaglioKPISinergia: {ex}");
+                    return Content($"<div class='alert alert-danger mb-0'>Errore generale: {ex.Message}</div>");
+                }
+            }
 
 
 
@@ -368,26 +749,51 @@ namespace Sinergia.Controllers
                     {
                         if (tipo == "A_" || tipo == "P_")
                         {
-                            // ✅ Trova il cliente in OperatoriSinergia
-                            var cliente = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == idParsed && c.Stato == "Attivo");
+                            var cliente = db.OperatoriSinergia
+                                .FirstOrDefault(c => c.ID_Cliente == idParsed && c.Stato == "Attivo");
 
-                            if (cliente != null && cliente.ID_UtenteCollegato.HasValue)
+                            if (cliente != null)
                             {
-                                Session["ID_UtenteImpers"] = cliente.ID_UtenteCollegato.Value; // ✅ Impersonificazione attiva
+                                // 🔹 Sempre salva ID cliente corrente
+                                Session["IDClienteProfessionistaCorrente"] = cliente.ID_Cliente;
+
+                                // 🔹 Se collegato, salva anche l'ID utente impersonificato
+                                if (cliente.ID_UtenteCollegato.HasValue)
+                                {
+                                    Session["ID_UtenteImpers"] = cliente.ID_UtenteCollegato.Value;
+                                }
+                                else
+                                {
+                                    Session["ID_UtenteImpers"] = null;
+                                }
                             }
                         }
                         else if (tipo == "C_")
                         {
-                            // Impersonificazione diretta su collaboratore
+                            // Per collaboratore: salvo solo utente impersonificato
                             Session["ID_UtenteImpers"] = idParsed;
+                            Session["IDClienteProfessionistaCorrente"] = null;
                         }
                     }
 
-                    // Salva anche in cookie (facoltativo)
                     var cookie = new HttpCookie("Cliente", idCliente)
                     {
                         Expires = DateTime.Now.AddDays(7)
                     };
+                    Response.Cookies.Add(cookie);
+                }
+            }
+            else
+            {
+                // ✅ Reset impersonificazione → ritorno a Admin
+                Session["ID_ClienteSelezionato"] = null;
+                Session["ID_UtenteImpers"] = null;
+                Session["IDClienteProfessionistaCorrente"] = null;
+
+                // cancella anche eventuale cookie
+                if (Request.Cookies["Cliente"] != null)
+                {
+                    var cookie = new HttpCookie("Cliente") { Expires = DateTime.Now.AddDays(-1) };
                     Response.Cookies.Add(cookie);
                 }
             }
@@ -417,6 +823,49 @@ namespace Sinergia.Controllers
             return View();
         }
 
+        // ==========================================================
+        // 👑 Metodo dedicato al Cruscotto per verificare se è Admin
+        // ==========================================================
+        private bool IsAdminUser_Dashboard()
+        {
+            try
+            {
+                int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
+
+                if (idUtenteCollegato <= 0)
+                {
+                    System.Diagnostics.Trace.WriteLine("⚠️ [IsAdminUser_Dashboard] Nessun utente collegato.");
+                    return false;
+                }
+
+                using (var db = new SinergiaDB())
+                {
+                    var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCollegato);
+                    if (utente == null)
+                    {
+                        System.Diagnostics.Trace.WriteLine("⚠️ [IsAdminUser_Dashboard] Utente non trovato nel DB.");
+                        return false;
+                    }
+
+                    bool isAdmin = utente.TipoUtente?.Trim().Equals("Admin", StringComparison.OrdinalIgnoreCase) == true;
+
+                    System.Diagnostics.Trace.WriteLine(
+                        $"👤 [IsAdminUser_Dashboard] ID={utente.ID_Utente}, Tipo={utente.TipoUtente}, IsAdmin={isAdmin}"
+                    );
+
+                    return isAdmin;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"❌ [IsAdminUser_Dashboard] Errore: {ex.Message}");
+                return false;
+            }
+        }
+
+
+
+
         #endregion
 
         #region LOG MODIFICHE   
@@ -429,6 +878,13 @@ namespace Sinergia.Controllers
         [HttpGet]
         public ActionResult GestioneModificheList(string nomeTabella)
         {
+            if (string.IsNullOrWhiteSpace(nomeTabella))
+                return Json(new { success = false, message = "Nessuna tabella selezionata." }, JsonRequestBehavior.AllowGet);
+
+            // 🔧 Normalizza: rimuove eventuale suffisso "_a" per compatibilità con i case esistenti
+            if (nomeTabella.EndsWith("_a"))
+                nomeTabella = nomeTabella.Replace("_a", "");
+
             IEnumerable<dynamic> lista = null;
 
             switch (nomeTabella)
@@ -470,6 +926,137 @@ namespace Sinergia.Controllers
                                 .FirstOrDefault()
                         }).ToList();
                     break;
+
+                case "BilancioProfessionista":
+                    lista = db.BilancioProfessionista
+                        .OrderByDescending(x => x.DataRegistrazione)
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.ID_Bilancio,
+                            Data = x.DataRegistrazione,
+                            ModificheTestuali = x.Descrizione ?? "(Nessuna descrizione)",
+                            TipoModifica = x.TipoVoce,
+                            NumeroVersione = 1,
+                            ID_UtenteUltimaModifica = x.ID_UtenteInserimento.ToString(),
+                            NomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == x.ID_UtenteInserimento)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .ToList();
+                    break;
+
+
+                case "ClientiProfessionisti":
+                    lista = db.ClientiProfessionisti_a
+                        .OrderByDescending(x => x.DataArchiviazione)
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.ID_ClientiProfessionisti_a,
+                            Data = x.DataArchiviazione,
+                            ModificheTestuali = x.ModificheTestuali,
+                            TipoModifica = "Relazione Cliente-Professionista",
+                            NumeroVersione = x.NumeroVersione,
+                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                            NomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .ToList();
+                    break;
+
+                case "CompensiPraticaDettaglio":
+                    lista = db.CompensiPraticaDettaglio_a
+                        .OrderByDescending(x => x.DataArchiviazione)
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.ID_RigaCompenso_a,
+                            Data = x.DataArchiviazione,
+                            ModificheTestuali = x.ModificheTestuali,
+                            TipoModifica = "Dettaglio Compenso",
+                            NumeroVersione = x.NumeroVersione,
+                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                            NomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .ToList();
+                    break;
+
+
+                case "DocumentiProfessionisti":
+                    lista = db.DocumentiProfessionisti_a
+                        .OrderByDescending(x => x.DataArchiviazione)
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.ID_Professionista,
+                            Data = x.DataArchiviazione,
+                            ModificheTestuali = x.ModificheTestuali,
+                            TipoModifica = "Documento Professionista",
+                            NumeroVersione = x.NumeroVersione,
+                            ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
+                            NomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .ToList();
+                    break;
+
+
+                case "TipologieCosti":
+                    lista = db.TipologieCosti_a
+                        .OrderByDescending(x => x.DataUltimaModifica)
+                        .Select(x => new LogModificaViewModel
+                        {
+                            ID = x.ID_Storico,
+                            Data = x.DataUltimaModifica,
+                            ModificheTestuali = x.ModificheTestuali,
+                            TipoModifica = x.Tipo ?? "Modifica",
+                            NumeroVersione = x.NumeroVersione,
+                            ID_UtenteUltimaModifica = x.ToString(),
+                            NomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == x.ID_UtenteUltimaModifica)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .ToList();
+                    break;
+
+
+                case "GenerazioneCosti":
+                    lista = db.GenerazioneCosti
+                        .OrderByDescending(x => x.DataCreazione)
+                        .AsEnumerable() // 🔹 passa in memoria per evitare errori LINQ SQL
+                        .Select(x =>
+                        {
+                            int idUtenteRif = x.ID_UtenteUltimaModifica ?? x.ID_UtenteCreatore ?? 0;
+                            string nomeUtente = db.Utenti
+                                .Where(u => u.ID_Utente == idUtenteRif)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault() ?? "-";
+
+                            return new LogModificaViewModel
+                            {
+                                ID = x.ID_GenerazioneCosto,
+                                Data = x.DataUltimaModifica ?? x.DataCreazione,
+                                ModificheTestuali =
+                                    "Origine: " + (x.Origine ?? "N/D") + " | " +
+                                    "Categoria: " + (x.Categoria ?? "N/D") + " | " +
+                                    "Descrizione: " + (x.Descrizione ?? "N/D") + " | " +
+                                    "Importo: " + ((decimal)(x.Importo ?? 0)).ToString("N2") + " € | " +
+                                    "Stato: " + ((x.Approvato ?? false) ? "Approvato" : "Previsionale"),
+                                TipoModifica = (x.Approvato ?? false) ? "Approvazione" : "Creazione",
+                                NumeroVersione = 1,
+                                ID_UtenteUltimaModifica = idUtenteRif.ToString(),
+                                NomeUtente = nomeUtente
+                            };
+                        })
+                        .ToList();
+                    break;
+
 
 
                 case "Utenti":
@@ -566,23 +1153,6 @@ namespace Sinergia.Controllers
                         }).ToList();
                     break;
 
-                case "TipologieCosti":
-                    lista = db.TipologieCosti_a
-                        .OrderByDescending(x => x.DataUltimaModifica)
-                        .Select(x => new LogModificaViewModel
-                        {
-                            ID = x.ID_Storico,
-                            Data = x.DataUltimaModifica ?? DateTime.Now,
-                            ModificheTestuali = x.ModificheTestuali,
-                            TipoModifica = x.Tipo,
-                            NumeroVersione = x.NumeroVersione,
-                            ID_UtenteUltimaModifica = x.ID_UtenteUltimaModifica.ToString(),
-                            NomeUtente = db.Utenti
-                                .Where(u => u.ID_Utente == x.ID_UtenteUltimaModifica)
-                                .Select(u => u.Nome + " " + u.Cognome)
-                                .FirstOrDefault()
-                        }).ToList();
-                    break;
 
                 case "FinanziamentiProfessionisti":
                     lista = db.FinanziamentiProfessionisti_a
@@ -767,21 +1337,6 @@ namespace Sinergia.Controllers
                     }).ToList();
                     break;
 
-                //case "OrdiniFornitori":
-                //    lista = db.OrdiniFornitori_a.Select(x => new LogModificaViewModel
-                //    {
-                //        ID = x.ID_Ordine,
-                //        Data = (DateTime)x.DataArchiviazione,
-                //        ModificheTestuali = x.ModificheTestuali,
-                //        TipoModifica = "",
-                //        NumeroVersione = x.NumeroVersione,
-                //        ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
-                //        NomeUtente = db.Utenti
-                //                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
-                //                .Select(u => u.Nome + " " + u.Cognome)
-                //                .FirstOrDefault()
-                //    }).ToList();
-                //    break;
 
                 case "Permessi":
                     lista = db.Permessi_a.Select(x => new LogModificaViewModel
@@ -798,21 +1353,7 @@ namespace Sinergia.Controllers
                     }).ToList();
                     break;
 
-                //case "PermessiDelegatiProfessionista":
-                //    lista = db.PermessiDelegabiliPerProfessionista_a.Select(x => new LogModificaViewModel
-                //    {
-                //        ID = x.ID_PermessiDelegabiliPerProfessionista_a,
-                //        Data = x.DataArchiviazione,
-                //        ModificheTestuali = x.ModificheTestuali,
-                //        TipoModifica = "",
-                //        NumeroVersione = x.NumeroVersione,
-                //        ID_UtenteUltimaModifica = x.ID_UtenteArchiviazione.ToString(),
-                //        NomeUtente = db.Utenti
-                //                .Where(u => u.ID_Utente == x.ID_UtenteArchiviazione)
-                //                .Select(u => u.Nome + " " + u.Cognome)
-                //                .FirstOrDefault()
-                //    }).ToList();
-                //    break;
+        
 
                 case "PlafondUtente":
                     lista = db.PlafondUtente_a.Select(x => new LogModificaViewModel
@@ -1114,50 +1655,58 @@ namespace Sinergia.Controllers
 
         public JsonResult GetTabelleArchivio()
         {
-            var tabelle = new List<SelectListItem>
-            {
-                new SelectListItem { Text = "AnagraficaCostiPratica", Value = "AnagraficaCostiPratica" },
-                new SelectListItem { Text = "AnagraficaCostiTeam", Value = "AnagraficaCostiTeam" },
-                new SelectListItem { Text = "AnagraficaCostiProfessionista", Value = "AnagraficaCostiProfessionista" }, // ✅ AGGIUNTO
-                new SelectListItem { Text = "AvvisiParcella", Value = "AvvisiParcella" },
-                new SelectListItem { Text = "Clienti", Value = "Clienti" },
-                new SelectListItem { Text = "Cluster", Value = "Cluster" },
-                new SelectListItem { Text = "CompensiPratica", Value = "CompensiPratica" },
-                new SelectListItem { Text = "CostiGeneraliUtente", Value = "CostiGeneraliUtente" }, // ✅ AGGIUNTO
-                new SelectListItem { Text = "CostiPersonaliUtente", Value = "CostiPersonaliUtente" },
-                new SelectListItem { Text = "CostiPratica", Value = "CostiPratica" },
-                new SelectListItem { Text = "DatiBancari", Value = "DatiBancari" },
-                new SelectListItem { Text = "DistribuzioneCostiTeam", Value = "DistribuzioneCostiTeam" },
-                new SelectListItem { Text = "DocumentiAziende", Value = "DocumentiAziende" },
-                new SelectListItem { Text = "DocumentiPratiche", Value = "DocumentiPratiche" },
-                new SelectListItem { Text = "Economico", Value = "Economico" },
-                new SelectListItem { Text = "EccezioniRicorrenzeCosti", Value = "EccezioniRicorrenzeCosti" }, // ✅ AGGIUNTO
-                new SelectListItem { Text = "FinanziamentiProfessionisti", Value = "FinanziamentiProfessionisti" },
-                new SelectListItem { Text = "Finanziario", Value = "Finanziario" },
-                new SelectListItem { Text = "Incassi", Value = "Incassi" },
-                new SelectListItem { Text = "MembriTeam", Value = "MembriTeam" },
-                new SelectListItem { Text = "MovimentiBancari", Value = "MovimentiBancari" },
-                new SelectListItem { Text = "OperatoriSinergia", Value = "OperatoriSinergia" },
-                //new SelectListItem { Text = "OrdiniFornitori", Value = "OrdiniFornitori" },
-                new SelectListItem { Text = "Permessi", Value = "Permessi" },
-                //new SelectListItem { Text = "PermessiDelegatiProfessionista", Value = "PermessiDelegatiProfessionista" },
-                new SelectListItem { Text = "PlafondUtente", Value = "PlafondUtente" },
-                new SelectListItem { Text = "Pratiche", Value = "Pratiche" },
-                new SelectListItem { Text = "Previsione", Value = "Previsione" },
-                new SelectListItem { Text = "Professioni", Value = "Professioni" },
-                new SelectListItem { Text = "RelazionePraticheUtenti", Value = "RelazionePraticheUtenti" },
-                new SelectListItem { Text = "RelazioneUtenti", Value = "RelazioneUtenti" },
-                new SelectListItem { Text = "RicorrenzeCosti", Value = "RicorrenzeCosti" },
-                new SelectListItem { Text = "RimborsiPratica", Value = "RimborsiPratica" },
-                new SelectListItem { Text = "SettoriFornitori", Value = "SettoriFornitori" },
-                new SelectListItem { Text = "TeamProfessionisti", Value = "TeamProfessionisti" },
-                new SelectListItem { Text = "TemplateIncarichi", Value = "TemplateIncarichi" },
-                new SelectListItem { Text = "TipologieCosti", Value = "TipologieCosti" },
-                new SelectListItem { Text = "TipoRagioneSociale", Value = "TipoRagioneSociale" },
-                new SelectListItem { Text = "Utenti", Value = "Utenti" }
-            };
-            return Json(tabelle, JsonRequestBehavior.AllowGet);
+                        var tabelle = new List<SelectListItem>
+                {
+                    new SelectListItem { Text = "AnagraficaCostiPratica", Value = "AnagraficaCostiPratica_a" },
+                    new SelectListItem { Text = "AnagraficaCostiProfessionista", Value = "AnagraficaCostiProfessionista_a" },
+                    new SelectListItem { Text = "AnagraficaCostiTeam", Value = "AnagraficaCostiTeam_a" },
+                    new SelectListItem { Text = "AvvisiParcella", Value = "AvvisiParcella_a" },
+                    new SelectListItem { Text = "BilancioProfessionista", Value = "BilancioProfessionista" },
+                    new SelectListItem { Text = "Clienti", Value = "Clienti_a" },
+                    new SelectListItem { Text = "ClientiProfessionisti", Value = "ClientiProfessionisti_a" },
+                    new SelectListItem { Text = "Cluster", Value = "Cluster_a" },
+                    new SelectListItem { Text = "CompensiPratica", Value = "CompensiPratica_a" },
+                    new SelectListItem { Text = "CompensiPraticaDettaglio", Value = "CompensiPraticaDettaglio_a" },
+                    new SelectListItem { Text = "CostiGeneraliUtente", Value = "CostiGeneraliUtente_a" },
+                    new SelectListItem { Text = "CostiPersonaliUtente", Value = "CostiPersonaliUtente_a" },
+                    new SelectListItem { Text = "CostiPratica", Value = "CostiPratica_a" },
+                    new SelectListItem { Text = "DatiBancari", Value = "DatiBancari_a" },
+                    new SelectListItem { Text = "DistribuzioneCostiTeam", Value = "DistribuzioneCostiTeam_a" },
+                    new SelectListItem { Text = "DocumentiAziende", Value = "DocumentiAziende_a" },
+                    new SelectListItem { Text = "DocumentiPratiche", Value = "DocumentiPratiche_a" },
+                    new SelectListItem { Text = "DocumentiProfessionisti", Value = "DocumentiProfessionisti_a" },
+                    new SelectListItem { Text = "EccezioniRicorrenzeCosti", Value = "EccezioniRicorrenzeCosti_a" },
+                    new SelectListItem { Text = "Economico", Value = "Economico_a" },
+                    new SelectListItem { Text = "FinanziamentiProfessionisti", Value = "FinanziamentiProfessionisti_a" },
+                    new SelectListItem { Text = "Finanziario", Value = "Finanziario_a" },
+                    new SelectListItem { Text = "GenerazioneCosti", Value = "GenerazioneCosti" },
+                    new SelectListItem { Text = "Incassi", Value = "Incassi_a" },
+                    new SelectListItem { Text = "MembriTeam", Value = "MembriTeam_a" },
+                    new SelectListItem { Text = "MovimentiBancari", Value = "MovimentiBancari_a" },
+                    new SelectListItem { Text = "OperatoriSinergia", Value = "OperatoriSinergia_a" },
+                    new SelectListItem { Text = "Permessi", Value = "Permessi_a" },
+                    new SelectListItem { Text = "PlafondUtente", Value = "PlafondUtente_a" },
+                    new SelectListItem { Text = "Pratiche", Value = "Pratiche_a" },
+                    new SelectListItem { Text = "Previsione", Value = "Previsione_a" },
+                    new SelectListItem { Text = "Professioni", Value = "Professioni_a" },
+                    new SelectListItem { Text = "RelazionePraticheUtenti", Value = "RelazionePraticheUtenti_a" },
+                    new SelectListItem { Text = "RelazioneUtenti", Value = "RelazioneUtenti_a" },
+                    new SelectListItem { Text = "RicorrenzeCosti", Value = "RicorrenzeCosti_a" },
+                    new SelectListItem { Text = "RimborsiPratica", Value = "RimborsiPratica_a" },
+                    new SelectListItem { Text = "SettoriFornitori", Value = "SettoriFornitori_a" },
+                    new SelectListItem { Text = "TeamProfessionisti", Value = "TeamProfessionisti_a" },
+                    new SelectListItem { Text = "TemplateIncarichi", Value = "TemplateIncarichi_a" },
+                    new SelectListItem { Text = "TipologieCosti", Value = "TipologieCosti_a" },
+                    new SelectListItem { Text = "TipoRagioneSociale", Value = "TipoRagioneSociale_a" },
+                    new SelectListItem { Text = "Utenti", Value = "Utenti_a" }
+                };
+
+            // 🔤 Ordina alfabeticamente per testo visualizzato
+            var tabelleOrdinate = tabelle.OrderBy(t => t.Text).ToList();
+
+            return Json(tabelleOrdinate, JsonRequestBehavior.AllowGet);
         }
+
 
         public ContentResult DettaglioModifica(string nomeTabella, int idArchivio)
         {
@@ -1281,6 +1830,68 @@ namespace Sinergia.Controllers
                             $"📝 Dettagli: {acp.ModificheTestuali}";
                     }
                     break;
+
+                case "BilancioProfessionista":
+                    var bil = db.BilancioProfessionista.FirstOrDefault(x => x.ID_Bilancio == idArchivio);
+                    if (bil != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == bil.ID_UtenteInserimento);
+                        contenuto =
+                            $"🗓 Data: {bil.DataRegistrazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Registrato da: {utente?.Nome} {utente?.Cognome} (ID {bil.ID_UtenteInserimento})\n" +
+                            $"💰 Importo: {bil.Importo:N2} €\n" +
+                            $"🏷 Tipo Movimento: {bil.TipoVoce}\n" +
+                            $"📂 Categoria: {bil.Categoria}\n" +
+                            $"📝 Descrizione: {bil.Descrizione}";
+                    }
+                    break;
+
+
+                case "ClientiProfessionisti":
+                    var Cp = db.ClientiProfessionisti_a.FirstOrDefault(x => x.ID_ClientiProfessionisti_a == idArchivio);
+                    if (Cp != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == Cp.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {Cp.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {Cp.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {Cp.NumeroVersione}\n" +
+                            $"👥 ID Cliente: {Cp.ID_Cliente}\n" +
+                            $"👤 ID Professionista: {Cp.ID_Professionista}\n" +
+                            $"📝 Dettagli: {Cp.ModificheTestuali}";
+                    }
+                    break;
+
+                case "CompensiPraticaDettaglio":
+                    var cpd = db.CompensiPraticaDettaglio_a.FirstOrDefault(x => x.ID_RigaCompenso_a == idArchivio);
+                    if (cpd != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == cpd.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {cpd.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {cpd.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {cpd.NumeroVersione}\n" +
+                            $"💼 ID Compenso: {cpd.ID_RigaCompenso_a}\n" +
+                            $"💰 Importo: {cpd.Importo:N2} €\n" +
+                            $"📝 Dettagli: {cpd.ModificheTestuali}";
+                    }
+                    break;
+
+                case "DocumentiProfessionisti":
+                    var docp = db.DocumentiProfessionisti_a.FirstOrDefault(x => x.ID_DocumentoArchivio == idArchivio);
+                    if (docp != null)
+                    {
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == docp.ID_UtenteArchiviazione);
+                        contenuto =
+                            $"🗓 Data: {docp.DataArchiviazione:dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {utente?.Nome} {utente?.Cognome} (ID {docp.ID_UtenteArchiviazione})\n" +
+                            $"🔢 Versione: {docp.NumeroVersione}\n" +
+                            $"📄 Nome File: {docp.NomeDocumento ?? "N/D"}\n" +
+                            $"📝 Dettagli: {docp.ModificheTestuali}";
+                    }
+                    break;
+
+
                 case "CostiGeneraliUtente":
                     var cgu = db.CostiGeneraliUtente_a.FirstOrDefault(x => x.IDVersioneCostoGenerale == idArchivio);
                     if (cgu != null)
@@ -1300,6 +1911,33 @@ namespace Sinergia.Controllers
                     }
                     break;
 
+                case "GenerazioneCosti":
+                    var gc = db.GenerazioneCosti.FirstOrDefault(x => x.ID_GenerazioneCosto == idArchivio);
+                    if (gc != null)
+                    {
+                        int idUtenteRiferimento = gc.ID_UtenteUltimaModifica ?? gc.ID_UtenteCreatore ?? 0;
+                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteRiferimento);
+                        var professionista = gc.ID_Utente.HasValue
+                            ? db.Utenti.FirstOrDefault(u => u.ID_Utente == gc.ID_Utente)
+                            : null;
+
+                        string nomeProfessionista = professionista != null
+                            ? $"{professionista.Nome} {professionista.Cognome} (ID {professionista.ID_Utente})"
+                            : (gc.ID_Utente.HasValue ? $"ID {gc.ID_Utente}" : "N/D");
+
+                        contenuto =
+                            $"🗓 Data: {(gc.DataUltimaModifica ?? gc.DataCreazione):dd/MM/yyyy HH:mm}\n" +
+                            $"👤 Modificato da: {(utente != null ? utente.Nome + " " + utente.Cognome : "N/D")} (ID {idUtenteRiferimento})\n" +
+                            $"🏷 Origine: {gc.Origine ?? "N/D"}\n" +
+                            $"📂 Categoria: {gc.Categoria ?? "N/D"}\n" +
+                            $"📝 Descrizione: {gc.Descrizione ?? "N/D"}\n" +
+                            $"💰 Importo: {(gc.Importo ?? 0).ToString("N2")} €\n" +
+                            $"⚙️ Stato: {(gc.Approvato == true ? "Approvato" : "Previsionale")}\n" +
+                            $"👥 Professionista: {nomeProfessionista}\n" +
+                            $"📝 Dettagli: Generazione automatica del costo ({(gc.Approvato == true ? "Approvato" : "In attesa di verifica")})";
+                    }
+                    break;
+ 
 
 
                 case "EccezioniRicorrenzeCosti":
@@ -2047,65 +2685,48 @@ namespace Sinergia.Controllers
 
         #region NOTIFICHE
 
+        /* ============================================================
+           🔐 GESTIONE VISIBILITÀ NOTIFICHE
+           ============================================================ */
+
         private bool IsAdminUser()
         {
             int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
-            var utenteCollegato = db.Utenti
-                .FirstOrDefault(u => u.ID_Utente == idUtenteCollegato);
+            var utenteCollegato = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCollegato);
             return utenteCollegato?.TipoUtente == "Admin";
         }
 
         /// <summary>
         /// Restituisce l'ID del cliente professionista corrente.
         /// Se l'utente è collegato come collaboratore, risale a ID_Cliente passando per Utenti → OperatoriSinergia.
-        /// Se non trova nulla, ritorna l'ID_Utente stesso (caso professionista diretto).
+        /// Se non trova nulla, ritorna l'ID_Utente stesso.
         /// </summary>
         public int GetIDClienteCorrente(int idUtenteCollegato)
         {
-            System.Diagnostics.Debug.WriteLine($"[GetIDClienteCorrente] idUtenteCollegato: {idUtenteCollegato}");
-
             var idCliente = (from u in db.Utenti
-                             join os in db.OperatoriSinergia
-                                 on u.ID_Utente equals os.ID_UtenteCollegato
+                             join os in db.OperatoriSinergia on u.ID_Utente equals os.ID_UtenteCollegato
                              where u.ID_Utente == idUtenteCollegato
-                             select os.ID_Cliente)
-                            .FirstOrDefault();
+                             select os.ID_Cliente).FirstOrDefault();
 
-            System.Diagnostics.Debug.WriteLine($"[GetIDClienteCorrente] idCliente trovato: {idCliente}");
-
-            var result = idCliente > 0 ? idCliente : idUtenteCollegato;
-            System.Diagnostics.Debug.WriteLine($"[GetIDClienteCorrente] risultato finale: {result}");
-
-            return result;
+            return idCliente > 0 ? idCliente : idUtenteCollegato;
         }
 
-        private IQueryable<Notifiche> ApplyNotificaVisibility(
-            IQueryable<Notifiche> query,
-            int idUtenteCollegato,
-            bool isAdmin)
+        private IQueryable<Notifiche> ApplyNotificaVisibility(IQueryable<Notifiche> query, int idUtenteCollegato, bool isAdmin)
         {
-            System.Diagnostics.Debug.WriteLine($"[ApplyNotificaVisibility] idUtenteCollegato: {idUtenteCollegato}, isAdmin: {isAdmin}");
-
             int idClienteCorrente = GetIDClienteCorrente(idUtenteCollegato);
-            System.Diagnostics.Debug.WriteLine($"[ApplyNotificaVisibility] idClienteCorrente: {idClienteCorrente}");
 
             if (isAdmin && idClienteCorrente == idUtenteCollegato)
-            {
-                System.Diagnostics.Debug.WriteLine("[ApplyNotificaVisibility] Admin non impersonificato → vede tutto");
-                return query;
-            }
+                return query; // Admin non impersonificato → vede tutto
 
             if (isAdmin)
-            {
-                System.Diagnostics.Debug.WriteLine("[ApplyNotificaVisibility] Admin impersonificato → notifiche cliente impersonato + proprie");
-                return query.Where(n =>
-                    n.ID_Utente == idClienteCorrente ||
-                    n.ID_Utente == idUtenteCollegato);
-            }
+                return query.Where(n => n.ID_Utente == idClienteCorrente || n.ID_Utente == idUtenteCollegato);
 
-            System.Diagnostics.Debug.WriteLine("[ApplyNotificaVisibility] Utente normale → solo notifiche del cliente corrente");
             return query.Where(n => n.ID_Utente == idClienteCorrente);
         }
+
+        /* ============================================================
+           📋 LISTA / DETTAGLIO / CRUD NOTIFICHE
+           ============================================================ */
 
         [HttpGet]
         public ActionResult NotificheList(DateTime? da, DateTime? a, string stato = "Tutte", string tipo = "Tutti", string q = "", int page = 1, int pageSize = 50)
@@ -2118,10 +2739,8 @@ namespace Sinergia.Controllers
             DateTime fine = ((a?.Date) ?? DateTime.Today).AddDays(1).AddTicks(-1);
 
             var query = db.Notifiche.Where(n => n.DataCreazione >= inizio && n.DataCreazione <= fine);
-
             query = ApplyNotificaVisibility(query, idUtenteCollegato, isAdmin);
 
-            // Filtri aggiuntivi
             if (!string.IsNullOrWhiteSpace(q))
                 query = query.Where(n => n.Titolo.Contains(q) || n.Descrizione.Contains(q));
 
@@ -2208,75 +2827,17 @@ namespace Sinergia.Controllers
             return Json(new { success = true, dettaglio }, JsonRequestBehavior.AllowGet);
         }
 
-        [HttpPost]
-        public ActionResult SegnaComeLetta(int id)
-        {
-            int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
-            if (idUtenteCollegato <= 0) return new HttpStatusCodeResult(401);
+        /* ============================================================
+           🧩 FACTORY CENTRALE
+           ============================================================ */
 
-            bool isAdmin = IsAdminUser();
-            var query = ApplyNotificaVisibility(db.Notifiche.AsQueryable(), idUtenteCollegato, isAdmin);
-
-            var n = query.FirstOrDefault(x => x.ID_Notifica == id);
-            if (n == null) return HttpNotFound();
-
-            if (!n.Letto)
-            {
-                n.Letto = true;
-                n.DataLettura = DateTime.Now;
-                n.Stato = "Letta";
-                db.SaveChanges();
-            }
-            return Json(new { success = true });
-        }
-
-        [HttpPost]
-        public ActionResult SegnaTutteComeLette()
-        {
-            int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
-            if (idUtenteCollegato <= 0) return new HttpStatusCodeResult(401);
-
-            bool isAdmin = IsAdminUser();
-            var query = ApplyNotificaVisibility(db.Notifiche.AsQueryable(), idUtenteCollegato, isAdmin);
-
-            foreach (var n in query.Where(x => !x.Letto))
-            {
-                n.Letto = true;
-                n.DataLettura = DateTime.Now;
-                n.Stato = "Letta";
-            }
-            db.SaveChanges();
-            return Json(new { success = true });
-        }
-
-        [HttpPost]
-        public ActionResult EliminaNotifica(int id)
-        {
-            int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
-            if (idUtenteCollegato <= 0) return new HttpStatusCodeResult(401);
-
-            bool isAdmin = IsAdminUser();
-            var query = ApplyNotificaVisibility(db.Notifiche.AsQueryable(), idUtenteCollegato, isAdmin);
-
-            var n = query.FirstOrDefault(x => x.ID_Notifica == id);
-            if (n == null) return HttpNotFound();
-
-            db.Notifiche.Remove(n);
-            db.SaveChanges();
-            return Json(new { success = true });
-        }
-        /* ===========================
-           HELPER DI CREAZIONE NOTIFICHE
-           =========================== */
-
-        // Factory centrale
         private void AddNotifica(string titolo, string descrizione, string tipoCodice, int idDestinatarioUtente, int? idPratica = null)
         {
             db.Notifiche.Add(new Notifiche
             {
                 Titolo = titolo,
                 Descrizione = descrizione,
-                Tipo = tipoCodice,         // es. PLAFOND_ASSENTE, PRATICA_SENZA_AVVISO, ...
+                Tipo = tipoCodice,
                 Stato = "Non letta",
                 ID_Utente = idDestinatarioUtente,
                 ID_Pratiche = idPratica,
@@ -2287,114 +2848,98 @@ namespace Sinergia.Controllers
             db.SaveChanges();
         }
 
-        /* --- PLAFOND --- */
+        /* ============================================================
+     🟢 SEGNALAZIONE LETTURA NOTIFICHE
+     ============================================================ */
 
-        // Professionista senza plafond configurato
-        private void CreaNotificaPlafondAssente(int idUtenteProfessionista, int? idPratica = null, string noteExtra = null)
+        [HttpPost]
+        public JsonResult SegnaComeLetta(int id)
         {
-            var msg = "Plafond non configurato per il professionista." + (string.IsNullOrWhiteSpace(noteExtra) ? "" : " " + noteExtra);
-            AddNotifica("Plafond assente", msg, "PLAFOND_ASSENTE", idUtenteProfessionista, idPratica);
+            System.Diagnostics.Trace.WriteLine($"========== [SegnaComeLetta] AVVIO ==========");
+            System.Diagnostics.Trace.WriteLine($"🟡 ID notifica ricevuto: {id}");
+
+            try
+            {
+                int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
+                if (idUtenteCollegato <= 0)
+                    return Json(new { success = false, message = "Utente non autenticato." });
+
+                bool isAdmin = IsAdminUser();
+
+                // 🔍 Applica visibilità
+                var query = ApplyNotificaVisibility(db.Notifiche.AsQueryable(), idUtenteCollegato, isAdmin);
+                var notifica = query.FirstOrDefault(n => n.ID_Notifica == id);
+
+                if (notifica == null)
+                {
+                    System.Diagnostics.Trace.WriteLine("⚠️ Notifica non trovata o non visibile.");
+                    return Json(new { success = false, message = "Notifica non trovata o non autorizzato." });
+                }
+
+                if (!notifica.Letto)
+                {
+                    notifica.Letto = true;
+                    notifica.Stato = "Letta";
+                    notifica.DataLettura = DateTime.Now;
+                    db.SaveChanges();
+
+                    System.Diagnostics.Trace.WriteLine($"✅ Notifica {id} marcata come letta.");
+                }
+                else
+                {
+                    System.Diagnostics.Trace.WriteLine($"ℹ️ Notifica {id} già letta.");
+                }
+
+                return Json(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"❌ Errore SegnaComeLetta: {ex}");
+                return Json(new { success = false, message = ex.Message });
+            }
         }
 
-        // Plafond insufficiente per coprire costi
-        private void CreaNotificaPlafondInsufficiente(int idUtenteProfessionista, decimal mancano, int? idPratica = null)
+
+        [HttpPost]
+        public JsonResult SegnaTutteComeLette()
         {
-            var msg = $"Plafond insufficiente: mancano {mancano:C} per coprire i costi previsti.";
-            AddNotifica("Plafond insufficiente", msg, "PLAFOND_INSUFFICIENTE", idUtenteProfessionista, idPratica);
+            System.Diagnostics.Trace.WriteLine("========== [SegnaTutteComeLette] AVVIO ==========");
+
+            try
+            {
+                int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
+                if (idUtenteCollegato <= 0)
+                    return Json(new { success = false, message = "Utente non autenticato." });
+
+                bool isAdmin = IsAdminUser();
+                var query = ApplyNotificaVisibility(db.Notifiche.AsQueryable(), idUtenteCollegato, isAdmin);
+
+                var nonLette = query.Where(n => !n.Letto).ToList();
+                if (!nonLette.Any())
+                {
+                    System.Diagnostics.Trace.WriteLine("ℹ️ Nessuna notifica non letta trovata.");
+                    return Json(new { success = true, message = "Nessuna notifica da aggiornare." });
+                }
+
+                foreach (var n in nonLette)
+                {
+                    n.Letto = true;
+                    n.Stato = "Letta";
+                    n.DataLettura = DateTime.Now;
+                }
+
+                db.SaveChanges();
+                System.Diagnostics.Trace.WriteLine($"✅ {nonLette.Count} notifiche marcate come lette.");
+
+                return Json(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"❌ Errore SegnaTutteComeLette: {ex}");
+                return Json(new { success = false, message = ex.Message });
+            }
         }
 
-        // Soglia plafond (early warning)
-        private void CreaNotificaPlafondSoglia(int idUtenteProfessionista, decimal plafondResiduo, decimal soglia, int? idPratica = null)
-        {
-            var msg = $"Plafond residuo {plafondResiduo:C} inferiore alla soglia {soglia:C}.";
-            AddNotifica("Plafond in soglia", msg, "PLAFOND_SOGLIA", idUtenteProfessionista, idPratica);
-        }
-
-        /* --- PRATICHE / ADMIN MONITORING --- */
-
-        // Regime lavorazione non conforme
-        private void CreaNotificaPraticaRegimeErrato(int idPratica, string motivo, int idDestinatarioAdmin)
-        {
-            var titolo = "Regime lavorazione non conforme";
-            var msg = string.IsNullOrWhiteSpace(motivo) ? "Verifica la pratica." : motivo;
-            AddNotifica(titolo, msg, "PRATICA_REGIME_ERRATO", idDestinatarioAdmin, idPratica);
-        }
-
-        // Pratica senza avviso di parcella
-        private void CreaNotificaPraticaSenzaAvviso(int idPratica, int idDestinatarioAdmin)
-        {
-            AddNotifica("Pratica senza avviso di parcella", "Non risulta alcun avviso emesso.", "PRATICA_SENZA_AVVISO", idDestinatarioAdmin, idPratica);
-        }
-
-        // Pratica senza incasso
-        private void CreaNotificaPraticaSenzaIncasso(int idPratica, int idDestinatarioAdmin)
-        {
-            AddNotifica("Pratica senza incasso", "Non risulta alcun incasso registrato.", "PRATICA_SENZA_INCASSO", idDestinatarioAdmin, idPratica);
-        }
-
-        // Avviso scaduto/non emesso entro X giorni dalla conclusione
-        private void CreaNotificaAvvisoScaduto(int idPratica, DateTime dataScadenza, int idDestinatarioAdmin)
-        {
-            var msg = $"Avviso di parcella non emesso entro la scadenza ({dataScadenza:dd/MM/yyyy}).";
-            AddNotifica("Avviso scaduto", msg, "PRATICA_AVVISO_SCADUTO", idDestinatarioAdmin, idPratica);
-        }
-
-        /* --- GENERAZIONE COSTI --- */
-
-        // Generazione costo fallita
-        private void CreaNotificaGenerazioneCostoFallita(int idDestinatarioAdmin, string descrErrore, int? idPratica = null)
-        {
-            var msg = "Errore in generazione costi: " + (descrErrore ?? "verificare log.");
-            AddNotifica("Errore generazione costi", msg, "SYS_GENERAZIONE_COSTO_FALLITA", idDestinatarioAdmin, idPratica);
-        }
-
-        // Costo bloccato da eccezione
-        private void CreaNotificaCostoBloccatoDaEccezione(int idDestinatarioAdmin, string categoria, DateTime dal, DateTime al, int? idPratica = null)
-        {
-            var msg = $"Costo '{categoria}' bloccato da eccezione nel periodo {dal:dd/MM/yyyy} – {al:dd/MM/yyyy}.";
-            AddNotifica("Costo bloccato da eccezione", msg, "SYS_COSTO_BLOCCATO_ECCEZIONE", idDestinatarioAdmin, idPratica);
-        }
-
-        // Duplicato rilevato in generazione
-        private void CreaNotificaDuplicatoGenerazione(int idDestinatarioAdmin, string chiaveLogica, int? idPratica = null)
-        {
-            var msg = $"Duplicato rilevato in generazione (chiave: {chiaveLogica}).";
-            AddNotifica("Duplicato generazione costi", msg, "SYS_DUPLICATO_GENERAZIONE", idDestinatarioAdmin, idPratica);
-        }
-
-        /* --- TEAM / CONFIG --- */
-
-        // Distribuzione team mancante o incompleta
-        private void CreaNotificaTeamDistribuzioneMancante(int idDestinatarioAdmin, int idTeam, string nomeCosto)
-        {
-            var msg = $"Distribuzione mancante/incompleta per Team #{idTeam} sul costo '{nomeCosto}'.";
-            AddNotifica("Distribuzione team mancante", msg, "SYS_TEAM_DISTRIBUZIONE_MANCANTE", idDestinatarioAdmin, null);
-        }
-
-        // Permessi incoerenti (es. utente senza permesso su azione richiesta)
-        private void CreaNotificaPermessoIncoerente(int idDestinatarioAdmin, int idUtente, string azione)
-        {
-            var msg = $"Utente #{idUtente} ha tentato l'azione '{azione}' senza permessi.";
-            AddNotifica("Permesso incoerente", msg, "SYS_PERMESSO_INCOERENTE", idDestinatarioAdmin, null);
-        }
-
-        /* --- PLAFOND --- */
-
-        // Plafond negativo (sconfinamento)
-        private void CreaNotificaPlafondNegativo(int idUtenteProfessionista, decimal saldo, int? idPratica = null)
-        {
-            var msg = $"Plafond in negativo: saldo attuale {saldo:C}. Intervenire per rientrare.";
-            AddNotifica("Plafond negativo", msg, "PLAFOND_NEGATIVO", idUtenteProfessionista, idPratica);
-        }
-
-        /* --- PRATICHE --- */
-
-        // Scadenza pratica imminente
-        private void CreaNotificaPraticaScadenzaImminente(int idUtenteProfessionista, int idPratica, DateTime dataScadenza, int giorniResidui)
-        {
-            var msg = $"La pratica con scadenza {dataScadenza:dd/MM/yyyy} è imminente ({giorniResidui} giorni rimanenti).";
-            AddNotifica("Scadenza pratica imminente", msg, "PRATICA_SCADENZA_IMMINENTE", idUtenteProfessionista, idPratica);
-        }
 
 
         #endregion
@@ -2409,82 +2954,191 @@ namespace Sinergia.Controllers
             if (idUtenteLoggato <= 0)
                 return new HttpStatusCodeResult(401);
 
-            DateTime inizio = da ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-            DateTime fine = a ?? inizio.AddMonths(1).AddDays(-1);
+            // Range date
+            DateTime inizio = da ?? DateTime.MinValue;
+            DateTime fine = a ?? DateTime.MaxValue;
 
+            // Recupero operatore attivo (professionista)
             var operatore = db.OperatoriSinergia
                 .FirstOrDefault(o => o.ID_UtenteCollegato == idUtenteAttivo && o.TipoCliente == "Professionista");
             if (operatore == null)
                 return PartialView("~/Views/Previsionale/_OperazioniPrevisionaliList.cshtml",
                     new List<OperazioniPrevisionaliViewModel>());
 
-            int idClienteProfessionista = operatore.ID_Cliente;
+            int idClienteProfessionista = operatore.ID_Cliente;  // per Previsione e Cluster
+            int idUtenteProfessionista = idUtenteAttivo;         // per GenerazioneCosti
 
-            // ========= ENTRATE previste =========
+            // ========= PREVISIONI salvate =========
+            var previsioniQuery =
+                from pr in db.Previsione
+                join p in db.Pratiche on pr.ID_Pratiche equals p.ID_Pratiche into pj
+                from pratica in pj.DefaultIfEmpty()
+                join c in db.Clienti on pratica.ID_Cliente equals c.ID_Cliente into cj
+                from cliente in cj.DefaultIfEmpty()
+                where pr.ID_Professionista == idClienteProfessionista
+                      && pr.DataPrevisione >= inizio && pr.DataPrevisione <= fine
+                      && pr.Stato == "Previsionale"
+                select new OperazioniPrevisionaliViewModel
+                {
+                    ID_Previsione = pr.ID_Previsione,
+                    ID_Pratiche = pr.ID_Pratiche,
+                    ID_Professionista = pr.ID_Professionista,
+                    Percentuale = pr.Percentuale,
+                    TipoOperazione = pr.TipoOperazione,
+                    Descrizione = pr.Descrizione,
+                    ImportoPrevisto = pr.ImportoPrevisto,
+                    DataPrevisione = pr.DataPrevisione,
+                    Stato = pr.Stato,
+                    NomeCliente = cliente != null
+                        ? (cliente.TipoCliente == "Professionista"
+                            ? cliente.Nome + " " + cliente.Cognome
+                            : cliente.Nome)
+                        : "",
+                    NomePratica = pratica != null ? pratica.Titolo : ""
+                };
+
+            // ========= ENTRATE previste (da Pratiche: Owner o Responsabile) =========
             var entrateQuery =
                 from p in db.Pratiche
                 join c in db.Clienti on p.ID_Cliente equals c.ID_Cliente
-                join cl in db.Cluster
-                     on new { p.ID_Pratiche, ID_Utente = p.ID_UtenteResponsabile }
-                     equals new { ID_Pratiche = cl.ID_Pratiche, cl.ID_Utente } into clj
-                from cluster in clj.DefaultIfEmpty()
-                let dataPrev = (p.DataInizioAttivitaStimata.HasValue
-                                ? p.DataInizioAttivitaStimata.Value
-                                : (p.DataCreazione ?? DateTime.Now))
-                let perc = (cluster != null ? cluster.PercentualePrevisione : 0m)
-                let importoPrev = p.Budget * perc / 100m
-                where p.ID_UtenteResponsabile == idClienteProfessionista
-                      && p.Stato != "Eliminato"
+                let dataPrev = (p.DataInizioAttivitaStimata ?? p.DataCreazione ?? DateTime.Now)
+
+                // 🔹 Trovo l'ID_Cliente collegato al RESPONSABILE
+                let idClienteResponsabile = (
+                    from os in db.OperatoriSinergia
+                    where os.ID_UtenteCollegato == p.ID_UtenteResponsabile
+                          && os.TipoCliente == "Professionista"
+                    select os.ID_Cliente
+                ).FirstOrDefault()
+
+                // 🔹 Trovo l'ID_Cliente collegato all'OWNER (UtenteCreatore)
+                let idClienteOwner = (
+                    from os in db.OperatoriSinergia
+                    where os.ID_UtenteCollegato == p.ID_UtenteCreatore
+                          && os.TipoCliente == "Professionista"
+                    select os.ID_Cliente
+                ).FirstOrDefault()
+
+                // 🔹 Professionista effettivo: prima il responsabile, altrimenti l’owner
+                let idProfessionistaEntrata = idClienteResponsabile != 0
+                    ? idClienteResponsabile
+                    : idClienteOwner
+
+                where p.Stato != "Eliminato"
                       && dataPrev >= inizio && dataPrev <= fine
-                      && importoPrev != 0
+                      && p.Budget > 0
+                      && idProfessionistaEntrata == idClienteProfessionista   // ✅ filtro per il professionista loggato
+
                 select new OperazioniPrevisionaliViewModel
                 {
                     ID_Previsione = p.ID_Pratiche,
                     ID_Pratiche = p.ID_Pratiche,
-                    ID_Professionista = p.ID_UtenteResponsabile,
-                    Percentuale = perc,
+                    ID_Professionista = idProfessionistaEntrata, // ✅ sempre un ID_Cliente
+                    Percentuale = 100,
                     TipoOperazione = "Entrata",
                     Descrizione = "Ricavo previsto da pratica",
+                    ImportoPrevisto = p.Budget,
+                    BudgetPratica = p.Budget,
+                    DataPrevisione = dataPrev,
+                    Stato = "Previsionale",
+                    NomeCliente = c.TipoCliente == "Professionista"
+                        ? (c.Nome + " " + c.Cognome)
+                        : c.Nome,
+                    NomePratica = p.Titolo
+                };
+
+
+
+            // ========= ENTRATE previste (Cluster = Collaboratore) =========
+            var clusterQuery =
+                from p in db.Pratiche
+                join c in db.Clienti on p.ID_Cliente equals c.ID_Cliente
+                join cl in db.Cluster on p.ID_Pratiche equals cl.ID_Pratiche
+                let dataPrev = (p.DataInizioAttivitaStimata ?? p.DataCreazione ?? DateTime.Now)
+                let importoPrev = p.Budget * cl.PercentualePrevisione / 100m
+                where cl.ID_Utente == idClienteProfessionista
+                      && p.Stato != "Eliminato"
+                      && dataPrev >= inizio && dataPrev <= fine
+                      && importoPrev > 0
+                select new OperazioniPrevisionaliViewModel
+                {
+                    ID_Previsione = p.ID_Pratiche,
+                    ID_Pratiche = p.ID_Pratiche,
+                    ID_Professionista = cl.ID_Utente,
+                    Percentuale = cl.PercentualePrevisione,
+                    TipoOperazione = "Entrata",
+                    Descrizione = "Quota collaboratore da pratica",
                     ImportoPrevisto = importoPrev,
                     BudgetPratica = p.Budget,
                     DataPrevisione = dataPrev,
                     Stato = "Previsionale",
-                    NomeCliente = c.TipoCliente == "Professionista" ? (c.Nome + " " + c.Cognome) : c.Nome,
+                    NomeCliente = c.TipoCliente == "Professionista"
+                        ? (c.Nome + " " + c.Cognome)
+                        : c.Nome,
                     NomePratica = p.Titolo
                 };
 
             // ========= USCITE previste =========
+            int IdClienteProfessionista = operatore.ID_Cliente;   // es. 6
+            int IdUtenteProfessionista = idUtenteAttivo;          // es. 15
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[USCITE] Mapping iniziale → idClienteProfessionista={IdClienteProfessionista}, idUtenteProfessionista={IdUtenteProfessionista}"
+            );
+
             var usciteQuery =
                 from g in db.GenerazioneCosti
                 join p in db.Pratiche on g.ID_Pratiche equals p.ID_Pratiche into pj
                 from pratica in pj.DefaultIfEmpty()
-                where g.ID_Utente == idClienteProfessionista
+                where g.ID_Utente == IdUtenteProfessionista   // usa ID_Utente
                       && g.Approvato == false
                       && g.Stato == "Previsionale"
-                      && g.DataRegistrazione >= inizio && g.DataRegistrazione <= fine
-                select new OperazioniPrevisionaliViewModel
+                select new
                 {
-                    ID_Previsione = g.ID_GenerazioneCosto,
-                    ID_Pratiche = g.ID_Pratiche,
-                    ID_Professionista = g.ID_Utente,
-                    Percentuale = null,
-                    TipoOperazione = "Uscita",
-                    Descrizione = (g.Categoria ?? "Costo") +
-                                  (string.IsNullOrEmpty(g.Descrizione) ? "" : " – " + g.Descrizione),
-                    ImportoPrevisto = -(g.Importo ?? 0m),
-                    BudgetPratica = null,
-                    DataPrevisione = g.DataRegistrazione,
-                    Stato = "Previsionale",
-                    NomePratica = pratica != null ? pratica.Titolo : null
+                    g,
+                    pratica
                 };
 
-            // Esecuzione query separata per evitare problemi EF
-            var entrateList = entrateQuery.ToList();
+            // 🔍 Debugga subito le righe trovate
             var usciteList = usciteQuery.ToList();
+            foreach (var row in usciteList)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[USCITE] RIGA DB → ID_GenerazioneCosto={row.g.ID_GenerazioneCosto}, " +
+                    $"g.ID_Utente={row.g.ID_Utente}, Importo={row.g.Importo}, Categoria={row.g.Categoria}, " +
+                    $"Stato={row.g.Stato}, Approvato={row.g.Approvato}, " +
+                    $"Pratica={(row.pratica != null ? row.pratica.Titolo : "NULL")}"
+                );
+            }
 
-            // Unione in memoria
-            var lista = entrateList;
-            lista.AddRange(usciteList);
+            // 🔄 Proietto nel ViewModel
+            var usciteFinal =
+                from row in usciteList
+                select new OperazioniPrevisionaliViewModel
+                {
+                    ID_Previsione = row.g.ID_GenerazioneCosto,
+                    ID_Pratiche = row.g.ID_Pratiche,
+                    ID_Professionista = idClienteProfessionista, // sempre ID_Cliente nel ViewModel
+                    TipoOperazione = "Uscita",
+                    Descrizione = (row.g.Categoria ?? "Costo") +
+                                  (string.IsNullOrEmpty(row.g.Descrizione) ? "" : " – " + row.g.Descrizione),
+                    ImportoPrevisto = -(row.g.Importo ?? 0m),
+                    DataPrevisione = row.g.DataRegistrazione,
+                    Stato = "Previsionale",
+                    NomePratica = row.pratica != null ? row.pratica.Titolo : null,
+                    DebugInfo =
+                        "g.ID_Utente=" + row.g.ID_Utente +
+                        " | idClienteProfessionista=" + idClienteProfessionista +
+                        " | idUtenteProfessionista=" + idUtenteProfessionista
+                };
+
+
+            // === Unione di tutte le fonti
+            var lista = new List<OperazioniPrevisionaliViewModel>();
+            lista.AddRange(previsioniQuery.ToList());
+            lista.AddRange(entrateQuery.ToList());
+            lista.AddRange(clusterQuery.ToList());
+            //lista.AddRange(usciteQuery.ToList());
 
             // Filtri opzionali
             if (tipo == "Entrate")
@@ -2770,11 +3424,12 @@ namespace Sinergia.Controllers
                 return PartialView("~/Views/GiornaleEconomico/_OperazioniEconomicheList.cshtml",
                     new List<OperazioniEconomicheViewModel>());
 
-            int idClienteProfessionista = operatore.ID_Cliente;
+            // ✅ Uso ID_Utente (non ID_Cliente)
+            int idProfessionista = (int)operatore.ID_UtenteCollegato;
 
             // ===== Team attivi
             var teamIds = db.MembriTeam
-                .Where(mt => mt.ID_Professionista == idClienteProfessionista && mt.Attivo)
+                .Where(mt => mt.ID_Professionista == idProfessionista && mt.Attivo)
                 .Select(mt => mt.ID_Team)
                 .Distinct()
                 .ToList();
@@ -2791,7 +3446,7 @@ namespace Sinergia.Controllers
             var entrateDto =
                 (from avv in db.AvvisiParcella
                  join p in db.Pratiche on avv.ID_Pratiche equals p.ID_Pratiche
-                 where p.ID_UtenteResponsabile == idClienteProfessionista
+                 where p.ID_UtenteResponsabile == idProfessionista
                        && avv.Stato != "Annullato"
                        && avv.DataAvviso >= inizio && avv.DataAvviso <= fine
                  select new
@@ -2836,7 +3491,7 @@ namespace Sinergia.Controllers
                  where statiPagati.Contains(g.Stato.Trim().ToLower())
                        && g.DataRegistrazione >= inizio && g.DataRegistrazione <= fine
                        && (
-                           g.ID_Utente == idClienteProfessionista
+                           g.ID_Utente == idProfessionista
                            || g.ID_Utente == idUtenteAttivo
                            || (g.ID_Team != null && teamIds.Contains(g.ID_Team.Value))
                            || (g.Categoria == "Costo Progetto" && g.ID_Pratiche != null && praticheProgettoIds.Contains(g.ID_Pratiche.Value))
@@ -2880,6 +3535,7 @@ namespace Sinergia.Controllers
 
             return PartialView("~/Views/GiornaleEconomico/_OperazioniEconomicheList.cshtml", lista);
         }
+
 
 
 
@@ -3057,28 +3713,30 @@ namespace Sinergia.Controllers
             DateTime inizio = da ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             DateTime fine = a ?? inizio.AddMonths(1).AddDays(-1);
 
-            var clientiDelProfessionista = db.OperatoriSinergia
+            // ✅ uso ID_UtenteCollegato
+            var professionistiIds = db.OperatoriSinergia
                 .Where(o => o.TipoCliente == "Professionista" && o.ID_UtenteCollegato == idUtenteAttivo)
-                .Select(o => o.ID_Cliente)
+                .Select(o => o.ID_UtenteCollegato)
                 .ToList();
 
-            if (clientiDelProfessionista.Count == 0)
+            if (professionistiIds.Count == 0)
                 return PartialView("~/Views/GiornaleFinanziario/_OperazioniFinanziarieList.cshtml",
                     new List<OperaziomoFinanziarieViewModel>());
 
-            int idClienteProfessionista = clientiDelProfessionista[0];
+            int idProfessionista = (int)professionistiIds[0];
 
+            // ===== Team attivi
             var teamIds = db.MembriTeam
-                .Where(mt => clientiDelProfessionista.Contains(mt.ID_Professionista) && mt.Attivo)
+                .Where(mt => professionistiIds.Contains(mt.ID_Professionista) && mt.Attivo)
                 .Select(mt => mt.ID_Team)
                 .Distinct()
                 .ToList();
 
-            // ===================== RECUPERO PRATICHE INCLUSE ANCHE DA COSTI PROGETTO =====================
+            // ===== Pratiche (anche da costi progetto)
             var tuttePraticheIds = (
                 from p in db.Pratiche
-                where (clientiDelProfessionista.Contains((int)p.ID_Owner) ||
-                       clientiDelProfessionista.Contains(p.ID_UtenteResponsabile))
+                where (professionistiIds.Contains((int)p.ID_Owner) ||
+                       professionistiIds.Contains(p.ID_UtenteResponsabile))
                       && p.Stato != "Eliminato"
                 select p.ID_Pratiche
             )
@@ -3109,7 +3767,7 @@ namespace Sinergia.Controllers
                 from av in aj.DefaultIfEmpty()
                 where i.DataIncasso >= inizio && i.DataIncasso <= fine
                 let idPratica = (int?)(i.ID_Pratiche ?? (av != null ? av.ID_Pratiche : (int?)null))
-                where idPratica != null && db.Pratiche.Any(p => p.ID_Pratiche == idPratica && clientiDelProfessionista.Contains((int)p.ID_Owner))
+                where idPratica != null && db.Pratiche.Any(p => p.ID_Pratiche == idPratica && professionistiIds.Contains((int)p.ID_Owner))
                 select new
                 {
                     i.ID_Incasso,
@@ -3146,7 +3804,7 @@ namespace Sinergia.Controllers
                       && g.DataRegistrazione >= inizio && g.DataRegistrazione <= fine
                       && (
                           g.ID_Utente == idUtenteAttivo ||
-                          g.ID_Utente == idClienteProfessionista ||
+                          g.ID_Utente == idProfessionista ||
                           (g.ID_Team != null && teamIds.Contains(g.ID_Team.Value)) ||
                           g.Categoria == "Costo Progetto"
                       )

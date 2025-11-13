@@ -39,5 +39,7 @@ namespace Sinergia.Models
 
         public decimal? BudgetPratica { get; set; }      // valore complessivo della pratica
 
+        public string DebugInfo { get; set; }
+
     }
 }

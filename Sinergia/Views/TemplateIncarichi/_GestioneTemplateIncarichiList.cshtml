@@ -4,7 +4,7 @@
     var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
     bool puoAggiungere = ViewBag.PuoAggiungere == true;
     bool mostraAzioni = puoAggiungere || Model.Any(c => c.PuoModificare || c.PuoEliminare);
-    var idProfessioneCorrente = ViewBag.ID_Professione != null ? ViewBag.ID_Professione.ToString() : "0";
+    //var idProfessioneCorrente = ViewBag.ID_Professione != null ? ViewBag.ID_Professione.ToString() : "0";
 }
 
 <!-- jQuery -->
@@ -26,19 +26,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/summernote/0.8.20/summernote-bs5.min.js"></script>
 
 
-<!-- 🔍 Controlli filtro/paginazione -->
-<div id="controlliTemplateIncarichi" class="d-flex flex-wrap align-items-center gap-2 mb-2">
-    <label for="filtroProfessione" class="form-label mb-0">Filtra per Professione:</label>
-    <select id="filtroProfessione"
-            class="form-select form-select-sm w-auto"
-            style="min-width: 200px; max-width: 250px;">
-        <option value="0">Tutte</option>
-        @foreach (var p in ViewBag.Professioni as List<SelectListItem>)
-        {
-            <option value="@p.Value" @(p.Value == idProfessioneCorrente ? "selected" : "")>@p.Text</option>
-        }
-    </select>
-</div>
 
 <!-- ➕ Pulsante nuovo -->
 <div class="d-flex justify-content-end mb-2">
@@ -60,7 +47,8 @@
             <thead class="table-light">
                 <tr>
                     <th class="text-nowrap">Nome Template</th>
-                    <th class="text-nowrap">Professione</th>
+                    <th class="text-nowrap">Tipo Compenso</th>
+
                     @if (mostraAzioni)
                     {
                         <th class="text-center text-nowrap">Azioni</th>
@@ -70,9 +58,9 @@
             <tbody>
                 @foreach (var t in Model)
                 {
-                    <tr data-idprofessione="@t.ID_Professione">
+                    <tr>
                         <td class="text-nowrap">@t.NomeTemplate</td>
-                        <td class="text-nowrap">@t.NomeProfessione</td>
+                        <td class="text-nowrap">@t.TipoCompenso</td>
                         @if (mostraAzioni)
                         {
                             <td class="text-center">
@@ -90,10 +78,9 @@
 <div class="d-block d-md-none mt-3 px-2">
     @foreach (var t in Model)
     {
-        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-template" data-idprofessione="@t.ID_Professione">
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-template">
             <div class="fw-bold text-primary mb-1">@t.NomeTemplate</div>
-            <div class="small text-muted"><strong>Professione:</strong> @t.NomeProfessione</div>
-
+            <div class="small text-muted"><strong>Tipo Compenso:</strong> @t.TipoCompenso</div>
             @if (mostraAzioni)
             {
                 <div class="d-flex flex-wrap gap-2 mt-2">
@@ -125,16 +112,19 @@
     </div>
 </div>
 
-@* visualizzazione template  *@
+@* visualizzazione template *@
 <div class="modal fade" id="visualizzaTemplateModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title" id="titoloTemplateModal">Visualizza Template</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="contenutoTemplateHtml">
-                <!-- HTML template qui -->
+            <div class="modal-body p-3" style="background-color:#f0f0f0;">
+                <div id="contenutoTemplateHtml"
+                     class="word-preview p-4 mx-auto bg-white border shadow-sm">
+                    <!-- Qui verrà iniettato l'HTML -->
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
@@ -142,6 +132,43 @@
         </div>
     </div>
 </div>
+
+<style>
+    .word-preview {
+        width: 21cm; /* A4 per desktop */
+        min-height: 29.7cm;
+        padding: 2cm;
+        font-family: "Calibri", "Times New Roman", serif;
+        font-size: 12pt;
+        line-height: 1.5;
+        background-color: #fff;
+        margin: 0 auto; /* centra in orizzontale */
+    }
+
+        .word-preview p {
+            margin-bottom: 0.5rem;
+        }
+
+        .word-preview h1,
+        .word-preview h2,
+        .word-preview h3 {
+            font-weight: bold;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+    /* 📱 Versione mobile */
+    @@media (max-width: 768px) {
+        .word-preview {
+            width: 100%; /* si adatta allo schermo */
+            min-height: auto; /* niente altezza fissa */
+            padding: 1rem; /* margini più piccoli */
+            font-size: 11pt; /* leggermente più piccolo */
+        }
+    }
+</style>
+
+
 
 <!-- 📂 Modale Importazione Template -->
 <div class="modal fade" id="importaTemplateModal" tabindex="-1" aria-labelledby="importaTemplateLabel" aria-hidden="true">
@@ -153,20 +180,26 @@
             </div>
             <div class="modal-body">
                 <form id="formImportaTemplate" enctype="multipart/form-data">
+
+                    <!-- File DOCX -->
                     <div class="mb-3">
                         <label class="form-label">Seleziona file DOCX</label>
                         <input type="file" name="file" id="fileDocx" accept=".docx" class="form-control" required />
                     </div>
+
+                    <!-- Tipo Template -->
                     <div class="mb-3">
-                        <label class="form-label">Professione associata (opzionale)</label>
-                        <select name="idProfessione" class="form-select">
-                            <option value="">-- Nessuna --</option>
-                            @foreach (var p in ViewBag.Professioni as List<SelectListItem>)
-                            {
-                                <option value="@p.Value">@p.Text</option>
-                            }
+                        <label class="form-label">Tipo di Template</label>
+                        <select name="tipoCompenso" class="form-select" required>
+                            <option value="">-- Seleziona --</option>
+                            <option value="Fisso">Incarico Fisso</option>
+                            <option value="A ore">Incarico a ore</option>
+                            <option value="Giudiziale">Incarico Giudiziale</option>
+                            <option value="Avviso Parcella">Avviso Parcella</option>
                         </select>
                     </div>
+
+                    <!-- Submit -->
                     <button type="submit" class="btn btn-success btn-sm">📂 Importa e Salva</button>
                 </form>
             </div>
@@ -261,8 +294,25 @@
     function visualizzaTemplateDaDb(id, titolo) {
         $.get('/Pratiche/GetTemplateIncarico', { id: id }, function (res) {
             if (res.success) {
-                document.getElementById('contenutoTemplateHtml').innerHTML = res.template.ContenutoHtml;
-                document.getElementById('titoloTemplateModal').textContent = res.template.NomeTemplate || titolo;
+                $('#titoloTemplateModal').text(res.template.NomeTemplate || titolo);
+
+                let contenuto = res.template.ContenutoHtml;
+
+                // Normalizza HTML
+                contenuto = contenuto.replace(/(<br\s*\/?>\s*){2,}/gi, '</p><p>');
+                if (!/<p>/i.test(contenuto)) {
+                    contenuto = '<p>' + contenuto + '</p>';
+                }
+
+                // 🔹 Aggiungi colore in base al tipo template
+                let tipo = res.template.TipoCompenso?.toLowerCase() || '';
+                if (tipo.includes('avviso')) {
+                    $('#contenutoTemplateHtml').css('border-left', '5px solid #0d6efd');
+                } else {
+                    $('#contenutoTemplateHtml').css('border-left', 'none');
+                }
+
+                $('#contenutoTemplateHtml').html(contenuto);
                 new bootstrap.Modal(document.getElementById('visualizzaTemplateModal')).show();
             } else {
                 toastr.error(res.message);
@@ -424,25 +474,12 @@
 
         function renderTable() {
             const keyword = searchInput.value.toLowerCase();
-            const selectedProfessione = document.getElementById('filtroProfessione').value;
 
             // Filtra righe desktop
-            let filteredRows = rows.filter(row => {
-                const text = row.innerText.toLowerCase();
-                const idProfessione = row.getAttribute('data-idprofessione');
-                const matchKeyword = text.includes(keyword);
-                const matchProfessione = (selectedProfessione === "0") || (idProfessione === selectedProfessione);
-                return matchKeyword && matchProfessione;
-            });
+            let filteredRows = rows.filter(row => row.innerText.toLowerCase().includes(keyword));
 
             // Filtra card mobile
-            let filteredCards = cards.filter(card => {
-                const text = card.innerText.toLowerCase();
-                const idProfessione = card.getAttribute('data-idprofessione');
-                const matchKeyword = text.includes(keyword);
-                const matchProfessione = (selectedProfessione === "0") || (idProfessione === selectedProfessione);
-                return matchKeyword && matchProfessione;
-            });
+            let filteredCards = cards.filter(card => card.innerText.toLowerCase().includes(keyword));
 
             const totalPages = Math.ceil(filteredRows.length / pageSize);
             currentPage = Math.min(currentPage, totalPages || 1);

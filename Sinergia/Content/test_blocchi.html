@@ -1,0 +1,71 @@
+
+<html>
+<head>
+<style>
+body { font-family: Arial; font-size: 12pt; margin: 2cm; }
+p { margin: 0; padding: 2px 0; }
+
+.blocco {
+    border: 1px solid black;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    padding: 10px;
+}
+
+/* Variante 1 */
+.block1 {
+    display: block;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+}
+
+/* Variante 2 */
+.block2 {
+    display: table;
+    width: 100%;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+}
+
+/* Variante 3 */
+.block3 {
+    display: block;
+    page-break-before: always;
+}
+</style>
+</head>
+<body>
+
+<h3>Test comportamento blocchi in PDF</h3>
+<p>Test 1: con display:block + page-break-inside:avoid</p>
+<div class='blocco block1'>
+    <p><b>Sinergia Hub S.t.A. Coop. a.r.l.</b></p>
+    <p>Via Caio Canuleio, n. 43, 00174, Roma</p>
+    <p>C.F. e P.I. 18068231002</p>
+    <p>Conto Corrente n. 06809/1000/00063000</p>
+    <p>IBAN: IT47L0306905110100000063000</p>
+    <p>Banca Intesa San Paolo</p>
+</div>
+
+<p>Test 2: con display:table + page-break-inside:avoid</p>
+<div class='blocco block2'>
+    <p><b>Sinergia Hub S.t.A. Coop. a.r.l.</b></p>
+    <p>Via Caio Canuleio, n. 43, 00174, Roma</p>
+    <p>C.F. e P.I. 18068231002</p>
+    <p>Conto Corrente n. 06809/1000/00063000</p>
+    <p>IBAN: IT47L0306905110100000063000</p>
+    <p>Banca Intesa San Paolo</p>
+</div>
+
+<p>Test 3: con page-break-before:always (forza nuova pagina)</p>
+<div class='blocco block3'>
+    <p><b>Sinergia Hub S.t.A. Coop. a.r.l.</b></p>
+    <p>Via Caio Canuleio, n. 43, 00174, Roma</p>
+    <p>C.F. e P.I. 18068231002</p>
+    <p>Conto Corrente n. 06809/1000/00063000</p>
+    <p>IBAN: IT47L0306905110100000063000</p>
+    <p>Banca Intesa San Paolo</p>
+</div>
+
+</body>
+</html>

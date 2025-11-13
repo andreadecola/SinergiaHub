@@ -17,6 +17,13 @@
 
         h2 {
             text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .periodo {
+            text-align: center;
+            font-size: 11px;
+            color: #555;
             margin-bottom: 20px;
         }
 
@@ -28,40 +35,67 @@
 
         th, td {
             border: 1px solid #444;
-            padding: 6px 8px;
+            padding: 5px 6px;
             text-align: left;
         }
 
         th {
-            background-color: #f0f0f0;
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+
+        td {
+            font-size: 11px;
+        }
+
+        .text-right {
+            text-align: right;
         }
     </style>
 </head>
 <body>
     <h2>Report Incassi</h2>
+    <div class="periodo">
+        @("Periodo: " + DateTime.Today.ToString("MMMM yyyy"))
+    </div>
 
     <table>
         <thead>
             <tr>
-                <th>Pratica</th>
-                <th>Data</th>
-                <th>Importo</th>
-                <th>Metodo</th>
-                <th>Plafond</th>
+                <th style="width: 5%">ID</th>
+                <th style="width: 20%">Pratica</th>
+                <th style="width: 10%">Data Incasso</th>
+                <th style="width: 10%">Importo (€)</th>
+                <th style="width: 12%">Metodo</th>
+                <th style="width: 6%">Plafond</th>
+                <th style="width: 10%">Avviso Parcella</th>
+                <th style="width: 10%">Totale Avviso (€)</th>
+                <th style="width: 7%">IVA</th>
+                <th style="width: 10%">Stato Avviso</th>
             </tr>
         </thead>
         <tbody>
             @foreach (var i in Model)
             {
                 <tr>
+                    <td>@i.ID_Incasso</td>
                     <td>@i.NomePratica</td>
                     <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
-                    <td>@i.Importo.ToString("N2") €</td>
+                    <td class="text-right">@i.Importo.ToString("N2")</td>
                     <td>@i.MetodoPagamento</td>
                     <td>@(i.VersaInPlafond == true ? "SI" : "NO")</td>
+                    <td>@(i.ID_AvvisoParcella > 0 ? "Avviso #" + i.ID_AvvisoParcella : "-")</td>
+                    <td class="text-right">@((i.ImportoAvviso ?? 0).ToString("N2"))</td>
+                    <td class="text-right">@((i.ImportoIVA ?? 0).ToString("N2"))</td>
+                    <td>@(string.IsNullOrEmpty(i.Stato) ? "-" : i.Stato)</td>
                 </tr>
             }
         </tbody>
     </table>
+
+    <br />
+    <p style="font-size: 11px; text-align: right; color: #666;">
+        Generato da Sinergia - @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+    </p>
 </body>
 </html>

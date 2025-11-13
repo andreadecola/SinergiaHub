@@ -261,7 +261,7 @@
 
                             <div class="col-md-4">
                                 <label>Nome</label>
-                                <input name="Nome" class="form-control form-control-sm" required />
+                                <input name="Nome" class="form-control form-control-sm" />
                                 <small class="text-muted d-none" data-prev="Nome"></small>
                             </div>
 
@@ -320,7 +320,7 @@
 
                             <div class="col-md-4">
                                 <label>Città</label>
-                                <select id="Citta" name="ID_CittaResidenza" class="form-control"></select>
+                                <select id="Citta" name="ID_Citta" class="form-control"></select>
                                 <small class="text-muted d-none" data-prev="Citta"></small>
                             </div>
 
@@ -330,22 +330,34 @@
                                 <small class="text-muted d-none" data-prev="Indirizzo"></small>
                             </div>
 
-                            <!-- Solo Admin: Professionista -->
-                            @if (utenteLoggato != null && utenteLoggato.TipoUtente == "Admin")
+                            <!-- Owner / Professionista -->
+                            @if (utenteLoggato != null)
                             {
-                                <div class="col-md-4">
+                                <div class="col-md-4" id="wrapperAssegnaProfessionista">
                                     <label>Assegna a Professionista</label>
-                                    <select name="ID_Operatore" class="form-select form-select-sm" required>
-                                        <option value="">-- Seleziona Professionista --</option>
-                                        @foreach (var p in ViewBag.Professionisti as List<SelectListItem>)
-                                        {
-                                            <option value="@p.Value">@p.Text</option>
-                                        }
-                                    </select>
+
+                                    @if (utenteLoggato.TipoUtente == "Admin" || utenteLoggato.TipoUtente == "Collaboratore")
+                                    {
+                                        <select name="ID_Operatore" class="form-select form-select-sm" required>
+                                            <option value="">-- Seleziona Professionista --</option>
+                                            @foreach (var p in ViewBag.Professionisti as List<SelectListItem>)
+                                            {
+                                                <option value="@p.Value">@p.Text</option>
+                                            }
+                                        </select>
+                                    }
+                                    else if (utenteLoggato.TipoUtente == "Professionista")
+                                    {
+                                        <!-- hidden field con professionista corrente -->
+                                        <input type="hidden" name="ID_Operatore" value="@( (ViewBag.Professionisti as List<SelectListItem>)?.FirstOrDefault()?.Value )" />
+                                        <input type="text" class="form-control form-control-sm bg-light" value="@( (ViewBag.Professionisti as List<SelectListItem>)?.FirstOrDefault()?.Text )" readonly />
+                                    }
+
                                     <small class="text-muted d-none" data-prev="Operatore Assegnato"></small>
                                     <input type="hidden" name="TipoOperatore" value="Professionista" />
                                 </div>
                             }
+
                         </div>
 
                         <!-- NOTE -->
@@ -480,13 +492,26 @@
                 console.error("❌ Errore nel caricamento di città e nazioni:", error);
             });
 
-        // 👤 Se l'utente è Admin → mostra select assegnazione professionista
+        // 👤 Mostra assegnazione Owner a seconda del ruolo
         const wrapperAssegna = document.getElementById("wrapperAssegnaProfessionista");
-        if (typeof utenteLoggatoTipo !== "undefined" && utenteLoggatoTipo === "Admin") {
-            wrapperAssegna?.classList.remove("d-none");
-        } else {
-            wrapperAssegna?.classList.add("d-none");
+        if (typeof utenteLoggatoTipo !== "undefined") {
+            if (utenteLoggatoTipo === "Admin" || utenteLoggatoTipo === "Collaboratore") {
+                // Admin e Collaboratore → mostrano la select
+                wrapperAssegna?.classList.remove("d-none");
+            } else if (utenteLoggatoTipo === "Professionista") {
+                // Professionista → già precompilato hidden, non serve mostrare la select
+                wrapperAssegna?.classList.remove("d-none");
+                const hiddenInput = document.querySelector('#wrapperAssegnaProfessionista input[name="ID_Operatore"]');
+                if (hiddenInput && hiddenInput.value) {
+                    // Mostro anche la label readonly
+                    const textBox = document.querySelector('#wrapperAssegnaProfessionista input[readonly]');
+                    if (textBox) textBox.closest('div').classList.remove('d-none');
+                }
+            } else {
+                wrapperAssegna?.classList.add("d-none");
+            }
         }
+
 
         // Mostra la modale
         new bootstrap.Modal(document.getElementById("clienteModal")).show();
@@ -517,7 +542,7 @@
                 fetch('/Utenti/GetCittaENazioni')
                     .then(r => r.json())
                     .then(data => {
-                        const selectCitta = form.querySelector('[name="ID_CittaResidenza"]');
+                        const selectCitta = form.querySelector('[name="ID_Citta"]');
                         const selectNazione = form.querySelector('[name="ID_Nazione"]');
 
                         selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
@@ -545,8 +570,8 @@
                             if (italia) selectNazione.value = italia.ID_BPCittaDN;
                         }
 
-                        if (c.ID_CittaResidenza) {
-                            selectCitta.value = c.ID_CittaResidenza;
+                        if (c.ID_Citta) {
+                            selectCitta.value = c.ID_Citta;
                         } else {
                             const roma = data.citta.find(x => x.NameLocalita.toLowerCase() === "roma");
                             if (roma) selectCitta.value = roma.ID_BPCitta;
@@ -565,6 +590,34 @@
 
                 document.getElementById("clienteModalLabel").innerText = "Modifica Cliente";
                 new bootstrap.Modal(document.getElementById("clienteModal")).show();
+                // 👤 Gestione assegnazione Owner a seconda del ruolo
+                const wrapperAssegna = document.getElementById("wrapperAssegnaProfessionista");
+                if (typeof utenteLoggatoTipo !== "undefined") {
+                    if (utenteLoggatoTipo === "Admin" || utenteLoggatoTipo === "Collaboratore") {
+                        // Admin e Collaboratore → mostrano la select
+                        wrapperAssegna?.classList.remove("d-none");
+                        // ✅ Se già salvato, seleziona il valore
+                        if (c.ID_Operatore) {
+                            const select = wrapperAssegna.querySelector('select[name="ID_Operatore"]');
+                            if (select) select.value = c.ID_Operatore;
+                        }
+                    } else if (utenteLoggatoTipo === "Professionista") {
+                        // Professionista → hidden precompilato + textbox readonly
+                        wrapperAssegna?.classList.remove("d-none");
+
+                        const hiddenInput = wrapperAssegna.querySelector('input[name="ID_Operatore"]');
+                        if (hiddenInput) hiddenInput.value = c.ID_Operatore;
+
+                        const textBox = wrapperAssegna.querySelector('input[readonly]');
+                        if (textBox) {
+                            textBox.value = c.OwnerVisualizzato || "";
+                            textBox.closest('div').classList.remove('d-none');
+                        }
+                    } else {
+                        wrapperAssegna?.classList.add("d-none");
+                    }
+                }
+
 
                 // ✅ Aggancio evento toggle (una sola volta)
                 $("#toggleVersioni").off("change").on("change", function () {

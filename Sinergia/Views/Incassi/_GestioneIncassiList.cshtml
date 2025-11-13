@@ -46,27 +46,21 @@
     </form>
 </div>
 
-
-<!-- ➕ Pulsante nuovo -->
-<div class="d-flex justify-content-end mb-2">
-    @if (puoAggiungere)
-    {
-        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovoIncasso()">Nuovo Incasso</button>
-    }
-</div>
-
-<!-- 🖥️ TABELLA DESKTOP -->
+<!-- 🖥️ TABELLA DESKTOP — VERSIONE DEFINITIVA -->
 <div class="d-none d-md-block">
     <div class="table-responsive">
-        <table class="table table-striped table-bordered" id="tabellaIncassi">
-            <thead>
+        <table class="table table-hover table-bordered align-middle shadow-sm" id="tabellaIncassi">
+            <thead class="table-light">
                 <tr>
-                    <th>Data</th>
-                    <th>Importo Incasso</th>
-                    <th>Utile Pratica</th>
+                    <th class="text-center">#</th>
+                    <th>Pratica</th>
+                    <th>Data Competenza</th>
+                    <th>Data Incasso</th>
+                    <th>Importo</th>
                     <th>Metodo Pagamento</th>
                     <th>Plafond</th>
-                    <th>Avviso Parcella</th>
+                    <th class="text-center">Stato</th>
+
                     @if (mostraAzioni)
                     {
                         <th class="text-center">Azioni</th>
@@ -74,162 +68,330 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach (var i in Model)
+                @if (Model == null || !Model.Any())
                 {
-                    <tr data-id="@i.ID_Incasso">
-                        <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
-                        <td>@i.Importo.ToString("C")</td>
-                        <td>@i.UtileNetto.ToString("C")</td>
-                        <td>@i.MetodoPagamento</td>
-                        <td>@(i.VersaInPlafond == true ? "Sì" : "No")</td>
-                        <td>@i.NomePratica</td>
-
-                        @if (mostraAzioni)
-                        {
-                            <td class="text-center">
-                                @Html.Partial(
-                                    "~/Views/Incassi/_AzioniIncasso.cshtml",
-                                    i,
-                                    new ViewDataDictionary {
-                                        { "PuoModificare", ViewBag.PuoModificare },
-                                        { "PuoEliminare", ViewBag.PuoEliminare },
-                                        { "TipoUtente", ViewBag.TipoUtente }
-                                    }
-                                )
-                            </td>
-                        }
+                    <tr>
+                        <td colspan="@(mostraAzioni ? 10 : 9)" class="text-center text-muted py-3">
+                            Nessun incasso o avviso di parcella trovato.
+                        </td>
                     </tr>
+                }
+                else
+                {
+                    int index = 1;
+                    foreach (var i in Model)
+                    {
+                        string stato = i.StatoAvviso ?? "In attesa";
+                        string statoBadge;
+                        string statoClasse;
+
+                        switch (stato)
+                        {
+                            case "Pagato":
+                                statoBadge = "Pagato";
+                                statoClasse = "badge bg-success";
+                                break;
+                            case "Inviato":
+                            case "Da incassare":
+                                statoBadge = "Da incassare";
+                                statoClasse = "badge bg-warning text-dark";
+                                break;
+                            case "Parziale":
+                                statoBadge = "Parziale";
+                                statoClasse = "badge bg-info text-dark";
+                                break;
+                            default:
+                                statoBadge = "In attesa";
+                                statoClasse = "badge bg-secondary";
+                                break;
+                        }
+
+                        <tr class="@(stato == "Pagato" ? "table-success" :
+                                    stato == "Parziale" ? "table-info" :
+                                    stato == "Da incassare" ? "table-warning" :
+                                    "table-light")"
+                            data-id="@i.ID_Incasso">
+
+                            <td class="text-center">@index</td>
+                            <td>@i.NomePratica</td>
+                            <td>@(i.DataCompetenza?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td> @(i.Importo.ToString("C") ?? "-")</td>
+                            <td>@(i.MetodoPagamento ?? "-")</td>
+                            <td>@(i.VersaInPlafond == true ? "Sì" : "No")</td>
+                            <td class="text-center">
+                                <span class="@statoClasse">@statoBadge</span>
+                            </td>
+
+                            @if (mostraAzioni)
+                            {
+                                <td class="text-center">
+                                    @Html.Partial(
+                                        "~/Views/Incassi/_AzioniIncasso.cshtml",
+                                        i,
+                                        new ViewDataDictionary {
+                                            { "PuoModificare", ViewBag.PuoModificare },
+                                            { "PuoEliminare", ViewBag.PuoEliminare },
+                                            { "TipoUtente", ViewBag.TipoUtente }
+                                        }
+                                    )
+                                </td>
+                            }
+                        </tr>
+
+                        index++;
+                    }
                 }
             </tbody>
         </table>
     </div>
 </div>
 
-<!-- 📱 CARD VIEW MOBILE -->
+
+<!-- 📱 CARD VIEW MOBILE — VERSIONE DEFINITIVA -->
 <div class="d-block d-md-none mt-3 px-2">
-    @foreach (var i in Model)
+    @if (Model == null || !Model.Any())
     {
-        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-incasso" data-id="@i.ID_Incasso">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-bold text-primary">@i.NomePratica</span>
-                <span>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</span>
-            </div>
-
-            <div class="small text-muted"><strong>Importo:</strong> @i.Importo.ToString("C")</div>
-            <div class="small text-muted"><strong>Utile Pratica:</strong> @i.UtileNetto.ToString("C")</div>
-            <div class="small text-muted"><strong>Metodo Pagamento:</strong> @i.MetodoPagamento</div>
-            <div class="small text-muted"><strong>Plafond:</strong> @(i.VersaInPlafond == true ? "Sì" : "No")</div>
-
-            @if (mostraAzioni)
-            {
-                <div class="d-flex flex-wrap gap-2 mt-2">
-                    @Html.Partial(
-                        "~/Views/Incassi/_AzioniIncasso.cshtml",
-                        i,
-                        new ViewDataDictionary {
-                            { "PuoModificare", ViewBag.PuoModificare },
-                            { "PuoEliminare", ViewBag.PuoEliminare },
-                            { "TipoUtente", ViewBag.TipoUtente }
-                        }
-                    )
-                </div>
-            }
+        <div class="alert alert-light text-center text-muted border">
+            Nessun incasso o avviso di parcella trovato.
         </div>
+    }
+    else
+    {
+        foreach (var i in Model)
+        {
+            string stato = i.StatoAvviso ?? "In attesa";
+            string statoBadge;
+            string statoClasse;
+
+            switch (stato)
+            {
+                case "Pagato":
+                    statoBadge = "Pagato";
+                    statoClasse = "badge bg-success";
+                    break;
+                case "Inviato":
+                case "Da incassare":
+                    statoBadge = "Da incassare";
+                    statoClasse = "badge bg-warning text-dark";
+                    break;
+                case "Parziale":
+                    statoBadge = "Parziale";
+                    statoClasse = "badge bg-info text-dark";
+                    break;
+                default:
+                    statoBadge = "In attesa";
+                    statoClasse = "badge bg-secondary";
+                    break;
+            }
+
+            <div class="border rounded shadow-sm p-3 mb-3 bg-white card-incasso" data-id="@i.ID_Incasso">
+                <!-- 🔹 Header card -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold text-primary">@i.NomePratica</span>
+                    <span class="@statoClasse">@statoBadge</span>
+                </div>
+
+                <!-- 🔹 Dati principali -->
+                <div class="small text-muted">
+                    <strong>Data competenza:</strong> @(i.DataCompetenza?.ToString("dd/MM/yyyy") ?? "-")
+                </div>
+                <div class="small text-muted">
+                    <strong>Data incasso:</strong> @(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")
+                </div>
+                <div class="small text-muted">
+                    <strong>Importo:</strong> @(i.Importo.ToString("C") ?? "-")
+                </div>
+                <div class="small text-muted">
+                    <strong>Metodo pagamento:</strong> @(i.MetodoPagamento ?? "-")
+                </div>
+                <div class="small text-muted">
+                    <strong>Plafond:</strong> @(i.VersaInPlafond == true ? "Sì" : "No")
+                </div>
+
+                <!-- 🔹 Azioni -->
+                @if (mostraAzioni)
+                {
+                    <div class="d-flex flex-wrap gap-2 mt-3 justify-content-center">
+                        @Html.Partial(
+                            "~/Views/Incassi/_AzioniIncasso.cshtml",
+                            i,
+                            new ViewDataDictionary {
+                                { "PuoModificare", ViewBag.PuoModificare },
+                                { "PuoEliminare", ViewBag.PuoEliminare },
+                                { "TipoUtente", ViewBag.TipoUtente }
+                            }
+                        )
+                    </div>
+                }
+            </div>
+        }
     }
 </div>
 
+
 <!-- 🔄 Paginazione -->
 <div id="paginazioneIncassi" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
-<!-- Modale Nuovo/Modifica Incasso -->
+
+<!-- 💰 MODALE NUOVO INCASSO (diretto da avviso parcella) -->
 <div class="modal fade" id="incassoModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <form id="incassoForm">
-            <div class="modal-content">
-                <div class="modal-header text-black">
-                    <h5 class="modal-title" id="incassoModalLabel">Nuovo Incasso</h5>
-                    <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+            <div class="modal-content shadow-lg border-0 rounded-3">
+                <div class="modal-header bg-light text-black border-bottom">
+                    <h5 class="modal-title fw-bold" id="incassoModalLabel">
+                        Nuovo Incasso da Avviso Parcella
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
                 <div class="modal-body">
                     <input type="hidden" name="ID_Incasso" />
-                    <input type="hidden" name="Operazione" value="Inserimento" />
+                    <input type="hidden" name="ID_Pratiche" />
+                    <input type="hidden" name="ID_AvvisoParcella" />
+                    <input type="hidden" name="Importo" id="Importo" />
 
+
+                    <!-- 🔹 INTESTAZIONE CLIENTE / OWNER / RESPONSABILE -->
+                    <div class="alert alert-light border p-2 mb-3">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-md-4">
+                                <strong>Cliente:</strong>
+                                <span id="infoCliente" class="text-primary fw-semibold">-</span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Owner Cliente:</strong>
+                                <span id="infoOwner" class="text-dark">-</span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Responsabile Pratica:</strong>
+                                <span id="infoResponsabile" class="text-dark">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🔸 DATI BASE -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Totale Avviso</label>
+                            <input type="text" id="totalePratica" class="form-control form-control-sm bg-light" readonly />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Titolo Avviso</label>
+                            <input type="text" id="avvisoParcella" class="form-control form-control-sm bg-light" readonly />
+                        </div>
+                    </div>
+
+                    <!-- 🔸 DETTAGLIO IMPORTI -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Imponibile</label>
+                            <input type="text" id="importoSenzaIVA" class="form-control form-control-sm bg-light" readonly />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Spese Generali</label>
+                            <div id="quotaSpese" class="form-control form-control-sm bg-light">-</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Contributo Integrativo</label>
+                            <div id="quotaContributo" class="form-control form-control-sm bg-light">-</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">IVA</label>
+                            <div id="quotaIva" class="form-control form-control-sm bg-light">-</div>
+                        </div>
+                    </div>
+
+                    <!-- 💼 RIPARTIZIONE DETTAGLIATA -->
+                    <div class="alert alert-secondary p-2 mb-3">
+                        <h6 class="fw-bold mb-2">
+                            <i class="fa-solid fa-wallet me-1 text-dark"></i> Calcolo dell’Importo Netto
+                        </h6>
+
+                        <div class="row g-2 mb-1">
+                            <div class="col-md-3">
+                                <label class="form-label">Base Imponibile</label>
+                                <div id="importoBaseCalc" class="form-control form-control-sm bg-light">-</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Quota Owner</label>
+                                <div id="quotaOwner" class="form-control form-control-sm bg-light">-</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Trattenuta Sinergia</label>
+                                <div id="quotaTrattenuta" class="form-control form-control-sm bg-light">-</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-success fw-bold">Netto Professionista</label>
+                                <div id="importoNettoFinale" class="form-control form-control-sm bg-light text-success fw-bold">-</div>
+                            </div>
+                        </div>
+
+                        <!-- 👥 COLLABORATORI -->
+                        <div id="collaboratoriSection" class="mt-3" style="display:none;">
+                            <h6 class="fw-semibold mb-2">
+                                <i class="fa-solid fa-user-group me-1"></i> Collaboratori
+                            </h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered align-middle mb-2">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Nome Collaboratore</th>
+                                            <th class="text-center">%</th>
+                                            <th class="text-end">Importo (€)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="collaboratoriTableBody"></tbody>
+                                    <tfoot>
+                                        <tr class="table-secondary">
+                                            <th colspan="2" class="text-end">Totale Collaboratori</th>
+                                            <th class="text-end fw-bold" id="totaleCollaboratori">0.00 €</th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <small class="text-muted fst-italic d-block">
+                            Il netto è calcolato al netto di IVA, contributo integrativo (spesa), quota owner, trattenuta Sinergia e quote collaboratori.
+                        </small>
+
+                        <!-- 💬 RIEPILOGO CALCOLO TESTUALE -->
+                        <small id="riepilogoCalcolo" class="text-muted fst-italic d-block mt-1"></small>
+                    </div>
+                    <!-- ✏️ INSERIMENTO INCASSO -->
                     <div class="row g-2">
-                        <!-- 🔹 Selezione pratica -->
                         <div class="col-md-6">
-                            <label>Pratica</label>
-                            <select name="ID_Pratiche" class="form-select form-select-sm" required>
-                                <option value="">-- Seleziona Pratica --</option>
-                                @foreach (var pratica in ViewBag.Pratiche as List<SelectListItem>)
-                                {
-                                    <option value="@pratica.Value">@pratica.Text</option>
-                                }
-                            </select>
+                            <label class="form-label">Data Incasso</label>
+                            <input name="DataIncasso" type="date" class="form-control form-control-sm" />
                         </div>
-
-                        <!-- 🔹 Info Pratica -->
                         <div class="col-md-6">
-                            <label>Totale Pratica</label>
-                            <input type="text" id="totalePratica" class="form-control form-control-sm" readonly />
-                        </div>
-
-                        <!-- 🔹 Info Avviso Parcella -->
-                        <div class="col-md-6">
-                            <label>Avviso di Parcella</label>
-                            <input type="text" id="avvisoParcella" class="form-control form-control-sm" readonly />
-                        </div>
-
-                        <div class="col-md-3">
-                            <label>Importo senza IVA</label>
-                            <input type="text" id="importoSenzaIVA" class="form-control form-control-sm" readonly />
-                        </div>
-
-                        <div class="col-md-3">
-                            <label>Importo con IVA</label>
-                            <input type="text" id="importoConIVA" class="form-control form-control-sm" readonly />
-                        </div>
-
-                        <div class="col-md-4">
-                            <label>Metodo di Pagamento</label>
-                            <input type="text" id="metodoPagamentoAvviso" name="MetodoPagamento" class="form-control form-control-sm" readonly />
-                        </div>
-
-                        <!-- 🔹 Incasso -->
-                        <div class="col-md-4">
-                            <label>Data Incasso</label>
-                            <input name="DataIncasso" type="date" class="form-control form-control-sm" required />
-                        </div>
-
-                        <div class="col-md-4">
-                            <label>Importo</label>
-                            <input name="Importo" type="number" step="0.01" min="0" class="form-control form-control-sm" required />
-                        </div>
-
-                        <div class="col-md-4">
-                            <label>Vuoi Versare L'utile della Pratica Nel Plafond?</label>
-                            <select name="VersaInPlafond" class="form-select form-select-sm" required>
+                            <label class="form-label">Versare l’Utile nel Plafond?</label>
+                            <select name="VersaInPlafond" class="form-select form-select-sm">
                                 <option value="true">Sì</option>
                                 <option value="false">No</option>
                             </select>
                         </div>
 
-                        <div class="col-md-12">
-                            <label>Note</label>
-                            <textarea name="Note" rows="2" class="form-control form-control-sm" placeholder="Eventuali commenti..."></textarea>
+                        <div class="col-md-12 mt-2">
+                            <label class="form-label">Note</label>
+                            <textarea name="Note" rows="2" class="form-control form-control-sm" placeholder="Eventuali commenti o dettagli..."></textarea>
                         </div>
                     </div>
                 </div>
 
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
-                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                        <i class="fa-regular fa-circle-xmark me-1"></i> Chiudi
+                    </button>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="fa-solid fa-floppy-disk me-1"></i> Salva Incasso
+                    </button>
                 </div>
             </div>
         </form>
     </div>
 </div>
-
-
 
 <!-- Modale Eliminazione Incasso -->
 <div class="modal fade" id="eliminaIncassoModal" tabindex="-1">
@@ -250,124 +412,496 @@
     </div>
 </div>
 
+<!-- 💰 MODALE DETTAGLIO INCASSO -->
+<div class="modal fade" id="dettaglioIncassoModal" tabindex="-1" aria-labelledby="dettaglioIncassoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content shadow-lg rounded-3">
+
+            <!-- 🔹 HEADER -->
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-semibold" id="dettaglioIncassoModalLabel">
+                    Dettaglio Incasso
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+
+            <!-- 🔹 BODY -->
+            <div class="modal-body">
+                <div class="row g-3">
+
+                    <!-- 📄 Pratica -->
+                    <div class="col-md-3">
+                        <label class="fw-semibold">Pratica</label>
+                        <input type="text" id="det_Pratica" class="form-control form-control-sm" readonly />
+                    </div>
+
+                    <!-- 📄 Avviso Parcella -->
+                    <div class="col-md-3">
+                        <label class="fw-semibold"> ID Avviso Parcella</label>
+                        <input type="text" id="det_Avviso" class="form-control form-control-sm text-center" readonly />
+                    </div>
+
+                    <!-- 🧾 Titolo Avviso -->
+                    <div class="col-md-6">
+                        <label class="fw-semibold">Titolo Avviso</label>
+                        <input type="text" id="det_TitoloAvviso" class="form-control form-control-sm" readonly />
+                    </div>
+
+                    <!-- 📅 Data Competenza Economica -->
+                    <div class="col-md-4">
+                        <label class="fw-semibold">Data Competenza Economica</label>
+                        <input type="text" id="det_DataCompetenzaEconomica" class="form-control form-control-sm" readonly />
+                    </div>
+
+                    <!-- 📅 Data Competenza Finanziaria -->
+                    <div class="col-md-4">
+                        <label class="fw-semibold">Data Competenza Finanziaria</label>
+                        <input type="text" id="det_DataCompetenzaFinanziaria" class="form-control form-control-sm" readonly />
+                    </div>
+
+                    <!-- 📅 Data Incasso -->
+                    <div class="col-md-4">
+                        <label class="fw-semibold">Data Incasso</label>
+                        <input type="text" id="det_DataIncasso" class="form-control form-control-sm" readonly />
+                    </div>
+
+                    <!-- 💳 Metodo Pagamento -->
+                    <div class="col-md-4">
+                        <label class="fw-semibold">Metodo di Pagamento</label>
+                        <input type="text" id="det_MetodoPagamento" class="form-control form-control-sm" readonly />
+                    </div>
+
+                    <!-- 💰 Importo totale -->
+                    <div class="col-md-4">
+                        <label class="fw-semibold">Importo Totale</label>
+                        <input type="text" id="det_Importo" class="form-control form-control-sm text-end" readonly />
+                    </div>
+
+                    <!-- 🏦 Versa in Plafond -->
+                    <div class="col-md-4">
+                        <label class="fw-semibold">Versato in Plafond</label>
+                        <input type="text" id="det_PlAfond" class="form-control form-control-sm" readonly />
+                    </div>
+
+                    <!-- 🗒️ Note -->
+                    <div class="col-md-12">
+                        <label class="fw-semibold">Note</label>
+                        <textarea id="det_Note" class="form-control form-control-sm" rows="2" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔹 FOOTER -->
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    Chiudi
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
 
 <script>
     // 🔁 VARIABILI GLOBALI
     let idIncassoDaEliminare = 0;
 
-    // ═══════════════════════════════════════════════════════════════
-    // ➕ APERTURA MODALE NUOVO INCASSO
-    function apriNuovoIncasso() {
-        const form = document.getElementById("incassoForm");
-        form.reset();
-        form.querySelector('[name="ID_Incasso"]').value = 0;
-        document.getElementById("incassoModalLabel").textContent = "Nuovo Incasso";
-        new bootstrap.Modal(document.getElementById("incassoModal")).show();
+    // ============================================================
+    // 💡 Utility per sicurezza numerica (evita errori toFixed su undefined/null)
+    // ============================================================
+    function safeNumber(value) {
+        const num = parseFloat(value);
+        return isNaN(num) ? 0 : num;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // ✏️ APERTURA MODALE MODIFICA INCASSO
-    function apriModificaIncasso(id) {
-        fetch(`/Pratiche/GetIncasso?id=${id}`)
+    // ============================================================
+    // 💰 CREA INCASSO DIRETTAMENTE DA AVVISO PARCELLA (senza riaccredito)
+    // ============================================================
+    function apriNuovoIncasso(idAvvisoParcella) {
+        fetch(`/Pratiche/GetDatiIncassoDaAvviso?idAvviso=${idAvvisoParcella}`)
             .then(res => res.json())
-            .then(res => {
-                if (!res.success) return toastr.error("Errore nel caricamento.");
+            .then(data => {
+                if (!data.success || !data.dati) {
+                    toastr.error("Errore nel caricamento dei dati dell’avviso parcella.");
+                    return;
+                }
 
-                const i = res.incasso;
+                // ============================================================
+                // 🔢 Normalizza numeri ricevuti dal server
+                // ============================================================
+                const avv = {
+                    ...data.dati,
+                    TotaleAvviso: safeNumber(data.dati.TotaleAvviso),
+                    ImportoImponibile: safeNumber(data.dati.ImportoImponibile),
+                    SpeseGeneraliImporto: safeNumber(data.dati.SpeseGeneraliImporto),
+                    PercentualeSpeseGenerali: safeNumber(data.dati.PercentualeSpeseGenerali),
+                    ContributoIntegrativoImporto: safeNumber(data.dati.ContributoIntegrativoImporto),
+                    PercentualeContributoIntegrativo: safeNumber(data.dati.PercentualeContributoIntegrativo),
+                    ImportoIVA: safeNumber(data.dati.ImportoIVA),
+                    AliquotaIVA: safeNumber(data.dati.AliquotaIVA),
+                    PercentualeOwner: safeNumber(data.dati.PercentualeOwner),
+                    QuotaOwner: safeNumber(data.dati.QuotaOwner),
+                    PercentualeTrattenutaSinergia: safeNumber(data.dati.PercentualeTrattenutaSinergia),
+                    QuotaTrattenutaSinergia: safeNumber(data.dati.QuotaTrattenutaSinergia),
+                    ImportoNettoFinale: safeNumber(data.dati.ImportoNettoFinale),
+                    ResiduoEffettivo: safeNumber(data.dati.ResiduoEffettivo),
+                    TotaleCollaboratori: safeNumber(data.dati.TotaleCollaboratori)
+                };
+
                 const form = document.getElementById("incassoForm");
                 form.reset();
 
-                console.log("📥 Dati ricevuti:", i);
+                console.log("📦 Dati ricevuti da GetDatiIncassoDaAvviso:", avv);
 
-                // 🔹 Campi base
-                form.querySelector('[name="ID_Incasso"]').value = i.ID_Incasso;
-                form.querySelector('[name="MetodoPagamento"]').value = i.MetodoPagamento || '';
-                form.querySelector('[name="VersaInPlafond"]').value = i.VersaInPlafond === "true" ? "true" : "false";
-                form.querySelector('[name="Note"]').value = i.Note || '';
+                // ============================================================
+                // 🔹 DATI NASCOSTI
+                // ============================================================
+                form.querySelector('[name="ID_Incasso"]').value = 0;
+                form.querySelector('[name="ID_Pratiche"]').value = avv.ID_Pratiche;
+                form.querySelector('[name="ID_AvvisoParcella"]').value = avv.ID_AvvisoParcelle;
 
-                // ❌ NON impostiamo l'importo finché non selezioni la pratica
-                form.querySelector('[name="Importo"]').value = '';  // ← lasciato vuoto inizialmente
+                // ============================================================
+                // 👤 DATI CLIENTE / OWNER / RESPONSABILE
+                // ============================================================
+                document.getElementById("infoCliente").textContent = avv.NomeCliente || "-";
+                document.getElementById("infoOwner").textContent = avv.NomeOwner || "-";
+                document.getElementById("infoResponsabile").textContent = avv.NomeResponsabile || "-";
 
-                // 🔸 DataIncasso (formattata ma inserita solo dopo selezione pratica)
-                let dataIncassoFormattata = null;
-                if (i.DataIncasso) {
-                    const match = /\/Date\((\d+)\)\//.exec(i.DataIncasso);
-                    if (match) {
-                        const timestamp = parseInt(match[1]);
-                        const date = new Date(timestamp);
-                        const tzOffsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-                        dataIncassoFormattata = tzOffsetDate.toISOString().split("T")[0];
-                        console.log("📅 DataIncasso corretta:", dataIncassoFormattata);
-                    }
+                if (avv.StessoProfessionista === true) {
+                    document.getElementById("infoOwner").classList.add("text-success", "fw-bold");
+                    document.getElementById("infoOwner").textContent += " (Owner = Responsabile)";
+                } else {
+                    document.getElementById("infoOwner").classList.remove("text-success", "fw-bold");
                 }
 
-                // 🔁 Reset selezione pratica
-                const selectPratica = form.querySelector('[name="ID_Pratiche"]');
-                selectPratica.value = "";
-                selectPratica.dispatchEvent(new Event('change'));
+                // ============================================================
+                // 💰 IMPORTI BASE
+                // ============================================================
+                document.getElementById("totalePratica").value =
+                    `${avv.TotaleAvviso.toFixed(2)} €`;
+                document.getElementById("avvisoParcella").value =
+                    avv.TitoloAvviso ? avv.TitoloAvviso : `Avviso #${avv.ID_AvvisoParcelle}`;
 
-                // 🧼 Svuota dati avviso/parcella
-                document.getElementById("totalePratica").value = '';
-                document.getElementById("avvisoParcella").value = '';
-                document.getElementById("importoSenzaIVA").value = '';
-                document.getElementById("importoConIVA").value = '';
-                document.getElementById("metodoPagamentoAvviso").value = '';
+                document.getElementById("importoSenzaIVA").value =
+                    `${avv.ImportoImponibile.toFixed(2)} €`;
 
-                // 💾 Salva la data su variabile globale
-                window.dataIncassoTemporanea = dataIncassoFormattata;
+                document.getElementById("quotaSpese").textContent =
+                    `${avv.PercentualeSpeseGenerali}% (${avv.SpeseGeneraliImporto.toFixed(2)} €)`;
 
-                // ➕ Imposta handler per quando selezioni la pratica
-                selectPratica.addEventListener("change", function handlerPratica() {
-                    if (window.dataIncassoTemporanea) {
-                        form.querySelector('[name="DataIncasso"]').value = window.dataIncassoTemporanea;
-                        console.log("✅ Data impostata dopo selezione pratica:", window.dataIncassoTemporanea);
-                    }
+                document.getElementById("quotaContributo").textContent =
+                    `${avv.PercentualeContributoIntegrativo}% (${avv.ContributoIntegrativoImporto.toFixed(2)} €)`;
 
-                    // ✅ Solo ora valorizziamo l'importo
-                    form.querySelector('[name="Importo"]').value = i.Importo || '';
+                document.getElementById("quotaIva").textContent =
+                    `${avv.AliquotaIVA}% (${avv.ImportoIVA.toFixed(2)} €)`;
 
-                    selectPratica.removeEventListener("change", handlerPratica);
-                });
+                if (document.getElementById("totaleResiduo"))
+                    document.getElementById("totaleResiduo").textContent =
+                        `${(avv.ResiduoEffettivo || avv.TotaleAvviso).toFixed(2)} €`;
 
-                // 🎯 Titolo e apertura modale
-                document.getElementById("incassoModalLabel").textContent = "Modifica Incasso";
+                // ============================================================
+                // 💶 DATI CALCOLATI DAL SERVER (aggiornati post-trattenuta)
+                // ============================================================
+                const baseDopoTrattenuta = safeNumber(avv.ImportoImponibile) - safeNumber(avv.QuotaTrattenutaSinergia);
+
+                document.getElementById("importoBaseCalc").textContent =
+                    `${baseDopoTrattenuta.toFixed(2)} € (dopo trattenuta)`;
+
+                document.getElementById("quotaOwner").textContent =
+                    `${avv.PercentualeOwner.toFixed(1)}% (${avv.QuotaOwner.toFixed(2)} €)`;
+
+                document.getElementById("quotaTrattenuta").textContent =
+                    `${avv.PercentualeTrattenutaSinergia.toFixed(1)}% (${avv.QuotaTrattenutaSinergia.toFixed(2)} €)`;
+
+                document.getElementById("importoNettoFinale").textContent =
+                    `${avv.ImportoNettoFinale.toFixed(2)} €`;
+
+                document.getElementById("quotaOwner").closest(".col-md-3").style.display =
+                    avv.PercentualeOwner > 0 ? "block" : "none";
+                document.getElementById("quotaTrattenuta").closest(".col-md-3").style.display =
+                    avv.PercentualeTrattenutaSinergia > 0 ? "block" : "none";
+
+                // ============================================================
+                // 👥 COLLABORATORI
+                // ============================================================
+                const collabCluster = avv.CollaboratoriCluster || [];
+                const collabDettaglio = avv.CollaboratoriDettaglio || [];
+                const tbody = document.getElementById("collaboratoriTableBody");
+                if (tbody) {
+                    tbody.innerHTML = "";
+                    [...collabCluster, ...collabDettaglio].forEach(c => {
+                        if (c.Nome?.trim().toLowerCase() === (avv.NomeResponsabile?.trim().toLowerCase())) return;
+
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `
+                    <td>${c.Nome}</td>
+                    <td class="text-center">${safeNumber(c.Percentuale).toFixed(1)}%</td>
+                    <td class="text-end">${safeNumber(c.Importo).toFixed(2)} €</td>`;
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                const totaleCollab = safeNumber(avv.TotaleCollaboratori);
+                const totCollabElement = document.getElementById("totaleCollaboratori");
+                if (totCollabElement)
+                    totCollabElement.textContent = `${totaleCollab.toFixed(2)} €`;
+
+                const collabSection = document.getElementById("collaboratoriSection");
+                if (collabSection)
+                    collabSection.style.display =
+                        (collabCluster.length + collabDettaglio.length) > 0 ? "block" : "none";
+
+                // ============================================================
+                // 🧾 RIEPILOGO CALCOLO TESTUALE (NUOVA LOGICA)
+                // ============================================================
+                let riepilogo = `
+            📘 <b>Calcolo del netto professionista:</b><br>
+            <b>${avv.ImportoImponibile.toFixed(2)} €</b> (Base imponibile)
+            − <b>${avv.QuotaTrattenutaSinergia.toFixed(2)} €</b> (Trattenuta Sinergia)
+            = <b>${baseDopoTrattenuta.toFixed(2)} €</b> (Base dopo trattenuta)
+            <br>+ <b>${avv.SpeseGeneraliImporto.toFixed(2)} €</b> (Spese generali)
+            − <b>${avv.ContributoIntegrativoImporto.toFixed(2)} €</b> (Contributo integrativo)
+            − <b>${avv.QuotaOwner.toFixed(2)} €</b> (Quota owner)`;
+
+                if (collabCluster.length > 0) {
+                    const totaleCluster = collabCluster.reduce((sum, c) => sum + safeNumber(c.Importo), 0);
+                    riepilogo += `<br>− <b>${totaleCluster.toFixed(2)} €</b> (Collaboratori su pratica - Cluster):`;
+                    collabCluster.forEach(c => {
+                        riepilogo += `<br>&nbsp;&nbsp;• ${c.Nome} (${safeNumber(c.Percentuale).toFixed(1)}%) → ${safeNumber(c.Importo).toFixed(2)} €`;
+                    });
+                }
+
+                if (collabDettaglio.length > 0) {
+                    const totaleDettaglio = collabDettaglio.reduce((sum, c) => sum + safeNumber(c.Importo), 0);
+                    riepilogo += `<br>− <b>${totaleDettaglio.toFixed(2)} €</b> (Collaboratori su compensi - Dettaglio):`;
+                    collabDettaglio.forEach(c => {
+                        riepilogo += `<br>&nbsp;&nbsp;• ${c.Nome} (${safeNumber(c.Percentuale).toFixed(1)}%) → ${safeNumber(c.Importo).toFixed(2)} €`;
+                    });
+                }
+
+                // ============================================================
+                // 📊 RIEPILOGO NUMERICO
+                // ============================================================
+                const contributo = safeNumber(avv.ContributoIntegrativoImporto);
+                const quotaOwner = safeNumber(avv.QuotaOwner);
+                const trattenuta = safeNumber(avv.QuotaTrattenutaSinergia);
+                const totaleCluster = (collabCluster || []).reduce((sum, c) => sum + safeNumber(c.Importo), 0);
+                const totaleDettaglio = (collabDettaglio || []).reduce((sum, c) => sum + safeNumber(c.Importo), 0);
+                const nettoFinale = safeNumber(avv.ImportoNettoFinale);
+                const lordoEffettivo = baseDopoTrattenuta + safeNumber(avv.SpeseGeneraliImporto);
+
+                riepilogo += `
+                <br><hr style="margin:6px 0;">
+                <b>Riepilogo numerico:</b><br>
+                ${baseDopoTrattenuta.toFixed(2)} € (Base dopo trattenuta)
+                + ${safeNumber(avv.SpeseGeneraliImporto).toFixed(2)} € (Spese generali)
+                − ${contributo.toFixed(2)} € (Contributo integrativo)
+                − ${quotaOwner.toFixed(2)} € (Quota owner)
+                − ${trattenuta.toFixed(2)} € (Trattenuta Sinergia)
+                − ${totaleCluster.toFixed(2)} € (Collaboratori Cluster)
+                − ${totaleDettaglio.toFixed(2)} € (Collaboratori Dettaglio)
+                <br>= <b class="text-success">${nettoFinale.toFixed(2)} €</b> (Netto professionista)`;
+
+                document.getElementById("riepilogoCalcolo").innerHTML = riepilogo;
+
+                // ============================================================
+                // 📝 DATI INSERIMENTO INCASSO
+                // ============================================================
+                const oggi = new Date().toISOString().split("T")[0];
+                form.querySelector('[name="DataIncasso"]').value = oggi;
+                form.querySelector('[name="VersaInPlafond"]').value = "true";
+
+                let importoField = form.querySelector('[name="Importo"]');
+                if (!importoField) {
+                    importoField = document.createElement("input");
+                    importoField.type = "hidden";
+                    importoField.name = "Importo";
+                    form.appendChild(importoField);
+                }
+
+                const importoNetto = safeNumber(avv.ImportoNettoFinale);
+                importoField.value = importoNetto.toFixed(2);
+
+                const riepilogoImporto = document.getElementById("importoNettoFinale");
+                if (riepilogoImporto) {
+                    riepilogoImporto.classList.add("text-success", "fw-bold");
+                    riepilogoImporto.textContent = `${importoNetto.toFixed(2)} €`;
+                }
+
+                // ============================================================
+                // 🧭 MOSTRA MODALE
+                // ============================================================
+                document.getElementById("incassoModalLabel").textContent =
+                    "Nuovo Incasso da Avviso Parcella";
                 new bootstrap.Modal(document.getElementById("incassoModal")).show();
             })
-            .catch(() => {
-                toastr.error("Errore nella richiesta dell'incasso.");
+            .catch(err => {
+                console.error("❌ Errore durante il caricamento dell’avviso:", err);
+                toastr.error("Errore di comunicazione con il server.");
             });
     }
 
 
     // ═══════════════════════════════════════════════════════════════
-    // 💾 SALVATAGGIO NUOVO O MODIFICA
+    /*✏️ APERTURA MODALE MODIFICA INCASSO*/
+    //function apriModificaIncasso(id) {
+    //    fetch(`/Pratiche/GetIncasso?id=${id}`)
+    //        .then(res => res.json())
+    //        .then(res => {
+    //            if (!res.success) return toastr.error("Errore nel caricamento.");
+
+    //            const i = res.incasso;
+    //            const form = document.getElementById("incassoForm");
+    //            form.reset();
+
+    //            console.log("📥 Dati ricevuti:", i);
+
+    //            // 🔹 Campi base
+    //            form.querySelector('[name="ID_Incasso"]').value = i.ID_Incasso;
+    //            form.querySelector('[name="MetodoPagamento"]').value = i.MetodoPagamento || '';
+    //            form.querySelector('[name="VersaInPlafond"]').value = i.VersaInPlafond === "true" ? "true" : "false";
+    //            form.querySelector('[name="Note"]').value = i.Note || '';
+
+    //            // ❌ NON impostiamo l'importo finché non selezioni la pratica
+    //            form.querySelector('[name="Importo"]').value = '';  // ← lasciato vuoto inizialmente
+
+    //            // 🔸 DataIncasso (formattata ma inserita solo dopo selezione pratica)
+    //            let dataIncassoFormattata = null;
+    //            if (i.DataIncasso) {
+    //                const match = /\/Date\((\d+)\)\//.exec(i.DataIncasso);
+    //                if (match) {
+    //                    const timestamp = parseInt(match[1]);
+    //                    const date = new Date(timestamp);
+    //                    const tzOffsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    //                    dataIncassoFormattata = tzOffsetDate.toISOString().split("T")[0];
+    //                    console.log("📅 DataIncasso corretta:", dataIncassoFormattata);
+    //                }
+    //            }
+
+    //            // 🔁 Reset selezione pratica
+    //            const selectPratica = form.querySelector('[name="ID_Pratiche"]');
+    //            selectPratica.value = "";
+    //            selectPratica.dispatchEvent(new Event('change'));
+
+    //            // 🧼 Svuota dati avviso/parcella
+    //            document.getElementById("totalePratica").value = '';
+    //            document.getElementById("avvisoParcella").value = '';
+    //            document.getElementById("importoSenzaIVA").value = '';
+    //            document.getElementById("importoConIVA").value = '';
+    //            document.getElementById("metodoPagamentoAvviso").value = '';
+
+    //            // 💾 Salva la data su variabile globale
+    //            window.dataIncassoTemporanea = dataIncassoFormattata;
+
+    //            // ➕ Imposta handler per quando selezioni la pratica
+    //            selectPratica.addEventListener("change", function handlerPratica() {
+    //                if (window.dataIncassoTemporanea) {
+    //                    form.querySelector('[name="DataIncasso"]').value = window.dataIncassoTemporanea;
+    //                    console.log("✅ Data impostata dopo selezione pratica:", window.dataIncassoTemporanea);
+    //                }
+
+    //                // ✅ Solo ora valorizziamo l'importo
+    //                form.querySelector('[name="Importo"]').value = i.Importo || '';
+
+    //                selectPratica.removeEventListener("change", handlerPratica);
+    //            });
+
+    //            // 🎯 Titolo e apertura modale
+    //            document.getElementById("incassoModalLabel").textContent = "Modifica Incasso";
+    //            new bootstrap.Modal(document.getElementById("incassoModal")).show();
+    //        })
+    //        .catch(() => {
+    //            toastr.error("Errore nella richiesta dell'incasso.");
+    //        });
+    //}
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //// commentato in data 20/10/2025  💾 SALVATAGGIO NUOVO O MODIFICA
+    //$('#incassoForm').on('submit', function (e) {
+    //    e.preventDefault();
+    //    const formData = new FormData(this);
+    //    const id = formData.get("ID_Incasso");
+
+    //    const url = id && parseInt(id) > 0
+    //        ? '/Pratiche/ModificaIncasso'
+    //        : '/Pratiche/CreaIncasso';
+
+    //    fetch(url, {
+    //        method: 'POST',
+    //        body: formData
+    //    })
+    //        .then(r => r.json())
+    //        .then(res => {
+    //            if (res.success) {
+    //                toastr.success(res.message);
+    //                bootstrap.Modal.getInstance(document.getElementById("incassoModal")).hide();
+    //                location.reload();
+    //            } else {
+    //                toastr.error(res.message);
+    //            }
+    //        });
+    //});
+
+
+    // 💾 SALVA INCASSO
     $('#incassoForm').on('submit', function (e) {
         e.preventDefault();
-        const formData = new FormData(this);
-        const id = formData.get("ID_Incasso");
 
-        const url = id && parseInt(id) > 0
-            ? '/Pratiche/ModificaIncasso'
-            : '/Pratiche/CreaIncasso';
+        const form = this;
+        const formData = new FormData(form);
 
-        fetch(url, {
+        // =======================================================
+        // 🔍 DEBUG - Mostra tutti i campi del FormData
+        // =======================================================
+        console.group("📤 [DEBUG] Dati inviati per CreaIncasso");
+        for (const [key, value] of formData.entries()) {
+            console.log(`${key}:`, value);
+        }
+        console.groupEnd();
+
+        // =======================================================
+        // 🔧 Normalizza Importo (sostituisce virgola → punto, rimuove spazi)
+        // =======================================================
+        let importo = formData.get("Importo");
+        if (importo) {
+            const normalizzato = importo.toString().replace(",", ".").replace(/\s/g, "");
+            console.log("💶 Importo normalizzato:", normalizzato);
+            formData.set("Importo", normalizzato);
+        } else {
+            console.warn("⚠️ Nessun valore 'Importo' trovato nel form!");
+        }
+
+        // =======================================================
+        // 🛰️ Invio al server
+        // =======================================================
+        fetch('/Pratiche/CreaIncasso', {
             method: 'POST',
             body: formData
         })
             .then(r => r.json())
             .then(res => {
+                console.group("📬 [RISPOSTA SERVER]");
+                console.log(res);
+                console.groupEnd();
+
                 if (res.success) {
                     toastr.success(res.message);
                     bootstrap.Modal.getInstance(document.getElementById("incassoModal")).hide();
-                    location.reload();
+                    setTimeout(() => location.reload(), 1000);
                 } else {
-                    toastr.error(res.message);
+                    toastr.error(res.message || "Errore durante il salvataggio.");
                 }
+            })
+            .catch(err => {
+                console.error("❌ Errore durante la chiamata fetch:", err);
+                toastr.error("Errore durante il salvataggio dell'incasso.");
             });
     });
 
+
     // ═══════════════════════════════════════════════════════════════
-    // 🗑️ CONFERMA ELIMINAZIONE
+    // 🗑️ ELIMINAZIONE INCASSO
     function confermaEliminazioneIncasso(id) {
         idIncassoDaEliminare = id;
         new bootstrap.Modal(document.getElementById("eliminaIncassoModal")).show();
@@ -383,13 +917,15 @@
             .then(res => {
                 if (res.success) {
                     toastr.success(res.message);
-                    location.reload();
+                    bootstrap.Modal.getInstance(document.getElementById("eliminaIncassoModal")).hide();
+                    setTimeout(() => location.reload(), 800);
                 } else {
                     toastr.error(res.message);
                 }
-            });
+            })
+            .catch(() => toastr.error("Errore durante l'eliminazione dell'incasso."));
     });
-
+    /* Ex funzione versa utile in plafond non serve */
     // ═══════════════════════════════════════════════════════════════
     //// 🏦 VERSAMENTO UTILE IN PLAFOND
     //function versaUtileInPlafond(idIncasso) {
@@ -413,8 +949,9 @@
 
     //--------------------------------------------------
     // bottone ricavi sinergia
-    function apriRiepilogoRicaviSinergia(idPratica) {
-        fetch(`/Pratiche/RiepilogoTrattenuteESinergia?idPratica=${idPratica}`)
+
+    function apriRiepilogoRicaviSinergia(idAvviso) {
+        fetch(`/Pratiche/RiepilogoTrattenuteESinergia?idAvviso=${idAvviso}`)
             .then(res => res.text())
             .then(html => {
                 const modalContainer = document.createElement('div');
@@ -425,56 +962,110 @@
                 const modal = new bootstrap.Modal(modalElement);
                 modal.show();
 
-                // Pulisce il DOM dopo la chiusura della modale
                 modalElement.addEventListener('hidden.bs.modal', function () {
                     modalContainer.remove();
                 });
             })
-            .catch(() => {
-                toastr.error('Errore nel caricamento del riepilogo.');
-            });
+            .catch(() => toastr.error('Errore nel caricamento del riepilogo.'));
     }
+
 
 
 
     // questa mi serve per intercettare l'avviso parcella della pratica selezionata e il totale della pratica
 
-    document.querySelector('select[name="ID_Pratiche"]').addEventListener('change', function () {
-        const idPratica = this.value;
-        if (!idPratica) {
-            document.getElementById('avvisoParcella').value = "";
-            document.getElementById('importoSenzaIVA').value = "";
-            document.getElementById('importoConIVA').value = "";
-            document.getElementById('metodoPagamentoAvviso').value = ""; // ✅ reset
-            document.getElementById('totalePratica').value = "";
-            return;
-        }
+    //document.querySelector('select[name="ID_Pratiche"]').addEventListener('change', function () {
+    //    const idPratica = this.value;
+    //    if (!idPratica) {
+    //        document.getElementById('avvisoParcella').value = "";
+    //        document.getElementById('importoSenzaIVA').value = "";
+    //        document.getElementById('importoConIVA').value = "";
+    //        document.getElementById('metodoPagamentoAvviso').value = ""; // ✅ reset
+    //        document.getElementById('totalePratica').value = "";
+    //        return;
+    //    }
 
-        fetch(`/Pratiche/GetDatiAvvisoParcella?idPratica=${idPratica}`)
+    //    fetch(`/Pratiche/GetDatiAvvisoParcella?idPratica=${idPratica}`)
+    //        .then(res => res.json())
+    //        .then(data => {
+    //            if (data.success) {
+    //                document.getElementById('avvisoParcella').value = data.avviso ?? "N/D";
+    //                document.getElementById('importoSenzaIVA').value = data.importoSenzaIVA ? data.importoSenzaIVA.toFixed(2) + " €" : "-";
+    //                document.getElementById('importoConIVA').value = data.importoConIVA ? data.importoConIVA.toFixed(2) + " €" : "-";
+    //                document.getElementById('metodoPagamentoAvviso').value = data.metodoPagamento ?? "-"; // ✅ nuovo campo
+    //                document.getElementById('totalePratica').value = data.totalePratica ? data.totalePratica.toFixed(2) + " €" : "-";
+    //            } else {
+    //                document.getElementById('avvisoParcella').value = "Nessun avviso";
+    //                document.getElementById('importoSenzaIVA').value = "-";
+    //                document.getElementById('importoConIVA').value = "-";
+    //                document.getElementById('metodoPagamentoAvviso').value = "-";
+    //                document.getElementById('totalePratica').value = "-";
+    //            }
+    //        })
+    //        .catch(() => {
+    //            document.getElementById('avvisoParcella').value = "Errore caricamento";
+    //            document.getElementById('importoSenzaIVA').value = "-";
+    //            document.getElementById('importoConIVA').value = "-";
+    //            document.getElementById('metodoPagamentoAvviso').value = "-";
+    //            document.getElementById('totalePratica').value = "-";
+    //        });
+    //});
+
+    function apriDettaglioIncasso(idIncasso) {
+        fetch(`/Pratiche/GetDettaglioIncasso?id=${idIncasso}`)
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    document.getElementById('avvisoParcella').value = data.avviso ?? "N/D";
-                    document.getElementById('importoSenzaIVA').value = data.importoSenzaIVA ? data.importoSenzaIVA.toFixed(2) + " €" : "-";
-                    document.getElementById('importoConIVA').value = data.importoConIVA ? data.importoConIVA.toFixed(2) + " €" : "-";
-                    document.getElementById('metodoPagamentoAvviso').value = data.metodoPagamento ?? "-"; // ✅ nuovo campo
-                    document.getElementById('totalePratica').value = data.totalePratica ? data.totalePratica.toFixed(2) + " €" : "-";
-                } else {
-                    document.getElementById('avvisoParcella').value = "Nessun avviso";
-                    document.getElementById('importoSenzaIVA').value = "-";
-                    document.getElementById('importoConIVA').value = "-";
-                    document.getElementById('metodoPagamentoAvviso').value = "-";
-                    document.getElementById('totalePratica').value = "-";
+                if (!data.success || !data.data) {
+                    toastr.error(data.message || "Errore nel recupero del dettaglio incasso.");
+                    return;
                 }
+
+                const inc = data.data;
+
+                document.getElementById("det_Pratica").value = inc.Pratica || "-";
+                document.getElementById("det_Avviso").value = inc.Avviso || "-";
+                document.getElementById("det_TitoloAvviso").value = inc.TitoloAvviso || "-";
+
+                document.getElementById("det_DataCompetenzaEconomica").value = inc.DataCompetenzaEconomica || "-";
+                document.getElementById("det_DataCompetenzaFinanziaria").value = inc.DataCompetenzaFinanziaria || "-";
+                document.getElementById("det_DataIncasso").value = inc.DataIncasso || "-";
+
+                document.getElementById("det_MetodoPagamento").value = inc.MetodoPagamento || "-";
+                document.getElementById("det_Importo").value = inc.ImportoTotale || "-";
+                document.getElementById("det_PlAfond").value = inc.VersaInPlafond || "-";
+                document.getElementById("det_Note").value = inc.Note || "";
+
+                new bootstrap.Modal(document.getElementById("dettaglioIncassoModal")).show();
             })
-            .catch(() => {
-                document.getElementById('avvisoParcella').value = "Errore caricamento";
-                document.getElementById('importoSenzaIVA').value = "-";
-                document.getElementById('importoConIVA').value = "-";
-                document.getElementById('metodoPagamentoAvviso').value = "-";
-                document.getElementById('totalePratica').value = "-";
+            .catch(err => {
+                console.error("❌ Errore fetch:", err);
+                toastr.error("Errore di comunicazione con il server.");
             });
-    });
+    }
+
+
+
+    // 🔧 Utilità per convertire le date .NET o ISO in formato leggibile
+    function formattaData(data) {
+        if (!data) return "-";
+
+        // Caso 1: formato .NET tipo "/Date(1739980800000)/"
+        const match = /\/Date\((\d+)\)\//.exec(data);
+        if (match) {
+            const ms = parseInt(match[1]);
+            return new Date(ms).toLocaleDateString("it-IT");
+        }
+
+        // Caso 2: formato ISO o classico
+        const date = new Date(data);
+        if (!isNaN(date.getTime())) {
+            return date.toLocaleDateString("it-IT");
+        }
+
+        return "-";
+    }
+
+
 
 
     // 🔍 Filtro e paginazione Incassi

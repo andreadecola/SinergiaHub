@@ -46,5 +46,9 @@ namespace Sinergia.Model
 
         [StringLength(20)]
         public string Stato { get; set; }
+
+        public int? ID_Fornitore { get; set; }
+
+        public DateTime? DataCompetenzaEconomica { get; set; }
     }
 }

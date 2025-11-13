@@ -48,5 +48,7 @@ namespace Sinergia.Model
         public int? ID_UtenteUltimaModifica { get; set; }
 
         public DateTime? DataUltimaModifica { get; set; }
+
+        public int? ID_Categoria { get; set; }
     }
 }

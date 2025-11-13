@@ -41,5 +41,17 @@ namespace Sinergia.Model
         public int NumeroVersione { get; set; }
 
         public string ModificheTestuali { get; set; }
+
+        [StringLength(50)]
+        public string Categoria { get; set; }
+
+        [StringLength(50)]
+        public string Origine { get; set; }
+
+        public DateTime? DataCompetenza { get; set; }
+
+        public int? ID_Owner { get; set; }
+
+        public int? ID_Riferimento { get; set; }
     }
 }

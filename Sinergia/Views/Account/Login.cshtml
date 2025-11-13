@@ -2,7 +2,6 @@
 @{
     Layout = null;
     
-    ViewBag.Title = "Login - Sinergia";
 }
 
 <!DOCTYPE html>
@@ -10,38 +9,38 @@
 <head>
     <!-- PWA -->
     <link rel="manifest" href="/PWA/manifest.json" />
-    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logo col PNG.png">
+    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logo Nuovo.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#003366">
     <meta charset="utf-8" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@ViewBag.Title</title>
-    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logosinergia 192x192.png" />
+    <title>Login - Sinergia</title>
+    <link rel="icon" type="image/png" href="~/Content/img/Icons/Logo Nuovo.png" />
     <link rel="stylesheet" href="~/Content/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
 
 
     <style>
-    .logo-desktop {
-        max-width: 100%;
-        height: auto;
-        max-height: 300px;
-        object-fit: contain;
-    }
-
-    .logo-mobile {
-        max-width: 150px;
-        height: auto;
-        object-fit: contain;
-    }
-
-    @@media (min-width: 768px) {
-        .login-wrapper {
-            min-height: 100vh;
-            background-color: #ffffff;
+        .logo-desktop {
+            max-width: 100%;
+            height: auto;
+            max-height: 300px;
+            object-fit: contain;
         }
-    }
+
+        .logo-mobile {
+            max-width: 150px;
+            height: auto;
+            object-fit: contain;
+        }
+
+        @@media (min-width: 768px) {
+            .login-wrapper {
+                min-height: 100vh;
+                background-color: #ffffff;
+            }
+        }
     </style>
 
 </head>
@@ -58,7 +57,7 @@
             </div>
 
             <div class="col-md-3 text-center d-none d-md-block">
-                <img src="@Url.Content("~/Content/img/Icons/Logo col PNG.png")" alt="Logo Sinergia" class="logo-desktop" />
+                <img src="@Url.Content("~/Content/img/Icons/Logo Nuovo.png")" alt="Logo Sinergia" class="logo-desktop" />
             </div>
 
             <!-- DESTRA: FORM -->
@@ -103,7 +102,7 @@
 
                     <!-- LOGO MOBILE SOLO SE VISIBILE -->
                     <div class="logo-mobile-only text-center mt-4 d-block d-md-none">
-                        <img src="~/Content/img/Icons/Logo col PNG.png" class="logo-mobile" alt="Logo Sinergia" />
+                        <img src="~/Content/img/Icons/Logo Nuovo.png" class="logo-mobile" alt="Logo Sinergia" />
                     </div>
                 </div>
             </div>

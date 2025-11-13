@@ -1,0 +1,538 @@
+
+                <style>
+                .avoid-break {
+                    page-break-before: auto !important;
+                    page-break-after: auto !important;
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    display: block !important;
+                    margin: 10px 0 !important;
+                }
+                table {
+                    border-collapse: collapse !important;
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    margin: auto !important;
+                    margin-bottom: 10px !important;
+                }
+                tr, td, th {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    border: 1px solid #000 !important;
+                    vertical-align: middle !important;
+                }
+                td, th {
+                    padding: 3px 6px !important;
+                    font-size: 10pt !important;
+                }
+
+                /* ✅ Imposta numerazione di pagina (per browser o PDF compatibili) */
+        @page {
+                    @bottom-center {
+                        content: 'Pagina ' counter(page) ' di ' counter(pages);
+                        font-size: 9pt;
+                        color: #666;
+                    }
+                }
+
+                /* ✅ Footer visivo compatibile anche con Rotativa */
+                .footer-page {
+                    text-align: center;
+                    font-size: 9pt;
+                    color: #666;
+                    margin-top: 20px;
+                }
+                </style><div class="pagina-template" style="page-break-after: always; padding: 30px;  color: #000;">
+            <h4 style="text-align:center; color:#007bff; margin-bottom:20px;">
+                Compenso: A ore
+            </h4>
+
+            
+                    <div style='display:flex; align-items:center; margin-bottom:30px;'>
+                        
+                    </div><head xmlns="http://www.w3.org/1999/xhtml"><meta charset="UTF-8" /><title>Template incarico importato</title><meta name="Generator" content="PowerTools for Open XML" /><style>span { white-space: pre-wrap; }
+p.docxNormale {
+    line-height: 115.0%;
+    margin-bottom: 12pt;
+    text-align: center;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 11pt;
+    margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 11pt;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000000 {
+    line-height: 115.0%;
+    margin-bottom: 12pt;
+    margin-left: 0;
+    text-indent: 0.10in;
+    text-align: center;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 11pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+p.docxNormale-000001 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0;
+    text-indent: 0.10in;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000002 {
+    
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 10pt;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+span.docxCarpredefinitoparagrafo-000003 {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 10pt;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+span.docxCarpredefinitoparagrafo-000004 {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+span.docxCarpredefinitoparagrafo-000005 {
+    
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-variant: small-caps;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+span.docxCarpredefinitoparagrafo-000006 {
+    
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000007 {
+    line-height: 115.0%;
+    margin-bottom: 6pt;
+    margin-left: 0;
+    text-indent: 0.10in;
+    text-align: center;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000008 {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000009 {
+    line-height: 115.0%;
+    margin-bottom: 6pt;
+    margin-left: 0;
+    text-indent: 0.10in;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000010 {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-variant: small-caps;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000011 {
+    line-height: 115.0%;
+    margin-bottom: 6pt;
+    margin-left: 0;
+    text-indent: 0.10in;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 11pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docx000012 {
+    font-size: 11pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+span.docxCarpredefinitoparagrafo-000013 {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 11pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000014 {
+    margin-top: 5pt;
+    line-height: 115.0%;
+    margin-bottom: 5pt;
+    margin-left: 0;
+    text-indent: 0.10in;
+    text-align: center;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-right: 0;
+}
+p.docxNormale-000015 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 16pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000016 {
+    
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 16pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000017 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0;
+    text-indent: 0.10in;
+    text-align: center;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docx000018 {
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+p.docx000019 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0;
+    text-indent: -0.30in;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docx000020 {
+    font-family: Calibri;
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+    display: inline-block;
+    text-indent: 0;
+    width: 0.295in;
+}
+span.docx000021 {
+    font-family: Calibri;
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+    display: inline-block;
+    text-indent: 0;
+    width: 0.295in;
+}
+p.docx000022 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0.30in;
+    text-indent: -0.30in;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docx000023 {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+    display: inline-block;
+    text-indent: 0;
+    width: 0.295in;
+}
+table.docx000024 {
+    border-collapse: collapse;
+    border: none;
+    margin-bottom: .001pt;
+}
+tr.docx000025 {
+    height: 0.44in;
+}
+td.docx000026 {
+    vertical-align: middle;
+    width: 151pt;
+    border-top: solid windowtext 1.0pt;
+    padding-top: 0;
+    border-right: solid windowtext 1.0pt;
+    padding-right: 5.4pt;
+    border-bottom: solid windowtext 1.0pt;
+    padding-bottom: 0;
+    border-left: solid windowtext 1.0pt;
+    padding-left: 5.4pt;
+}
+p.docxNormale-000027 {
+    margin-bottom: 0;
+    text-align: left;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    line-height: 108%;
+    margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000028 {
+    color: #000000;
+    
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+td.docx000029 {
+    vertical-align: middle;
+    width: 68pt;
+    border-top: solid windowtext 1.0pt;
+    padding-top: 0;
+    border-right: solid windowtext 1.0pt;
+    padding-right: 5.4pt;
+    border-bottom: solid windowtext 1.0pt;
+    padding-bottom: 0;
+    border-left-style: none;
+    padding-left: 5.4pt;
+}
+p.docxNormale-000030 {
+    margin-bottom: 0;
+    text-align: right;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    line-height: 108%;
+    margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000031 {
+    color: #000000;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+tr.docx000032 {
+    height: 0.23in;
+}
+p.docxNormale-000033 {
+    margin-bottom: 0;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    line-height: 108%;
+    margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+tr.docx000034 {
+    height: 0.22in;
+}
+p.docxNormale-000035 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000036 {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    font-style: italic;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000037 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0.30in;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+p.docxNormale-000038 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0.30in;
+    text-align: center;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 9pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000039 {
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 9pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+p.docx000040 {
+    line-height: 115.0%;
+    margin-bottom: 6pt;
+    margin-left: 0.30in;
+    text-indent: -0.30in;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+p.docxNormale-000041 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    text-indent: 0.30in;
+    text-align: center;
+    font-family: Calibri;
+    font-size: 8pt;
+    margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000042 {
+    font-family: Calibri;
+    font-size: 8pt;
+    font-style: normal;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000043 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    text-align: justify;
+    font-family: Calibri;
+    font-size: 8pt;
+    margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+span.docxCarpredefinitoparagrafo-000044 {
+    font-family: Calibri;
+    font-size: 8pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000045 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0.30in;
+    text-indent: -0.30in;
+    text-align: justify;
+    font-family: Calibri;
+    font-size: 8pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+p.docxNormale-000046 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0;
+    text-indent: 0.30in;
+    text-align: justify;
+    font-family: Calibri;
+    font-size: 8pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+span.docx000047 {
+    font-size: 8pt;
+    font-style: normal;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+p.docxNormale-000048 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 8pt;
+    margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+p.docxNormale-000049 {
+    line-height: 115.0%;
+    margin-bottom: 0;
+    margin-left: 0;
+    text-indent: 0.30in;
+    text-align: justify;
+    font-family: 'Book Antiqua', 'serif';
+    font-size: 12pt;
+    margin-top: 0;
+    margin-right: 0;
+}
+</style></head><div xmlns="http://www.w3.org/1999/xhtml"><p dir="ltr" class="docxNormale"><span lang="it-IT" class="docxCarpredefinitoparagrafo">CONFERIMENTO INCARICO PROFESSIONALE</span></p><p dir="ltr" class="docxNormale-000000"><span lang="it-IT" class="docxCarpredefinitoparagrafo">A TEMPO</span></p><p dir="ltr" class="docxNormale-000001"><span lang="it-IT">De Cola Andrea</span><span lang="it-IT">(</span><span lang="it-IT" xml:space="preserve">C.F. </span><span lang="it-IT">1234567891</span><span lang="it-IT" xml:space="preserve">), residente in ROMA</span><span lang="it-IT" xml:space="preserve"> PV </span><span lang="it-IT" xml:space="preserve">__________, </span><span lang="it-IT" xml:space="preserve">alla </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000002">Via Dante Alighieri 10</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">/ </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000005">__________</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">(C.F. </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000006">1234567891</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">  e P.IVA  </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000006">12345678911</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">), in persona del l.r.p.t.VUOTO sig.VUOTO (C.F. VUOTO ), con sede legale in Citt.VUOTO  , alla </span>VUOTO , </span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004"> PV(VUOTO)</span></p><p dir="ltr" class="docxNormale-000007"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000008">CONFERISCE</span></p><p dir="ltr" class="docxNormale-000009"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">A </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000005">Gina Lollobrigida</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004"> (C.F. </span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000006">1234567891023456 </span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">), quale socio professionista di      </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000010">Sinergia Hub Società tra Avvocati cooperativa a responsabilità limitata</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">(C.F. e P.I. 18068231002), con sede in Roma, Via Caio Canuleio, n. 43</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">,</span></p><p dir="ltr" class="docxNormale-000011"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000013">Cliente e Studio Legale congiuntamente indicati, in avanti, anche come le “</span><span lang="it-IT" class="docxCarpredefinitoparagrafo">Parti</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000013">”,</span></p><p dir="ltr" class="docxNormale-000014"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000008">l’incarico per:</span></p><p dir="ltr" class="docxNormale-000015"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000006">__________</span></p><p dir="ltr" class="docxNormale-000017"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000008">RAPPRESENTA</span></p><p dir="ltr" class="docx000019"><span lang="it-IT" class="docx000020">-</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">di aver consegnato contestualmente al conferimento del presente incarico allo Studio Legale tutti i documenti e le informazioni in suo possesso relativi alla questione __________ stesso;</span></p><p dir="ltr" class="docx000019"><span lang="it-IT" class="docx000021">-</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">di avere ricevuto l’informativa di cui agli artt. 12 e 13 del Regolamento UE 2016/679 e di acconsentire al trattamento dei dati personali ad opera dello Studio Legale, dei suoi collaboratori, sostituti e domiciliatari;</span></p><p dir="ltr" class="docx000019"><span lang="it-IT" class="docx000021">-</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">di aver ricevuto l’informativa che, nei limiti di cui all’art. 12, II comma, del d.lgs. 231/2007 in materia di antiriciclaggio, lo Studio Legale è obbligato a segnalare le operazioni sospette.</span></p><p dir="ltr" class="docx000019"><span lang="it-IT" class="docx000021">-</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">di essere stato informato dallo Studio Legale del grado di complessità della prestazione;</span></p><p dir="ltr" class="docx000019"><span lang="it-IT" class="docx000021">-</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">di essere stato informato dallo Studio Legale dei costi prevedibili e di ogni circostanza concernente l’incarico conferito, prevedibile al momento della stipulazione del presente contratto;</span></p><p dir="ltr" class="docx000019"><span lang="it-IT" class="docx000021">-</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">di essere consapevole del fatto che lo Studio Legale non può garantire il conseguimento del risultato voluto, talché la sua prestazione va compensata a prescindere dall’esito della controversia.</span></p><p dir="ltr" class="docxNormale-000017"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000008">PATTUISCE</span></p><p dir="ltr" class="docxNormale-000001"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">con il predetto Studio Legale, che accetta, le seguenti previsioni:</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">1)</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">Ai sensi dell’art. 13, comma 5 L. n. 247/2012, lo Studio Legale dichiara ed il Cliente prende atto che la misura dei costi delle prestazioni relative all’Incarico è determinata, a tempo, nelle seguenti tariffe orarie, oltre IVA 22%, spese generali (15%) e CPA 4%, come per legge. </span></p><div align="center"><table dir="ltr" class="docx000024"><tr class="docx000025"><td class="docx000026"><p dir="ltr" class="docxNormale-000027"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000028">1 prova 2</span></p></td><td class="docx000029"><p dir="ltr" class="docxNormale-000030"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000031">€ </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000028">100,00 €</span></p></td></tr><tr class="docx000032"><td class="docx000026"><p dir="ltr" class="docxNormale-000027"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000028">1 prova 2 </span></p></td><td class="docx000029"><p dir="ltr" class="docxNormale-000030"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000031">€ </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000028">100,00 €</span></p></td></tr><tr class="docx000032"><td class="docx000026"><p dir="ltr" class="docxNormale-000033"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000028">1 prova 2 </span></p></td><td class="docx000029"><p dir="ltr" class="docxNormale-000030"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000031">€ </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000028">100,00 €</span></p></td></tr><tr class="docx000034"><td class="docx000026"><p dir="ltr" class="docxNormale-000033"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000028">1 prova 2 </span></p></td><td class="docx000029"><p dir="ltr" class="docxNormale-000030"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000031">€ </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000028">100,00 €</span></p></td></tr></table></div><p dir="ltr" class="docxNormale-000035"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">La durata dell’Incarico si presume a tempo indeterminato. Lo Studio Legale predisporrà al termine di ciascun trimestre un prospetto delle attività svolte e del tempo impiegato, che verrà inviato al Cliente unitamente al Pro-forma della fattura.</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">2)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Il Cliente è tenuto a corrispondere allo Studio Legale l’intero importo pattuito, indipendentemente dall’eventuale minore liquidazione giudiziale e dall’eventuale obbligo di rifusione delle spese a carico della controparte.</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">3)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Lo Studio Legale considererà le spese liquidate giudizialmente a carico della controparte, e dalla stessa versate, in aggiunta al compenso pattuito ed a titolo di maggiorazione sullo stesso.</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">4)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Nel caso di cessazione del rapporto il Cliente è tenuto a versare in ogni caso il compenso dovuto ai sensi del D.M. 55/2014, o i diversi compensi previsti pro tempore</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000036">,</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004"> per l’attività svolta. In caso di conciliazione giudiziale o di transazione della controversia intervenuta nel corso del contenzioso, allo Studio Legale è dovuto, oltre al compenso per l’attività sino ad allora svolta, un ulteriore compenso pari a quello previsto per la fase decisionale, aumentato di un quarto, come stabilito dall’art. 4, comma 6, del D.M. 55/2014 e successive modificazioni.</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">5)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Eventuali spese necessarie all’esecuzione dell’incarico verranno sostenute in nome e per conto del Cliente, con richiesta di intestazione dei relativi documenti fiscali a nome dello stesso. Lo Studio Legale provvederà all’anticipazione degli importi e emetterà successivamente fattura per il rimborso, senza applicazione dell’IVA ai sensi dell’art. 15, comma 1, n. 3), D.P.R. 633/1972, trattandosi di spese escluse dal campo di applicazione dell’imposta.</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">6)</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">Il Cliente prende atto che attesa la natura della prestazione __________, costi e compensi potranno subire delle variazioni in aumento qualora dovessero rendersi opportune attività ulteriori e/o adempimenti più complessi rispetto a quanto inizialmente previsto in modo indicativo e che dal realizzarsi di tale eventualità gli verrà in ogni caso dato tempestivo avviso. </span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">7)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Il Cliente dichiara di essere stato informato dallo Studio Legale della possibilità di essere condannato al pagamento delle spese legali della controparte in caso di esito negativo, o parzialmente negativo, del giudizio, e delle spese per consulenti tecnici d’ufficio nominati dall’Autorità Giudiziaria.</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">8)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Il Compenso come sopra pattuito viene ritenuto, dalle Parti, congruo e soddisfacente per l’Incarico. Restano in ogni caso salvi gli obblighi deontologici dello Studio Legale. Il Cliente potrà segnalare eventuali irregolarità nei rendiconti delle attività e nei Pro-Forma inviati ogni trimestre dallo Studio entro 3 giorni dalla ricezione. In difetto di esplicita segnalazione di irregolarità, decorso tale termine lo Studio emetterà le fatture per gli importi corrispondenti ai Pro-Forma. Il cliente si impegna a pagare entro il quinto giorno dalla loro ricezione dandone conferma via mail con l’invio della ricevuta di avvenuto bonifico.</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">9)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Il Cliente si impegna a pagare allo Studio Legale le fatture, che questo emetterà per gli importi di cui al Compenso, entro il quinto giorno dalla loro ricezione dandone conferma via mail con l’invio della ricevuta di avvenuto bonifico. In caso di mancato pagamento del Compenso e/o delle spese lo Studio Legale avrà la facoltà di rinunciare all’incarico (mandato) professionale e procedere per il recupero del compenso maturato. Il pagamento sarà effettuato a:</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">10)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">In caso di recesso da parte del Cliente rimarrà l’obbligo di corrispondere allo Studio Legale le spese sostenute e il Compenso dovuto per l’attività già svolta e concordata</span></p><p dir="ltr" class="docxNormale-000038"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000039">Sinergia Hub S.t.A. Coop. a.r.l.</span></p><p dir="ltr" class="docxNormale-000038"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000039">Via Caio Canuleio, n. 43, 00174, Roma</span></p><p dir="ltr" class="docxNormale-000038"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000039">C.F. e P.I. 18068231002</span></p><p dir="ltr" class="docxNormale-000038"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000039">Conto Corrente n. 06809/1000/00063000</span></p><p dir="ltr" class="docxNormale-000038"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000039">IBAN: IT47L0306905110100000063000</span></p><p dir="ltr" class="docxNormale-000038"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000039">Banca Intesa San Paolo</span></p><p dir="ltr" class="docx000022"><span lang="it-IT" class="docx000023">11)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Lo Studio legale per lo svolgimento dell’Incarico può avvalersi, sotto la propria responsabilità, di sostituti e collaboratori per lo svolgimento della prestazione e si impegna ad informare il Cliente dell’opportunità della nomina di consulenti e/o di investigatori, i cui costi saranno sostenuti dal Cliente.</span></p><p dir="ltr" class="docx000040"><span lang="it-IT" class="docx000023">12)</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Lo Studio Legale dichiara di essere regolarmente assicurato per la responsabilità professionale.</span></p><p dir="ltr" class="docxNormale-000035"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">Roma, </span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000039">21/10/2025                                                                                                                                                      </span></p><p dir="ltr" class="docxNormale-000035"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">Firma </span></p><p dir="ltr" class="docxNormale-000035"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000004">Per accettazione specifica ex artt. 1341 e 1342 c.c. dei punti n. 2, 4, 5, 7, 8, 9</span></p><p dir="ltr" class="docxNormale-000035"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000004">Firma </span></p></div><div xmlns="http://www.w3.org/1999/xhtml"><p dir="ltr" class="docxNormale-000041"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">Informativa ai sensi degli artt. 12 e 13 del Regolamento generale sulla protezione dei dati personali UE 2016/679.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000044">Ai </span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">sensi</span><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000044"> degli artt. 12 e 13 del Regolamento generale sulla protezione dei dati personali UE 2016/679, in relazione ai dati personali di cui lo Studio dei procuratori costituiti, entrerà in possesso con l’affidamento della Sua pratica, La informiamo di quanto segue:</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">1. Titolare del trattamento.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">Sono titolari del trattamento i legali indicati l’Incarico su esteso a cui fa seguito la presente informativa.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">2. Finalità del trattamento dei dati.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">Il trattamento è finalizzato unicamente alla corretta e completa esecuzione dell’incarico professionale ricevuto, sia in ambito giudiziale che in ambito stragiudiziale.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">3. Modalità del trattamento dei dati.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">a) Il trattamento può essere svolto con o senza l’ausilio di strumenti elettronici o comunque automatizzati;</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">b) il trattamento è svolto dal titolare, dai responsabili e/o dagli incaricati del trattamento.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">4. Conferimento dei dati.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">Il conferimento di dati personali comuni, sensibili e giudiziari è strettamente necessario ai fini dello svolgimento delle attività di cui al punto 1.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">5. Rifiuto di conferimento dei dati.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">L’eventuale rifiuto da parte dell’interessato di conferire dati personali nel caso di cui al punto 3 comporta l’impossibilità di adempiere alle attività di cui al punto 1.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">6. Comunicazione dei dati.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000044">I dati personali possono venire a conoscenza degli incaricati del trattamento e possono essere comunicati per le finalità di cui al punto 1 a collaboratori esterni, soggetti operanti nel settore giudiziario, alle controparti e relativi difensori, a collegi di arbitri e, in genere, a tutti quei soggetti pubblici e privati cui la comunicazione sia necessaria per il corretto adempimento delle finalità indicate nel punto 1. </span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">7. Diffusione dei dati.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">I dati personali non sono soggetti a diffusione.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">8. Trasferimento dei dati all’estero.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">I dati personali possono essere trasferiti verso Paesi dell’Unione Europea e verso Paesi terzi nell’ambito delle finalità di cui al punto 1.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">9. Diritti dell’interessato.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000044">A norma degli artt. 15 (Diritto di accesso), 16 (Diritto di rettifica), 17 (Diritto alla cancellazione), 18 (Diritto di limitazione di trattamento), 20 (Diritto alla portabilità dei dati) e 21 (Diritto di opposizione) del Regolamento UE 2016/679, l’interessato può in ogni momento richiedere l’accesso ai dati personali e la rettifica o la cancellazione degli stessi o la limitazione del trattamento che lo riguardano o di opporsi al loro trattamento, oltre al diritto alla portabilità dei dati, inoltrando comunicazione scritta al Titolare del Trattamento. </span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000044">L’interessato può proporre altresì reclamo all’Autorità di controllo dello stato in cui risiede o lavora. </span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" xml:space="preserve" class="docxCarpredefinitoparagrafo-000044">Si fa presente che anche ai fini della normativa in materia di antiriciclaggio i dati, relativi alle prestazioni rientranti nella predetta disciplina legislativa, verranno in quanto previsto per Legge conservati per dieci anni dall’ultimazione della prestazione. </span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">10. Consenso al trattamento dei dati</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">Ai sensi dell’art. 6, par. 1, lett. a) del Regolamento generale sulla protezione dei dati personali UE n. 2016/679, con l’apposizione della firma in calce ai presenti moduli manifesta il consenso al trattamento dei dati nell’ambito delle finalità e modalità sopra richiamate nei limiti in cui il consenso della S.V. fosse richiesto per Legge. In particolare, esprimo il mio consenso per l’acquisizione dei dati personali; la comunicazione dei dati a terzi così come indicati nella presente informativa. Tale consenso vale fino a revoca scritta da far pervenire tramite raccomandata con ricevuta di ritorno</span><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">.</span></p><p dir="ltr" class="docxNormale-000045"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000042">11. Trattamento mediante sistemi di intelligenza artificiale</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">Lo Studio legale informa che, nell’ambito dell’esecuzione dell’incarico professionale, potrà avvalersi di strumenti tecnologici basati su sistemi di intelligenza artificiale (IA), anche generativa, per finalità di supporto all’attività legale, organizzazione documentale, predisposizione di bozze e ottimizzazione dei processi interni.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">Tali sistemi vengono utilizzati nel rispetto dei principi di liceità, correttezza, trasparenza, minimizzazione dei dati, limitazione della conservazione e integrità, secondo quanto previsto dal Regolamento UE 2016/679 (GDPR). In particolare: (i) i dati personali eventualmente trattati tramite tali strumenti sono pseudonimizzati o anonimizzati, ove possibile, e mai utilizzati per attività di profilazione o decisioni automatizzate che producano effetti giuridici sull’interessato senza l’intervento umano; (ii) i sistemi impiegati non conservano in modo permanente i dati personali forniti, né li utilizzano per addestrare modelli esterni allo studio legale; (iii) il trattamento mediante IA non sostituisce l’attività decisionale del professionista, che rimane responsabile del contenuto e delle determinazioni assunte.</span></p><p dir="ltr" class="docxNormale-000043"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">L’interessato ha diritto di opporsi in qualunque momento a questo tipo di trattamento, secondo le modalità indicate al punto 9.</span></p><p dir="ltr" class="docxNormale-000046"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">SI ALLEGA VISURA/DOC DOCUMENTO DI IDENTITA’</span></p><p dir="ltr" class="docxNormale-000048"><span lang="it-IT" class="docxCarpredefinitoparagrafo-000044">Roma, 21/10/2025                                                                                                                                                      Firmato</span></p></div><div class='docx-footer' style='text-align:center; margin-top:25px; font-size:11pt; line-height:1.3;'><p style='margin:0;'>- o - </p><p style='margin:0;'>Sinergia Hub Soc. tra Avvocati Coop. a.r.l.</p><p style='margin:0;'>Via Caio Canuleio, n. 43, 00174, Roma</p><p style='margin:0;'>Via. E. De Amicis, n. 71, 00045 Genzano di Roma</p><p style='margin:0;'>Via dei Fiorentini, n. 10,80133 Napoli</p><p style='margin:0;'>Via Alberico Albricci, n. 9, 20122 Milano</p><p style='margin:0;'>Email studiolegale@fratinidamico.it</p><p style='margin:0;'>PEC riccardofratini@pecaruba.it - dario.damico@oav.legalmail.it</p><p style='margin:0;'>Tel. 06 9763 5399</p></div>
+        </div>

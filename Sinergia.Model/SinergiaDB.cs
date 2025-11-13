@@ -21,6 +21,7 @@ namespace Sinergia.Model
         public virtual DbSet<AvvisiParcella> AvvisiParcella { get; set; }
         public virtual DbSet<AvvisiParcella_a> AvvisiParcella_a { get; set; }
         public virtual DbSet<BilancioProfessionista> BilancioProfessionista { get; set; }
+        public virtual DbSet<CategorieCosti> CategorieCosti { get; set; }
         public virtual DbSet<Citta> Citta { get; set; }
         public virtual DbSet<Clienti> Clienti { get; set; }
         public virtual DbSet<Clienti_a> Clienti_a { get; set; }
@@ -46,6 +47,8 @@ namespace Sinergia.Model
         public virtual DbSet<DocumentiAziende_a> DocumentiAziende_a { get; set; }
         public virtual DbSet<DocumentiPratiche> DocumentiPratiche { get; set; }
         public virtual DbSet<DocumentiPratiche_a> DocumentiPratiche_a { get; set; }
+        public virtual DbSet<DocumentiProfessionisti> DocumentiProfessionisti { get; set; }
+        public virtual DbSet<DocumentiProfessionisti_a> DocumentiProfessionisti_a { get; set; }
         public virtual DbSet<EccezioniRicorrenzeCosti> EccezioniRicorrenzeCosti { get; set; }
         public virtual DbSet<EccezioniRicorrenzeCosti_a> EccezioniRicorrenzeCosti_a { get; set; }
         public virtual DbSet<Economico> Economico { get; set; }
@@ -100,6 +103,7 @@ namespace Sinergia.Model
         public virtual DbSet<TemplateIncarichi_a> TemplateIncarichi_a { get; set; }
         public virtual DbSet<TipologieCosti> TipologieCosti { get; set; }
         public virtual DbSet<TipologieCosti_a> TipologieCosti_a { get; set; }
+        public virtual DbSet<TipologieServiziFornitori> TipologieServiziFornitori { get; set; }
         public virtual DbSet<TipoRagioneSociale> TipoRagioneSociale { get; set; }
         public virtual DbSet<TipoRagioneSociale_a> TipoRagioneSociale_a { get; set; }
         public virtual DbSet<Utenti> Utenti { get; set; }
@@ -127,6 +131,14 @@ namespace Sinergia.Model
                 .Property(e => e.AliquotaIVA)
                 .HasPrecision(5, 2);
 
+            modelBuilder.Entity<AvvisiParcella>()
+                .Property(e => e.RimborsoSpesePercentuale)
+                .HasPrecision(5, 2);
+
+            modelBuilder.Entity<AvvisiParcella>()
+                .Property(e => e.ImportoAcconto)
+                .HasPrecision(10, 2);
+
             modelBuilder.Entity<AvvisiParcella_a>()
                 .Property(e => e.ContributoIntegrativoPercentuale)
                 .HasPrecision(5, 2);
@@ -138,6 +150,14 @@ namespace Sinergia.Model
             modelBuilder.Entity<AvvisiParcella_a>()
                 .Property(e => e.AliquotaIVA)
                 .HasPrecision(5, 2);
+
+            modelBuilder.Entity<AvvisiParcella_a>()
+                .Property(e => e.RimborsoSpesePercentuale)
+                .HasPrecision(5, 2);
+
+            modelBuilder.Entity<AvvisiParcella_a>()
+                .Property(e => e.ImportoAcconto)
+                .HasPrecision(10, 2);
 
             modelBuilder.Entity<BilancioProfessionista>()
                 .Property(e => e.TipoVoce)
@@ -215,6 +235,14 @@ namespace Sinergia.Model
                 .Property(e => e.Categoria)
                 .IsUnicode(false);
 
+            modelBuilder.Entity<CompensiPraticaDettaglio>()
+                .Property(e => e.ImportoInviatoAllaFatturazione)
+                .HasPrecision(10, 2);
+
+            modelBuilder.Entity<CompensiPraticaDettaglio>()
+                .Property(e => e.ImportoResiduo)
+                .HasPrecision(19, 2);
+
             modelBuilder.Entity<CompensiPraticaDettaglio_a>()
                 .Property(e => e.TipoCompenso)
                 .IsUnicode(false);
@@ -222,6 +250,14 @@ namespace Sinergia.Model
             modelBuilder.Entity<CompensiPraticaDettaglio_a>()
                 .Property(e => e.Categoria)
                 .IsUnicode(false);
+
+            modelBuilder.Entity<CompensiPraticaDettaglio_a>()
+                .Property(e => e.ImportoInviatoAllaFatturazione)
+                .HasPrecision(10, 2);
+
+            modelBuilder.Entity<CompensiPraticaDettaglio_a>()
+                .Property(e => e.ImportoResiduo)
+                .HasPrecision(19, 2);
 
             modelBuilder.Entity<CostiPersonaliUtente>()
                 .Property(e => e.Importo)
@@ -306,6 +342,22 @@ namespace Sinergia.Model
             modelBuilder.Entity<Finanziario_a>()
                 .Property(e => e.Stato)
                 .IsUnicode(false);
+
+            modelBuilder.Entity<Incassi>()
+                .Property(e => e.PercentualeResponsabile)
+                .HasPrecision(5, 2);
+
+            modelBuilder.Entity<Incassi>()
+                .Property(e => e.PercentualeOwner)
+                .HasPrecision(5, 2);
+
+            modelBuilder.Entity<Incassi_a>()
+                .Property(e => e.PercentualeResponsabile)
+                .HasPrecision(5, 2);
+
+            modelBuilder.Entity<Incassi_a>()
+                .Property(e => e.PercentualeOwner)
+                .HasPrecision(5, 2);
 
             modelBuilder.Entity<LogOperazioniSistema>()
                 .Property(e => e.Descrizione)

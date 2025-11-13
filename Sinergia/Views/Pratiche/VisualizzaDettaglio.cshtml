@@ -1,138 +1,292 @@
 ﻿@model Sinergia.Models.VisualizzaDettaglioPraticaViewModel
-
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<div class="container-fluid">
+<style>
+    /* --- 📱 MOBILE ONLY --- */
+    @@media (max-width: 767px) {
+        .desktop-view {
+            display: none !important;
+        }
 
-    <!-- Dettaglio Pratica -->
-    <div class="card mb-3 shadow-sm border-0">
-        <div class="card-header  text-dark fw-bold">
-            <i class="bi bi-folder-fill me-1"></i> Dettaglio Pratica
-        </div>
-        <div class="card-body">
-            <p><strong>Titolo:</strong> @Model.Pratica.Titolo</p>
-            <p><strong>Cliente:</strong> @Model.Pratica.NomeCliente</p>
-            <p><strong>Budget:</strong> @Model.Pratica.Budget.ToString("C2")</p>
-            <p><strong>Data Creazione:</strong> @(Model.Pratica.DataCreazione?.ToString("dd/MM/yyyy") ?? "-")</p>
-            <p>
-                <strong>Professionista Responsabile:</strong>
-                @(Model.Pratica.NomeUtenteResponsabile?.Trim().ToLower() == "admin admin"
-                    ? "Admin"
-                    : Model.Pratica.NomeUtenteResponsabile)
-            </p>
-            <p><strong>Stato Pratica:</strong> @Model.Pratica.Stato</p>
+        .mobile-view {
+            display: block !important;
+        }
 
-            @*@if (Model.Utenti != null && Model.Utenti.Any())
-            {
-                <p><strong>Collaboratori Assegnati:</strong></p>
-                <ul>
-                    @foreach (var c in Model.Utenti)
-                    {
-                        <li>@c.Nome @c.Cognome (ID Utente: @c.ID_Utente)</li>
-                    }
-                </ul>
+        .mobile-card {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            background: #fafafa;
+        }
+
+            .mobile-card strong {
+                color: #444;
             }
-            else
-            {
-                <p class="text-muted fst-italic">Nessun collaboratore assegnato a questa pratica.</p>
-            }*@
-        </div>
-    </div>
 
-    <!-- Cluster Associati -->
-    <div class="card mb-3 shadow-sm border-0">
-        <div class="card-header  text-dark fw-bold">
-            <i class="bi bi-diagram-3-fill me-1"></i> Cluster Associati
-        </div>
-        <div class="card-body">
-            @if (Model.Cluster == null || !Model.Cluster.Any())
-            {
-                <p class="text-muted">Nessun cluster associato a questa pratica.</p>
-            }
-            else
-            {
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Collaboratore</th>
-                            <th>Tipo Cluster</th>
-                            <th>Percentuale</th>
-                            <th>Importo</th>
-                            <th>Data Assegnazione</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var c in Model.Cluster)
-                        {
-                            <tr>
-                                <td>@c.NomeUtente</td>
-                                <td>@c.TipoCluster</td>
-                                <td>@c.PercentualePrevisione.ToString("N2") %</td>
-                                <td>@c.ImportoCalcolato.ToString("C2")</td>
-                                <td>
-                                    @(c.DataAssegnazione.HasValue
-                        ? c.DataAssegnazione.Value.ToString("dd/MM/yyyy")
-                        : "-")
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            }
-        </div>
-    </div>
+        .mobile-section-title {
+            font-weight: 600;
+            margin-top: 15px;
+            margin-bottom: 8px;
+        }
 
+        .mobile-key {
+            color: #666;
+            font-size: .9rem;
+        }
+    }
 
-    <!-- Avvisi Parcella -->
-    <div class="card mb-3 shadow-sm border-0">
-        <div class="card-header  text-dark fw-bold">
-            <i class="bi bi-receipt me-1"></i> Avvisi Parcella
+    /* --- 🖥 DESKTOP ONLY --- */
+    @@media (min-width: 768px) {
+        .desktop-view {
+            display: block !important;
+        }
+
+        .mobile-view {
+            display: none !important;
+        }
+    }
+</style>
+
+<div class="container-fluid px-2 px-md-3">
+
+    <!-- 🖥️ VERSIONE DESKTOP -->
+    <div class="desktop-view">
+
+        <!-- 📁 DETTAGLIO PRATICA -->
+        <div class="card mb-3 shadow-sm border-0">
+            <div class="card-header text-dark fw-bold d-flex align-items-center">
+                <i class="bi bi-folder-fill me-2"></i> Dettaglio Pratica
+            </div>
+            <div class="card-body">
+                <div class="row mb-2"><div class="col-4 fw-semibold text-muted">Titolo</div><div class="col-8">@Model.Pratica.Titolo</div></div>
+                <div class="row mb-2"><div class="col-4 fw-semibold text-muted">Cliente</div><div class="col-8">@Model.Pratica.NomeCliente</div></div>
+                <div class="row mb-2"><div class="col-4 fw-semibold text-muted">Budget</div><div class="col-8">@Model.Pratica.Budget.ToString("C2")</div></div>
+                <div class="row mb-2"><div class="col-4 fw-semibold text-muted">Data Creazione</div><div class="col-8">@(Model.Pratica.DataCreazione?.ToString("dd/MM/yyyy") ?? "-")</div></div>
+                <div class="row mb-2"><div class="col-4 fw-semibold text-muted">Responsabile</div><div class="col-8">@Model.Pratica.NomeUtenteResponsabile</div></div>
+                <div class="row mb-2"><div class="col-4 fw-semibold text-muted">Stato</div><div class="col-8">@Model.Pratica.Stato</div></div>
+            </div>
         </div>
-        <div class="card-body">
-            @if (Model.AvvisiParcella == null || !Model.AvvisiParcella.Any())
-            {
-                <p class="text-muted fst-italic">Nessun avviso parcella registrato per questa pratica.</p>
-            }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table table-hover table-bordered align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Data Avviso</th>
-                                <th>Importo</th>
-                                <th>Metodo di Pagamento</th>
-                                <th>Importo IVA</th>
-                                <th>Contributo Integrativo</th>
-                                <th>Stato</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var avviso in Model.AvvisiParcella)
-                            {
+
+        <!-- 👥 CLUSTER ASSOCIATI -->
+        <div class="card mb-3 shadow-sm border-0">
+            <div class="card-header text-dark fw-bold d-flex align-items-center">
+                <i class="bi bi-diagram-3-fill me-2"></i> Cluster Associati
+            </div>
+            <div class="card-body p-0">
+                @if (Model.Cluster == null || !Model.Cluster.Any())
+                {
+                    <p class="text-muted p-3 mb-0">Nessun cluster associato.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-striped table-sm align-middle mb-0">
+                            <thead class="table-light text-center">
                                 <tr>
-                                    <td>@(avviso.DataAvviso?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                    <td>@(avviso.Importo?.ToString("C2") ?? "-")</td>
-                                    <td>@avviso.MetodoPagamento</td>
-                                    <td>@(avviso.ImportoIVA?.ToString("C2") ?? "-")</td>
-                                    <td>@(avviso.ContributoIntegrativoImporto?.ToString("C2") ?? "-")</td>
-                                    <td>@avviso.Stato</td>
+                                    <th>Collaboratore</th>
+                                    <th>Tipo</th>
+                                    <th>%</th>
+                                    <th>Importo</th>
+                                    <th>Data</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach (var c in Model.Cluster)
+                                {
+                                    <tr class="text-center">
+                                        <td>@c.NomeUtente</td>
+                                        <td>@c.TipoCluster</td>
+                                        <td>@c.PercentualePrevisione.ToString("N2")%</td>
+                                        <td>@c.ImportoCalcolato.ToString("C2")</td>
+                                        <td>@(c.DataAssegnazione?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- 👤 COLLABORATORI DA COMPENSI DETTAGLIO -->
+        <div class="card mb-3 shadow-sm border-0">
+            <div class="card-header text-dark fw-bold d-flex align-items-center">
+                <i class="bi bi-people-fill me-2"></i> Collaboratori (Compensi Dettaglio)
+            </div>
+            <div class="card-body p-0">
+                @if (Model.CollaboratoriDettaglio == null || !Model.CollaboratoriDettaglio.Any())
+                {
+                    <p class="text-muted p-3 mb-0">Nessun collaboratore aggiuntivo registrato.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm align-middle mb-0 text-center">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Compenso</th>
+                                    <th>Collaboratore</th>
+                                    <th>%</th>
+                                    <th>Importo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var coll in Model.CollaboratoriDettaglio)
+                                {
+                                    <tr>
+                                        <td>@coll.NomeCompenso</td>
+                                        <td>@coll.Nome</td>
+                                        <td>@coll.Percentuale.ToString("N2")%</td>
+                                        <td>@coll.Importo.ToString("C2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+
+        <!-- 🧾 AVVISI PARCELLA -->
+        <div class="card mb-3 shadow-sm border-0">
+            <div class="card-header text-dark fw-bold d-flex align-items-center">
+                <i class="bi bi-receipt me-2"></i> Avvisi Parcella
+            </div>
+            <div class="card-body p-0">
+                @if (Model.AvvisiParcella == null || !Model.AvvisiParcella.Any())
+                {
+                    <p class="text-muted p-3 mb-0">Nessun avviso parcella registrato.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered table-sm align-middle mb-0">
+                            <thead class="table-light text-center">
+                                <tr>
+                                    <th>Titolo Avviso</th>
+                                    <th>Data</th>
+                                    <th>Importo</th>
+                                    <th>Metodo</th>
+                                    <th>IVA</th>
+                                    <th>Contributo</th>
+                                    <th>Stato</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var avviso in Model.AvvisiParcella)
+                                {
+                                    <tr class="text-center">
+                                        <td>@(avviso.TitoloAvviso ?? "-")</td>
+                                        <td>@(avviso.DataAvviso?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                        <td>@(avviso.Importo?.ToString("C2") ?? "-")</td>
+                                        <td>@(avviso.MetodoPagamento ?? "-")</td>
+                                        <td>@(avviso.ImportoIVA?.ToString("C2") ?? "-")</td>
+                                        <td>@(avviso.ContributoIntegrativoImporto?.ToString("C2") ?? "-")</td>
+                                        <td>@(avviso.Stato ?? "-")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+
+        <!-- 🔙 PULSANTE DI NAVIGAZIONE -->
+        <div class="d-flex justify-content-end mt-4">
+            <a href="@Url.Action("GestionePratiche", "Pratiche")"
+               class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Torna alla lista pratiche
+            </a>
+        </div>
+    </div>
+
+
+    <!-- 📱 VERSIONE MOBILE -->
+    <div class="mobile-view">
+
+        <!-- 📁 Dettaglio Pratica -->
+        <h6 class="mobile-section-title d-flex align-items-center mb-2">
+            <i class="bi bi-folder-fill me-2 text-primary"></i>
+            <span>Dettaglio Pratica</span>
+        </h6>
+        <div class="mobile-card">
+            <strong>@Model.Pratica.Titolo</strong><br />
+            <span class="mobile-key">@Model.Pratica.NomeCliente</span><br />
+            <span class="mobile-key">Budget: @Model.Pratica.Budget.ToString("C0")</span><br />
+            <span class="mobile-key">Stato: @Model.Pratica.Stato</span>
+        </div>
+
+        <!-- 🔗 Cluster -->
+        @if (Model.Cluster != null && Model.Cluster.Any())
+        {
+            <h6 class="mobile-section-title d-flex align-items-center mt-4 mb-2">
+                <i class="bi bi-diagram-3-fill me-2 text-primary"></i>
+                <span>Cluster</span>
+            </h6>
+            foreach (var c in Model.Cluster)
+            {
+                <div class="mobile-card">
+                    <strong>@c.NomeUtente</strong><br />
+                    <span class="mobile-key">@c.TipoCluster - @c.PercentualePrevisione.ToString("N0")%</span><br />
+                    <span class="mobile-key">Importo: @c.ImportoCalcolato.ToString("C0")</span>
                 </div>
             }
-        </div>
-    </div>
+        }
 
-    <!-- Pulsanti di Navigazione -->
-    <div class="d-flex justify-content-start mt-3">
-        <a href="@Url.Action("GestionePratiche", "Pratiche")" class="btn btn-secondary btn-sm me-2">
-            <i class="bi bi-arrow-left"></i> Torna alla lista pratiche
-        </a>
+        <!-- 👥 Collaboratori -->
+        @if (Model.CollaboratoriDettaglio != null && Model.CollaboratoriDettaglio.Any())
+        {
+            <h6 class="mobile-section-title d-flex align-items-center mt-4 mb-2">
+                <i class="bi bi-people-fill me-2 text-primary"></i>
+                <span>Collaboratori</span>
+            </h6>
+            foreach (var coll in Model.CollaboratoriDettaglio)
+            {
+                <div class="mobile-card">
+                    <strong class="text-primary">@coll.NomeCompenso</strong><br />
+                    <span class="mobile-key fw-bold">@coll.Nome</span><br />
+                    <span class="mobile-key">Quota: @coll.Percentuale.ToString("N0")%</span><br />
+                    <span class="mobile-key">Importo: @coll.Importo.ToString("C0")</span>
+                </div>
+            }
+        }
+
+        <!-- 🧾 Avvisi Parcella -->
+        @if (Model.AvvisiParcella != null && Model.AvvisiParcella.Any())
+        {
+            <h6 class="mobile-section-title d-flex align-items-center mt-4 mb-2">
+                <i class="bi bi-receipt me-2 text-primary"></i>
+                <span>Avvisi Parcella</span>
+            </h6>
+            foreach (var avviso in Model.AvvisiParcella)
+            {
+                <div class="mobile-card">
+                    <strong class="text-primary">
+                        @(avviso.TitoloAvviso ?? "Senza titolo")
+                    </strong><br />
+                    <span class="mobile-key fw-bold">
+                        @(avviso.Importo?.ToString("C0") ?? "-")
+                    </span><br />
+                    <span class="mobile-key">Metodo: @(avviso.MetodoPagamento ?? "-")</span><br />
+                    <span class="mobile-key">Data: @(avviso.DataAvviso?.ToString("dd/MM/yyyy") ?? "-")</span><br />
+                    <span class="mobile-key text-muted">@avviso.Stato</span>
+                </div>
+            }
+        }
+
+        <!-- 🔙 Torna alla lista -->
+        <div class="d-flex justify-content-end mt-4">
+            <a href="@Url.Action("GestionePratiche", "Pratiche")" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Torna alla lista pratiche
+            </a>
+        </div>
     </div>
 
 </div>
+

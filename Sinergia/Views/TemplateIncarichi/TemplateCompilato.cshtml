@@ -1,8 +1,41 @@
 ﻿@model string
 @{
-    Layout = null; // Nessun layout
+    Layout = null; // Nessun layout globale
     ViewData["Layout"] = null;
+
+    // Percorso assoluto del logo (serve per Rotativa/wkhtmltopdf)
+    string logoPath = "file:///" + Server.MapPath("~/Content/img/Icons/Logo Nuovo.png").Replace("\\", "/");
 }
 
-@Html.Raw(Model)
+<!-- 🔹 Header con logo -->
+<div style="
+    display:flex;
+    align-items:flex-start; /* ⬅️ evita il rettangolo */
+    justify-content:flex-start;
+    margin:0 0 25px 0;
+    padding:0;
+    background:none !important;
+    border:none !important;
+    outline:none !important;
+    box-shadow:none !important;
+">
+    <img src="@logoPath"
+         alt="Logo Sinergia"
+         style="
+            max-height:180px;
+            width:auto;
+            margin-left:20px;
+            display:inline-block;
+            border:none !important;
+            outline:none !important;
+            background:none !important;
+            box-shadow:none !important;
+            pointer-events:none;
+            user-select:none;
+            -webkit-user-drag:none;
+            -webkit-print-color-adjust:exact;
+         ">
+</div>
 
+<!-- 🔹 Contenuto HTML generato dal controller -->
+@Html.Raw(Model)

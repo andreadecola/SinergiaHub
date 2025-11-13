@@ -25,7 +25,25 @@ namespace Sinergia.Models
         public string BudgetFormattato { get; set; }
 
         public bool HaIncaricoGenerato { get; set; }
+        // ============================================================
+        // 📑 DOCUMENTI INCARICO (uno per tipo)
+        // ============================================================
+        // ✅ ID del documento principale (per compatibilità retroattiva)
         public int? ID_DocumentoIncarico { get; set; }
+
+        // ✅ Nuovi campi per i diversi tipi di incarico
+        public int? ID_IncaricoFisso { get; set; }
+        public int? ID_IncaricoAOre { get; set; }
+        public int? ID_IncaricoGiudiziale { get; set; }
+        public string NomeFileIncaricoFisso { get; set; }
+        public string NomeFileIncaricoAOre { get; set; }
+        public string NomeFileIncaricoGiudiziale { get; set; }
+
+        // ✅ Nuovo: incarico firmato caricato manualmente (PDF)
+        public int? ID_IncaricoFirmato { get; set; }
+        public string NomeFileIncaricoFirmato { get; set; }
+
+
 
         public DateTime? DataInizioAttivitaStimata { get; set; }
         public DateTime? DataFineAttivitaStimata { get; set; }
@@ -128,6 +146,7 @@ namespace Sinergia.Models
             public string EstremiGiudizio { get; set; }
             public string OggettoIncarico { get; set; }
             public int? ID_ProfessionistaIntestatario { get; set; }
+            public string Collaboratori { get; set; }
         }
 
 
@@ -136,17 +155,26 @@ namespace Sinergia.Models
             public string Descrizione { get; set; }
             public decimal Importo { get; set; }
         }
-
         public class CostoPraticaViewModel
         {
             public string Categoria { get; set; } // Es: "Viaggio", "Albergo"
             public string Descrizione { get; set; }
             public decimal Importo { get; set; }
+
             public int? ID_ClienteAssociato { get; set; }
             public string NomeFornitoreManuale { get; set; }
 
             public int IDCostoHidden { get; set; }
             public int ID_AnagraficaCosto { get; set; } // ✅ nuovo campo per salvataggio
+
+            // 🆕 Nuovi campi aggiunti
+            public int? ID_Fornitore { get; set; }
+
+            [DataType(DataType.Date)]
+            public DateTime? DataCompetenzaEconomica { get; set; }
+
+            [DataType(DataType.Date)]
+            public DateTime DataInserimento { get; set; } = DateTime.Now;
         }
 
         // ================================
@@ -161,5 +189,15 @@ namespace Sinergia.Models
         public decimal ImportoIncassato { get; set; }
         public decimal Utile { get; set; }
         public decimal? TrattenutaPersonalizzata { get; set; } // solo admin
+    }
+
+    // ================================
+    // 📌 DTO collaboratori per riga compenso
+    // ================================
+    public class CollaboratoreCompensoDTO
+    {
+        public int ID_Collaboratore { get; set; }
+        public string NomeCollaboratore { get; set; }
+        public decimal Percentuale { get; set; }
     }
 }

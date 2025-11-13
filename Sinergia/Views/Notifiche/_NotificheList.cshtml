@@ -33,11 +33,17 @@
         </select>
     </div>
 
+    @* Questo Bottone chiama la modale segna tutte come lette   *@
     <div class="d-flex align-items-center gap-2">
-        <button id="btnSegnaTutte" class="btn btn-outline-success btn-sm">
-            <i class="fa fa-check"></i> Segna tutte come lette
+        <button class="btn btn-outline-success btn-sm"
+                title="Segna tutte come lette"
+                data-bs-toggle="modal"
+                data-bs-target="#modaleSegnaTutte">
+            <i class="fa fa-check-double"></i> Segna tutte come lette
         </button>
     </div>
+
+
 </div>
 
 @if (!lista.Any())
@@ -188,6 +194,36 @@ else
 </div>
 
 
+<!-- 🔔 Modale conferma segna tutte come lette -->
+<div class="modal fade" id="modaleSegnaTutte" tabindex="-1" aria-labelledby="modaleSegnaTutteLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modaleSegnaTutteLabel">
+                    <i class="bi bi-check-circle me-2"></i> Segna tutte come lette
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">
+                    Vuoi davvero segnare tutte le notifiche come <b>lette</b>?
+                    L’operazione non può essere annullata.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Annulla
+                </button>
+                <button type="button" id="btnConfermaSegnaTutte" class="btn btn-success">
+                    <i class="bi bi-check-circle"></i> Conferma
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
 
 <script>
 // ==== AZIONI ====
@@ -245,17 +281,32 @@ function segnaComeLetta(id, btn) {
 }
 
 // segna tutte come lette (reload dopo successo)
-function segnaTutteComeLette() {
-    const url = '@Url.Action("SegnaTutteComeLette","Home")';
-    $.post(url, function (r) {
-        if (r && r.success) {
-            location.reload(); // 🔄 ricarica la pagina
-        } else {
-            alert('Operazione non riuscita.');
-        }
-    }).fail(() => alert('Errore di rete.'));
-}
 
+document.addEventListener("DOMContentLoaded", function () {
+
+    // 🧩 Click su "Conferma" nella modale
+    document.getElementById("btnConfermaSegnaTutte").addEventListener("click", function () {
+        const url = '@Url.Action("SegnaTutteComeLette","Home")';
+        console.log("📨 POST → " + url);
+
+        $.post(url, function (r) {
+            console.log("📬 Risposta:", r);
+
+            if (r && r.success) {
+                toastr.success("✅ Tutte le notifiche sono state segnate come lette.");
+                const modale = bootstrap.Modal.getInstance(document.getElementById("modaleSegnaTutte"));
+                modale.hide();
+
+                setTimeout(() => location.reload(), 800);
+            } else {
+                toastr.warning(r.message || "Operazione non riuscita.");
+            }
+        }).fail(function (xhr, status, err) {
+            console.error("❌ Errore AJAX:", err);
+            toastr.error("Errore di rete.");
+        });
+    });
+});
 // elimina con modale (reload dopo successo)
 let _elimCtx = { id: null, tr: null };
 function eliminaNotifica(id, btn) {

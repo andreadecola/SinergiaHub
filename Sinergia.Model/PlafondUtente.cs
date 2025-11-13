@@ -50,5 +50,10 @@ namespace Sinergia.Model
         public int? ID_Pratiche { get; set; }
 
         public int? ID_CostoPersonale { get; set; }
+
+        public DateTime? DataCompetenzaFinanziaria { get; set; }
+
+        [StringLength(100)]
+        public string Operazione { get; set; }
     }
 }

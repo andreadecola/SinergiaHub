@@ -187,6 +187,7 @@
     <Compile Include="AvvisiParcella.cs" />
     <Compile Include="AvvisiParcella_a.cs" />
     <Compile Include="BilancioProfessionista.cs" />
+    <Compile Include="CategorieCosti.cs" />
     <Compile Include="Citta.cs" />
     <Compile Include="Clienti.cs" />
     <Compile Include="ClientiProfessionisti.cs" />
@@ -212,6 +213,8 @@
     <Compile Include="DocumentiAziende_a.cs" />
     <Compile Include="DocumentiPratiche.cs" />
     <Compile Include="DocumentiPratiche_a.cs" />
+    <Compile Include="DocumentiProfessionisti.cs" />
+    <Compile Include="DocumentiProfessionisti_a.cs" />
     <Compile Include="EccezioniRicorrenzeCosti.cs" />
     <Compile Include="EccezioniRicorrenzeCosti_a.cs" />
     <Compile Include="Economico.cs" />
@@ -268,6 +271,7 @@
     <Compile Include="TemplateIncarichi_a.cs" />
     <Compile Include="TipologieCosti.cs" />
     <Compile Include="TipologieCosti_a.cs" />
+    <Compile Include="TipologieServiziFornitori.cs" />
     <Compile Include="TipoRagioneSociale.cs" />
     <Compile Include="TipoRagioneSociale_a.cs" />
     <Compile Include="Utenti.cs" />

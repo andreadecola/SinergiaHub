@@ -6,44 +6,80 @@
 }
 
 <div class="btn-group btn-group-sm" role="group" style="gap: 4px;">
+
+    @* ✏️ Modifica *@
     @if (puoModificare)
     {
         <button type="button"
                 class="btn btn-warning"
-                title="Modifica"
+                title="Modifica pratica"
                 onclick="apriModificaPratica(@Model.ID_Pratiche)">
             <i class="fa fa-pencil"></i>
         </button>
     }
 
+    @* 🗑️ Elimina *@
     @if (puoEliminare)
     {
         <button type="button"
                 class="btn btn-danger"
-                title="Elimina"
+                title="Elimina pratica"
                 onclick="eliminaPratica(@Model.ID_Pratiche)">
             <i class="fa fa-trash"></i>
         </button>
     }
 
-    @if (Model.ID_DocumentoIncarico.HasValue)
+    @* 📑 Visualizza incarichi generati *@
+    @if (Model.ID_IncaricoFisso.HasValue || Model.ID_IncaricoAOre.HasValue || Model.ID_IncaricoGiudiziale.HasValue)
     {
-        <button type="button"
-                class="btn btn-success"
-                title="Visualizza incarico"
-                onclick="visualizzaPdf(@Model.ID_DocumentoIncarico.Value)">
-            <i class="fa fa-file"></i>
-        </button>
+        if (Model.ID_IncaricoFisso.HasValue)
+        {
+            <button type="button"
+                    class="btn btn-outline-primary"
+                    title="Visualizza incarico fisso"
+                    onclick="visualizzaPdf(@Model.ID_IncaricoFisso.Value)">
+                <i class="fa fa-file-contract"></i>
+            </button>
+        }
+
+        if (Model.ID_IncaricoAOre.HasValue)
+        {
+            <button type="button"
+                    class="btn btn-outline-success"
+                    title="Visualizza incarico a ore"
+                    onclick="visualizzaPdf(@Model.ID_IncaricoAOre.Value)">
+                <i class="fa fa-clock"></i>
+            </button>
+        }
+
+        if (Model.ID_IncaricoGiudiziale.HasValue)
+        {
+            <button type="button"
+                    class="btn btn-outline-warning"
+                    title="Visualizza incarico giudiziale"
+                    onclick="visualizzaPdf(@Model.ID_IncaricoGiudiziale.Value)">
+                <i class="fa fa-gavel"></i>
+            </button>
+        }
     }
     else
     {
-        <button type="button"
-                class="btn btn-success"
-                title="Crea incarico"
-                onclick="apriAnteprimaIncarico(@Model.ID_Pratiche)">
-            <i class="fa fa-file"></i>
-        </button>
+        if (Model.ID_IncaricoFirmato.HasValue)
+        {
+            <button class="btn btn-outline-danger"
+                    title="Visualizza incarico firmato @Model.NomeFileIncaricoFirmato"
+                    onclick="visualizzaPdf(@Model.ID_IncaricoFirmato.Value)">
+                <i class="fa fa-file-pdf"></i>
+            </button>
+        }
+        else
+        {
+            <button class="btn btn-success"
+                    title="Genera incarico"
+                    onclick="apriAnteprimaIncarico(@Model.ID_Pratiche)">
+                <i class="fa fa-plus-circle"></i>
+            </button>
+        }
+
     }
 </div>
-
-

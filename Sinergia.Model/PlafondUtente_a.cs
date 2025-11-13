@@ -43,10 +43,6 @@ namespace Sinergia.Model
 
         public string ModificheTestuali { get; set; }
 
-        [Required]
-        [StringLength(50)]
-        public string Operazione { get; set; }
-
         public int? ID_Incasso { get; set; }
 
         public decimal Importo { get; set; }
@@ -64,5 +60,10 @@ namespace Sinergia.Model
         public int? ID_Pratiche { get; set; }
 
         public int? ID_CostoPersonale { get; set; }
+
+        public DateTime? DataCompetenzaFinanziaria { get; set; }
+
+        [StringLength(100)]
+        public string Operazione { get; set; }
     }
 }

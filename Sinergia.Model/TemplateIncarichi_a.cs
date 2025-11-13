@@ -30,5 +30,10 @@ namespace Sinergia.Model
         public int NumeroVersione { get; set; }
 
         public string ModificheTestuali { get; set; }
+
+        [StringLength(100)]
+        public string TipoCompenso { get; set; }
+
+        public byte[] FileDocx { get; set; }
     }
 }

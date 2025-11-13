@@ -39,6 +39,11 @@
 <div class="d-flex justify-content-between mb-2" id="controlliPrevisionale">
     <div class="d-flex flex-wrap align-items-center gap-2">
         <input id="searchPrev" type="text" class="form-control form-control-sm w-auto" placeholder="Cerca...">
+
+        <!-- 🔹 Nuovi campi data -->
+        <input id="filtroDaPrev" type="date" class="form-control form-control-sm w-auto">
+        <input id="filtroAPrev" type="date" class="form-control form-control-sm w-auto">
+
         <select id="filtroTipoPrev" class="form-select form-select-sm w-auto">
             <option value="Tutte">Tutte</option>
             <option value="Entrata">Entrate</option>
@@ -77,6 +82,33 @@
     </form>
 </div>
 
+@if (Model.Any(m => !string.IsNullOrEmpty(m.DebugInfo)))
+{
+    <h4>DEBUG - Mappature ID</h4>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered">
+            <thead>
+                <tr>
+                    <th>ID_Previsione</th>
+                    <th>Descrizione</th>
+                    <th>Debug Info</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model.Where(m => !string.IsNullOrEmpty(m.DebugInfo)))
+                {
+                    <tr>
+                        <td>@item.ID_Previsione</td>
+                        <td>@item.Descrizione</td>
+                        <td>@item.DebugInfo</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+
 
 @if (!lista.Any())
 {
@@ -102,15 +134,17 @@ else
                 @foreach (var r in lista)
                 {
                     var tipo = string.Equals(r.TipoOperazione, "Entrata", StringComparison.OrdinalIgnoreCase) ? "Entrata" : "Uscita";
-                    <tr class="@rowClass(tipo)" data-tipo="@tipo">
+                    <tr class="@rowClass(tipo)"
+                        data-tipo="@tipo"
+                        data-data="@(r.DataPrevisione?.ToString("yyyy-MM-dd"))">
                         <td>@(r.DataPrevisione?.ToString("dd/MM/yyyy") ?? "-")</td>
                         <td><span class="@badgeClass(tipo)">@tipo</span></td>
                         <td>@(string.IsNullOrWhiteSpace(r.Descrizione) ? "—" : r.Descrizione)</td>
                         <td>@(string.IsNullOrWhiteSpace(r.NomePratica) ? "—" : r.NomePratica)</td>
                         <td class="text-end">
                             @(tipo == "Entrata"
-                                ? (r.BudgetPratica.GetValueOrDefault().ToString("N2") + " €")
-                                : "—")
+                            ? (r.BudgetPratica.GetValueOrDefault().ToString("N2") + " €")
+                            : "—")
                         </td>
                         <td class="text-end">@r.ImportoPrevisto.GetValueOrDefault().ToString("N2") €</td>
                         <td class="text-center">
@@ -131,7 +165,9 @@ else
         @foreach (var r in lista)
         {
             var tipo = string.Equals(r.TipoOperazione, "Entrata", StringComparison.OrdinalIgnoreCase) ? "Entrata" : "Uscita";
-            <div class="border rounded shadow-sm p-3 mb-3 bg-white card-previsionale" data-tipo="@tipo">
+            <div class="border rounded shadow-sm p-3 mb-3 bg-white card-previsionale"
+                 data-tipo="@tipo"
+                 data-data="@(r.DataPrevisione?.ToString("yyyy-MM-dd"))">
                 <div class="small text-muted"><strong>Data:</strong> @(r.DataPrevisione?.ToString("dd/MM/yyyy") ?? "-")</div>
                 <div><strong>Tipo:</strong> <span class="@badgeClass(tipo)">@tipo</span></div>
                 <div><strong>Descrizione:</strong> @(string.IsNullOrWhiteSpace(r.Descrizione) ? "—" : r.Descrizione)</div>
@@ -139,8 +175,8 @@ else
                 <div>
                     <strong>Valore pratica:</strong>
                     @(tipo == "Entrata"
-                        ? (r.BudgetPratica.GetValueOrDefault().ToString("N2") + " €")
-                        : "—")
+                    ? (r.BudgetPratica.GetValueOrDefault().ToString("N2") + " €")
+                    : "—")
                 </div>
                 <div class="fw-bold @(tipo == "Entrata" ? "text-success" : "text-danger")">
                     @r.ImportoPrevisto.GetValueOrDefault().ToString("N2") €
@@ -155,6 +191,7 @@ else
             </div>
         }
     </div>
+
 
     <!-- 🔄 Paginazione -->
     <div class="d-flex justify-content-end align-items-center gap-2 mt-2" id="paginazionePrevisionale"></div>
@@ -205,27 +242,37 @@ else
         let pageSize = parseInt(pageSizeSelect.value || '10');
         let currentPage = 1;
 
-        function matches(el, term, tipo) {
+        function matches(el, term, tipo, from, to) {
             const text = el.innerText.toLowerCase();
             const okTerm = !term || text.includes(term);
 
-            if (tipo === 'Tutte') return okTerm;
-
-            // Controlla tipo da classe o da data-attribute
+            // 🔹 Tipo
             const isEntrata = el.classList.contains('table-success') || el.getAttribute('data-tipo') === 'Entrata';
             const isUscita = el.classList.contains('table-danger') || el.getAttribute('data-tipo') === 'Uscita';
+            const okTipo = (tipo === 'Tutte') || (tipo === 'Entrata' && isEntrata) || (tipo === 'Uscita' && isUscita);
 
-            const okTipo = (tipo === 'Entrata' && isEntrata) || (tipo === 'Uscita' && isUscita);
-            return okTerm && okTipo;
+            // 🔹 Date
+            const dataAttr = el.getAttribute('data-data'); // formato yyyy-MM-dd
+            let okDate = true;
+            if (dataAttr) {
+                const d = new Date(dataAttr);
+                if (from) okDate = okDate && d >= new Date(from);
+                if (to) okDate = okDate && d <= new Date(to);
+            }
+
+            return okTerm && okTipo && okDate;
         }
+
 
         function render() {
             const term = (searchInput.value || '').toLowerCase();
             const tipo = tipoSelect.value || 'Tutte';
+            const from = document.getElementById('filtroDaPrev')?.value;
+            const to = document.getElementById('filtroAPrev')?.value;
 
             // Filtra
-            const filteredRows = allRows.filter(r => matches(r, term, tipo));
-            const filteredCards = allCards.filter(c => matches(c, term, tipo));
+            const filteredRows = allRows.filter(r => matches(r, term, tipo, from, to));
+            const filteredCards = allCards.filter(c => matches(c, term, tipo, from, to));
 
             // Calcola pagine in base alla vista attiva
             const totalItems = window.innerWidth >= 768 ? filteredRows.length : filteredCards.length;
@@ -266,11 +313,15 @@ else
             pagContainer.appendChild(next);
         }
 
+        // Event listeners
         searchInput.addEventListener('input', () => { currentPage = 1; render(); });
         tipoSelect.addEventListener('change', () => { currentPage = 1; render(); });
         pageSizeSelect.addEventListener('change', () => { pageSize = parseInt(pageSizeSelect.value); currentPage = 1; render(); });
+        document.getElementById('filtroDaPrev').addEventListener('change', () => { currentPage = 1; render(); });
+        document.getElementById('filtroAPrev').addEventListener('change', () => { currentPage = 1; render(); });
 
         render();
+
     })();
 
 

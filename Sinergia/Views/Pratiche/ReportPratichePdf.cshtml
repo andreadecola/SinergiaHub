@@ -1,5 +1,7 @@
 ﻿@model List<Sinergia.Models.PraticaViewModel>
-@{ Layout = null; }
+@{
+    Layout = null;
+}
 
 <!DOCTYPE html>
 <html>
@@ -9,13 +11,20 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 12px;
-            margin: 30px;
+            font-size: 11px;
+            margin: 25px;
         }
 
         h2 {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 10px;
+            color: #555;
+            margin-bottom: 15px;
         }
 
         table {
@@ -26,42 +35,103 @@
 
         th, td {
             border: 1px solid #444;
-            padding: 6px 8px;
+            padding: 5px 7px;
             text-align: left;
         }
 
         th {
             background-color: #f0f0f0;
+            font-weight: bold;
+        }
+
+        td {
+            font-size: 10px;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        /* 🎨 Stati colorati */
+        .stato-attiva {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        /* Verde */
+        .stato-inattiva {
+            color: #7f8c8d;
+            font-weight: bold;
+        }
+        /* Grigio */
+        .stato-lavorazione {
+            color: #e67e22;
+            font-weight: bold;
+        }
+        /* Arancio */
+        .stato-contrattualizzazione {
+            color: #2980b9;
+            font-weight: bold;
+        }
+        /* Blu */
+        .stato-conclusa {
+            color: #8e44ad;
+            font-weight: bold;
+        }
+        /* Viola */
+
+        tfoot td {
+            font-weight: bold;
+            background-color: #f9f9f9;
         }
     </style>
 </head>
 <body>
     <h2>Report Pratiche</h2>
+    <div class="subtitle">
+        Generato il @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+    </div>
+
     <table>
         <thead>
             <tr>
-                <th>ID</th>
-                <th>Titolo</th>
-                <th>Cliente</th>
-                <th>Owner</th>
-                <th>Data Creazione</th>
-                <th>Stato</th>
+                <th style="width:5%">ID</th>
+                <th style="width:25%">Titolo</th>
+                <th style="width:20%">Cliente</th>
+                <th style="width:20%">Owner</th>
+                <th style="width:10%">Data Creazione</th>
+                <th style="width:10%">Stato</th>
             </tr>
         </thead>
         <tbody>
             @foreach (var p in Model)
             {
+                string statoClasse = p.Stato?.ToLower() switch
+                {
+                    "attiva" => "stato-attiva",
+                    "inattiva" => "stato-inattiva",
+                    "in lavorazione" => "stato-lavorazione",
+                    "contrattualizzazione" => "stato-contrattualizzazione",
+                    "conclusa" => "stato-conclusa",
+                    _ => ""
+                };
+
                 <tr>
-                    <td>@p.ID_Pratiche</td>
+                    <td class="text-center">@p.ID_Pratiche</td>
                     <td>@p.Titolo</td>
                     <td>@p.NomeCliente</td>
                     <td>@p.NomeOwner</td>
-                    <td>@(p.DataCreazione.HasValue ? p.DataCreazione.Value.ToString("dd/MM/yyyy") : "-")</td>
-                    <td>@p.Stato</td>
+                    <td class="text-center">@($"{p.DataCreazione:dd/MM/yyyy}")</td>
+                    <td class="text-center @statoClasse">@p.Stato</td>
                 </tr>
             }
         </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="6" class="text-center">
+                    Totale pratiche incluse nel report: <strong>@Model.Count</strong>
+                </td>
+            </tr>
+        </tfoot>
     </table>
 </body>
 </html>
-

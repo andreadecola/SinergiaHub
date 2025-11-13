@@ -6,7 +6,7 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Report Avvisi Parcella</title>
+    <title>Riepilogo Avvisi Parcella</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,7 +16,14 @@
 
         h2 {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 5px;
+        }
+
+        .periodo {
+            text-align: center;
+            font-size: 10px;
+            color: #555;
+            margin-bottom: 15px;
         }
 
         table {
@@ -27,47 +34,110 @@
 
         th, td {
             border: 1px solid #444;
-            padding: 4px 6px;
+            padding: 5px 6px;
             text-align: left;
         }
 
         th {
-            background-color: #f2f2f2;
+            background-color: #f0f0f0;
+            font-weight: bold;
         }
+
+        td {
+            font-size: 10px;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        /* Stati */
+        .stato-attesa {
+            color: #c0392b;
+            font-weight: bold;
+        }
+        /* rosso */
+        .stato-inviato {
+            color: #e67e22;
+            font-weight: bold;
+        }
+        /* arancio */
+        .stato-pagato {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        /* verde */
     </style>
 </head>
 <body>
-    <h2>Report Avvisi Parcella</h2>
+    <h2>Riepilogo Avvisi Parcella</h2>
+    <div class="periodo">
+        Report generato il @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+    </div>
+
     <table>
         <thead>
             <tr>
-                <th>ID</th>
-                <th>Pratica</th>
-                <th>Data Avviso</th>
-                <th>Importo</th>
-                <th>Contributo Integrativo %</th>
-                <th>IVA %</th>
-                <th>Totale Avviso Parcella</th>
-                <th>Stato</th>
-                <th>Metodo Pagamento</th>
+                <th style="width:4%">ID</th>
+                <th style="width:12%">Pratica</th>
+                <th style="width:12%">Responsabile</th>
+                <th style="width:12%">Owner Cliente</th>
+                <th style="width:7%">Data Avviso</th>
+                <th style="width:7%">Competenza</th>
+                <th style="width:6%">Trimestre</th>
+                <th style="width:7%">Importo Base</th>
+                <th style="width:6%">IVA</th>
+                <th style="width:6%">C.I.</th>
+                <th style="width:6%">Rimb. Spese</th>
+                <th style="width:7%">Totale (€)</th>
+                <th style="width:7%">Incassato (€)</th>
+                <th style="width:7%">Residuo (€)</th>
+                <th style="width:6%">Stato</th>
             </tr>
         </thead>
         <tbody>
             @foreach (var a in Model)
             {
+                string statoClasse = a.Stato switch
+                {
+                    "In attesa" => "stato-attesa",
+                    "Inviato" => "stato-inviato",
+                    "Pagato" => "stato-pagato",
+                    _ => ""
+                };
+
                 <tr>
-                    <td>@a.ID_AvvisoParcelle</td>
+                    <td class="text-center">@a.ID_AvvisoParcelle</td>
                     <td>@a.NomePratica</td>
-                    <td>@(a.DataAvviso.HasValue ? a.DataAvviso.Value.ToString("dd/MM/yyyy") : "-")</td>
-                    <td>@(a.Importo.HasValue ? a.Importo.Value.ToString("N2") : "0,00")</td>
-                    <td>@(a.ContributoIntegrativoImporto?.ToString("N2") ?? "0")%</td>
-                    <td>@(a.ImportoIVA?.ToString("N2") ?? "0")%</td>
-                    <td>@(a.TotaleAvvisoParcella.HasValue ? a.TotaleAvvisoParcella.Value.ToString("N2") : "0,00")</td>
-                    <td>@a.Stato</td>
-                    <td>@a.MetodoPagamento</td>
+                    <td>@a.NomeResponsabilePratica</td>
+                    <td>@a.NomeOwnerCliente</td>
+                    <td class="text-center">@($"{a.DataAvviso:dd/MM/yyyy}")</td>
+                    <td class="text-center">@($"{a.DataCompetenzaEconomica:dd/MM/yyyy}")</td>
+                    <td class="text-center">@a.TrimestreCompetenza</td>
+                    <td class="text-right">@($"{a.Importo ?? 0:N2}")</td>
+                    <td class="text-right">@($"{a.ImportoIVA ?? 0:N2}")</td>
+                    <td class="text-right">@($"{a.ContributoIntegrativoImporto ?? 0:N2}")</td>
+                    <td class="text-right">@($"{a.ImportoRimborsoSpese ?? 0:N2}")</td>
+                    <td class="text-right">@($"{a.TotaleAvvisoParcella ?? 0:N2}")</td>
+                    <td class="text-right">@($"{a.TotaleIncassato:N2}")</td>
+                    <td class="text-right">@($"{a.ImportoResiduoEffettivo:N2}")</td>
+                    <td class="text-center @statoClasse">@a.Stato</td>
                 </tr>
             }
         </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="11" class="text-right"><strong>TOTALE COMPLESSIVO</strong></td>
+                <td class="text-right"><strong>@($"{Model.Sum(a => a.TotaleAvvisoParcella ?? 0):N2}")</strong></td>
+                <td class="text-right"><strong>@($"{Model.Sum(a => a.TotaleIncassato):N2}")</strong></td>
+                <td class="text-right"><strong>@($"{Model.Sum(a => a.ImportoResiduoEffettivo):N2}")</strong></td>
+                <td></td>
+            </tr>
+        </tfoot>
     </table>
 </body>
 </html>

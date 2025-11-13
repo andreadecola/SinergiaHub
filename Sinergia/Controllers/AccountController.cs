@@ -16,55 +16,105 @@ namespace Sinergia.Controllers
         // GET: Login
         public ActionResult Index()
         {
-            return View("Login");
+            // 🔹 Passa un modello vuoto per evitare NullReferenceException
+            var model = new LoginViewModel();
+            return View("Login", model);
         }
+
 
         // POST: Login
         [HttpPost]
         public ActionResult Index(LoginViewModel model)
         {
-            if (!ModelState.IsValid)
-                return View("Login", model);
-
-            var user = UserManager.AutenticaUtente(model.Nome, model.Password);
-
-            if (user == null)
+            try
             {
-                ModelState.AddModelError("", "Credenziali non valide.");
-                return View("Login", model);
-            }
+                if (!ModelState.IsValid)
+                    return View("Login", model);
 
-            // 1. Salva utente in sessione
-            Session["User"] = user;
+                var user = UserManager.AutenticaUtente(model.Nome, model.Password);
 
-            // 2. Autenticazione ASP.NET Forms
-            FormsAuthentication.SetAuthCookie(user.Nome, false);
-
-            // 3. Se ha una PasswordTemporanea, mostra modale
-            if (!string.IsNullOrEmpty(user.PasswordTemporanea))
-            {
-                TempData["PasswordTemporanea"] = true; // 👈 segnalino per mostrare la modale
-                return View("Login",model); // 🔥 Torni alla Index view, modale si apre da sola
-            }
-
-            // 4. Carica menu dinamico
-            Session["menuLinks"] = MenuHelper.GetMenuUtente(user.ID_Utente, user.TipoUtente);
-
-            // 5. Imposta cookie azienda (se non esiste)
-            using (var db = new SinergiaDB())
-            {
-                var azienda = db.Clienti.FirstOrDefault(c => c.Stato == "Attivo" && c.TipoCliente == "Azienda");
-
-                if (azienda != null)
+                if (user == null)
                 {
-                    var cookie = new HttpCookie("SinergiaAzienda", azienda.Nome);
-                    Response.Cookies.Add(cookie);
-                    TempData["aziendaSelezionata"] = azienda.Nome;
+                    System.Diagnostics.Trace.WriteLine($"❌ [LOGIN] Credenziali non valide per utente: {model.Nome}");
+                    ModelState.AddModelError("", "Credenziali non valide.");
+                    return View("Login", model);
                 }
-            }
 
-            // 6. Redirect alla Dashboard
-            return RedirectToAction("Cruscotto", "Home");
+                // ======================================================
+                // 1️⃣ Salva utente in sessione
+                // ======================================================
+                Session["User"] = user;
+                Session["ID_Utente"] = user.ID_Utente;
+                Session["TipoUtente"] = user.TipoUtente;
+
+                // 🔍 DEBUG LOG DETTAGLI LOGIN
+                System.Diagnostics.Trace.WriteLine("═══════════════════════════════════════════════");
+                System.Diagnostics.Trace.WriteLine($"🔑 [LOGIN SUCCESS] Ore {DateTime.Now:HH:mm:ss}");
+                System.Diagnostics.Trace.WriteLine($"👤 Nome utente: {user.Nome} {user.Cognome}");
+                System.Diagnostics.Trace.WriteLine($"🏷️ TipoUtente: {user.TipoUtente}");
+                System.Diagnostics.Trace.WriteLine($"🆔 ID_Utente: {user.ID_Utente}");
+                System.Diagnostics.Trace.WriteLine($"💾 Session[\"User\"]: {(Session["User"] != null ? "OK" : "❌ null")}");
+                System.Diagnostics.Trace.WriteLine($"💾 Session[\"ID_Utente\"]: {Session["ID_Utente"]}");
+                System.Diagnostics.Trace.WriteLine($"💾 Session[\"TipoUtente\"]: {Session["TipoUtente"]}");
+                System.Diagnostics.Trace.WriteLine("═══════════════════════════════════════════════");
+
+                // ======================================================
+                // 2️⃣ Autenticazione ASP.NET Forms
+                // ======================================================
+                FormsAuthentication.SetAuthCookie(user.Nome, false);
+
+                // ======================================================
+                // 3️⃣ Se ha una PasswordTemporanea, mostra modale
+                // ======================================================
+                if (!string.IsNullOrEmpty(user.PasswordTemporanea))
+                {
+                    System.Diagnostics.Trace.WriteLine($"⚠️ [LOGIN] L’utente {user.Nome} ha una password temporanea attiva.");
+                    TempData["PasswordTemporanea"] = true;
+                    return View("Login", model);
+                }
+
+                // ======================================================
+                // 4️⃣ Carica menu dinamico
+                // ======================================================
+                Session["menuLinks"] = MenuHelper.GetMenuUtente(user.ID_Utente, user.TipoUtente);
+                System.Diagnostics.Trace.WriteLine("📋 Menu utente caricato correttamente.");
+
+                // ======================================================
+                // 5️⃣ Imposta cookie azienda (se non esiste)
+                // ======================================================
+                using (var db = new SinergiaDB())
+                {
+                    var azienda = db.Clienti.FirstOrDefault(c => c.Stato == "Attivo" && c.TipoCliente == "Azienda");
+                    if (azienda != null)
+                    {
+                        var cookie = new HttpCookie("SinergiaAzienda", azienda.Nome);
+                        Response.Cookies.Add(cookie);
+                        TempData["aziendaSelezionata"] = azienda.Nome;
+                        System.Diagnostics.Trace.WriteLine($"🏢 Azienda impostata in cookie: {azienda.Nome}");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Trace.WriteLine("⚠️ Nessuna azienda attiva trovata nel DB.");
+                    }
+                }
+
+                // ======================================================
+                // ✅ 6️⃣ Pulizia log periodica
+                // ======================================================
+                Sinergia.App_Helpers.DatabaseMaintenanceHelper.PulisciLogSinergia();
+                System.Diagnostics.Trace.WriteLine("🧹 Pulizia log completata (se necessaria).");
+
+                // ======================================================
+                // 7️⃣ Redirect alla Dashboard
+                // ======================================================
+                System.Diagnostics.Trace.WriteLine("🚀 Redirect verso Home/Cruscotto.\n\n");
+                return RedirectToAction("Cruscotto", "Home");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"❌ [LOGIN] Errore critico: {ex.Message}");
+                throw;
+            }
         }
 
 
@@ -74,8 +124,10 @@ namespace Sinergia.Controllers
         {
             Session.Clear();
             FormsAuthentication.SignOut();
-            return RedirectToAction("Index");
+            // 🔹 Torna sempre all'action che inizializza il model
+            return RedirectToAction("Index", "Account");
         }
+
 
 
 

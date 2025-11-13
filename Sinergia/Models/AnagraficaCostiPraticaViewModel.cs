@@ -44,5 +44,16 @@ namespace Sinergia.Models
 
         public string ID_CodiceCosto => $"CPROG-{ID_AnagraficaCosto}";
 
+        // =====================================================
+        // 🏷️ NUOVI CAMPI — Gestione categorie costi
+        // =====================================================
+
+        [Display(Name = "Categoria")]
+        [Required(ErrorMessage = "La categoria è obbligatoria.")]
+        public int? ID_Categoria { get; set; }   // FK -> CategorieCosti.ID_Categoria
+
+        [Display(Name = "Nome Categoria")]
+        public string NomeCategoria { get; set; } // Popolato in lista o in GetCostoProgetto
+
     }
 }

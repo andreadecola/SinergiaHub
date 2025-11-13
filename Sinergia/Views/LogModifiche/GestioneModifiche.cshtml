@@ -3,49 +3,168 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
+
+<style>
+    /* 🎨 Mobile cards */
+    .mobile-card-log {
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #fff;
+        box-shadow: 0 2px 3px rgba(0, 0, 0, 0.05);
+        margin-bottom: 10px;
+    }
+
+        .mobile-card-log strong {
+            display: block;
+            color: #0d6efd;
+            font-size: 1rem;
+        }
+
+        .mobile-card-log .small {
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        .mobile-card-log .text-muted {
+            font-size: 0.8rem;
+        }
+
+    /* 📱 Impaginazione verticale per il dettaglio mobile */
+    #contenutoDettaglioModificaMobile {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding-bottom: 4rem;
+    }
+
+    /* Ogni sezione del dettaglio */
+    .dettaglio-blocco {
+        display: flex;
+        flex-direction: column;
+        padding: 0.75rem 1rem;
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        border: 1px solid #e0e0e0;
+    }
+
+        /* Etichetta (titolo del campo) */
+        .dettaglio-blocco .etichetta {
+            font-size: 0.85rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        /* Valore (testo del campo) */
+        .dettaglio-blocco .valore {
+            font-size: 1rem;
+            color: #212529;
+            word-wrap: break-word;
+            white-space: normal;
+        }
+
+        /* Blocchi di testo multilinea (come i Dettagli) */
+        .dettaglio-blocco.lungo .valore {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+    /* Footer sticky in basso */
+    #viewDettaglioModificaMobile .bg-light {
+        position: sticky;
+        bottom: 0;
+    }
+
+</style>
 <div class="p-3">
+
     <!-- 🔍 FILTRI -->
-    <div class="row mb-3 align-items-end">
-        <div class="col-auto">
-            <label class="mylabel">Tabella</label>
-            <select id="filtroTabella" class="form-select form-select-sm" style="min-width: 180px;">
-                <option value="">-- Seleziona tabella --</option>
-                @{
-                    var tabelle = new[] {
-                        "AnagraficaCostiPratica", "AnagraficaCostiTeam", "AnagraficaCostiProfessionista",  "AvvisiParcella",  "Clienti",  "Cluster","CompensiPratica",
-                        "CostiGeneraliUtente","CostiPersonaliUtente", "CostiPratica", "DatiBancari","DistribuzioneCostiTeam", "DocumentiAziende", "DocumentiPratiche",
-                        "EccezioniRicorrenzeCosti", "Economico","FinanziamentiProfessionisti","Finanziario","Incassi","MembriTeam","MovimentiBancari","OperatoriSinergia",
-                         "Permessi","PlafondUtente", "Pratiche", "Previsione", "Professioni", "RelazionePraticheUtenti",
-                        "RelazioneUtenti", "RicorrenzeCosti", "RimborsiPratica", "SettoriFornitori", "TeamProfessionisti", "TemplateIncarichi", "TipologieCosti",
-                        "TipoRagioneSociale","Utenti"
-                    };
+    <div class="filtro-container mb-3">
+        <div class="row align-items-end gy-2 gx-3">
+            <!-- 🔹 Selettore tabella -->
+            <div class="col-12 col-md-auto">
+                <label class="mylabel">Tabella</label>
+                <select id="filtroTabella" class="form-select form-select-sm text-center w-100">
+                    <option value=""> Seleziona tabella </option>
+                    @{
+                        var tabelle = new Dictionary<string, string>
+                            {
+                                { "AnagraficaCostiPratica_a", "Anagrafica Costi Pratica" },
+                                { "AnagraficaCostiProfessionista_a", "Anagrafica Costi Professionista" },
+                                { "AnagraficaCostiTeam_a", "Anagrafica Costi Team" },
+                                { "AvvisiParcella_a", "Avvisi Parcella" },
+                                { "BilancioProfessionista", "Bilancio Professionista" },
+                                { "Clienti_a", "Clienti" },
+                                { "ClientiProfessionisti_a", "Clienti Professionisti" },
+                                { "Cluster_a", "Cluster" },
+                                { "CompensiPratica_a", "Compensi Pratica" },
+                                { "CompensiPraticaDettaglio_a", "Compensi Pratica Dettaglio" },
+                                { "CostiGeneraliUtente_a", "Costi Generali Utente" },
+                                { "CostiPersonaliUtente_a", "Costi Personali Utente" },
+                                { "CostiPratica_a", "Costi Pratica" },
+                                { "DatiBancari_a", "Dati Bancari" },
+                                { "DistribuzioneCostiTeam_a", "Distribuzione Costi Team" },
+                                { "DocumentiAziende_a", "Documenti Aziende" },
+                                { "DocumentiPratiche_a", "Documenti Pratiche" },
+                                { "DocumentiProfessionisti_a", "Documenti Professionisti" },
+                                { "EccezioniRicorrenzeCosti_a", "Eccezioni Ricorrenze Costi" },
+                                { "Economico_a", "Economico" },
+                                { "FinanziamentiProfessionisti_a", "Finanziamenti Professionisti" },
+                                { "Finanziario_a", "Finanziario" },
+                                { "GenerazioneCosti", "Generazione Costi" },
+                                { "Incassi_a", "Incassi" },
+                                { "MembriTeam_a", "Membri Team" },
+                                { "MovimentiBancari_a", "Movimenti Bancari" },
+                                { "OperatoriSinergia_a", "Operatori Sinergia" },
+                                { "Permessi_a", "Permessi" },
+                                { "PlafondUtente_a", "Plafond Utente" },
+                                { "Pratiche_a", "Pratiche" },
+                                { "Previsione_a", "Previsione" },
+                                { "Professioni_a", "Professioni" },
+                                { "RelazionePraticheUtenti_a", "Relazione Pratiche Utenti" },
+                                { "RelazioneUtenti_a", "Relazione Utenti" },
+                                { "RicorrenzeCosti_a", "Ricorrenze Costi" },
+                                { "RimborsiPratica_a", "Rimborsi Pratica" },
+                                { "SettoriFornitori_a", "Settori Fornitori" },
+                                { "TeamProfessionisti_a", "Team Professionisti" },
+                                { "TemplateIncarichi_a", "Template Incarichi" },
+                                { "TipologieCosti_a", "Tipologie Costi" },
+                                { "TipoRagioneSociale_a", "Tipo Ragione Sociale" },
+                                { "Utenti_a", "Utenti" }
+                            };
 
 
-                    foreach (var tab in tabelle)
-                    {
-                        <option>@tab</option>
+                        foreach (var tab in tabelle)
+                        {
+                            <option value="@tab.Key">@tab.Value</option>
+;
+                        }
                     }
-                }
-            </select>
-        </div>
+                </select>
+            </div>
 
-        <div class="col-auto">
-            <label class="mylabel">Modifiche dal</label>
-            <input type="date" id="filtroDataDa" class="form-control form-control-sm" style="min-width: 140px;" />
-        </div>
+            <!-- 📅 Data inizio -->
+            <div class="col-6 col-md-auto">
+                <label class="mylabel">Dal</label>
+                <input type="date" id="filtroDataDa" class="form-control form-control-sm w-100" />
+            </div>
 
-        <div class="col-auto">
-            <label class="mylabel">Modifiche fino al</label>
-            <input type="date" id="filtroDataA" class="form-control form-control-sm" style="min-width: 140px;" />
-        </div>
+            <!-- 📅 Data fine -->
+            <div class="col-6 col-md-auto">
+                <label class="mylabel">Al</label>
+                <input type="date" id="filtroDataA" class="form-control form-control-sm w-100" />
+            </div>
 
-        <div class="col-auto">
-            <label class="mylabel">Testo</label>
-            <input type="text" id="filtroTesto" class="form-control form-control-sm" placeholder="Cerca..." style="min-width: 180px;" />
-        </div>
+            <!-- 🔍 Testo ricerca -->
+            <div class="col-12 col-md-auto">
+                <label class="mylabel">Testo</label>
+                <input type="text" id="filtroTesto" class="form-control form-control-sm w-100" placeholder="Cerca..." />
+            </div>
 
-        <div class="col-auto d-flex align-items-end">
-            <div class="d-flex gap-2">
+            <!-- 🎛️ Azioni -->
+            <div class="col-12 col-md-auto d-flex align-items-end gap-2">
                 <select id="selectPageSizeLog" class="form-select form-select-sm w-auto">
                     <option>10</option>
                     <option>25</option>
@@ -57,41 +176,46 @@
     </div>
 
 
+    <!-- 🖥️ VERSIONE DESKTOP -->
+    <div class="d-none d-md-block">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover" id="tabellaLog">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Data</th>
+                        <th>Modificato da</th>
+                        <th>Versione</th>
+                        <th>Tipo</th>
+                        <th>Dettaglio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Dati caricati via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
 
+    <!-- 📱 VERSIONE MOBILE -->
+    <div id="listaLogMobile" class="d-md-none">
+        <!-- Dati caricati via JS -->
+    </div>
 
-    <!-- 📋 TABELLA -->
-    <div class="table-responsive">
-        <table class="table table-bordered table-hover" id="tabellaLog">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Data</th>
-                    <th>Modificato da</th>
-                    <th>Versione</th>
-                    <th>Tipo</th>
-                    <th>Dettaglio</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Dati caricati via JS -->
-            </tbody>
-        </table>
+    <!-- 🎛️ PAGINAZIONE -->
+    <div class="d-flex justify-content-between align-items-center mb-2" id="controlliLog">
+        <div></div>
+        <div id="paginazioneLog" class="d-flex gap-2 align-items-center"></div>
     </div>
 </div>
 
-<!-- 🎛️ CONTROLLI DI PAGINAZIONE -->
-<div class="d-flex justify-content-between align-items-center mb-2" id="controlliLog">
-    <div></div>
-    <div id="paginazioneLog" class="d-flex gap-2 align-items-center"></div>
-</div>
-
-<!-- 📦 MODALE DETTAGLIO -->
+<!-- 📦 MODALE DETTAGLIO DESKTOP -->
 <div class="modal fade" id="modaleDettaglioModifica" tabindex="-1" role="dialog" aria-labelledby="titoloModaleDettaglio" aria-hidden="true">
-    <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="titoloModaleDettaglio">Dettaglio Modifica</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-semibold" id="titoloModaleDettaglio">Dettaglio Modifica</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
             </div>
             <div class="modal-body" id="contenutoDettaglioModifica">
                 <!-- Il contenuto verrà caricato via JS -->
@@ -99,6 +223,36 @@
         </div>
     </div>
 </div>
+<!-- 📱 VIEW MOBILE - Dettaglio Modifica -->
+<div id="viewDettaglioModificaMobile" class="d-md-none position-fixed top-0 start-0 w-100 h-100 bg-white" style="display:none; z-index:1080;">
+    <!-- 🔹 HEADER -->
+    <div class="bg-primary text-white d-flex align-items-center justify-content-between p-3 shadow-sm">
+        <h6 class="m-0 fw-semibold">
+            <i class="bi bi-clock-history me-2"></i> Dettaglio Modifica
+        </h6>
+        <button type="button" class="btn btn-light btn-sm" onclick="chiudiViewMobile()">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+
+    <!-- 🔹 BODY -->
+    <div class="p-3 overflow-auto h-100" id="contenutoDettaglioModificaMobile">
+        <div class="text-center text-muted py-3" id="placeholderDettaglio">
+            <i class="bi bi-arrow-repeat fa-spin me-1"></i> Caricamento in corso...
+        </div>
+    </div>
+
+    <!-- 🔹 FOOTER -->
+    <div class="bg-light border-top p-2 text-end">
+        <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="chiudiViewMobile()">
+            <i class="bi bi-x-circle me-1"></i> Chiudi
+        </button>
+    </div>
+</div>
+
+
+
+
 
 <script>
     $(document).ready(function () {
@@ -123,12 +277,9 @@
             righe.each(function () {
                 const dataAttr = $(this).data('data');
                 const testoRicerca = ($(this).data('ricerca') || '').toLowerCase();
-
-                // Se la riga non ha data, la saltiamo
                 if (!dataAttr) return;
 
                 const dataModifica = new Date(dataAttr);
-
                 const passaTesto = testo === '' || testoRicerca.includes(testo);
                 const passaDataDa = dataDa === '' || dataModifica >= new Date(dataDa);
                 const passaDataA = dataA === '' || dataModifica <= new Date(dataA);
@@ -142,26 +293,54 @@
         });
     }
 
-
     function renderTabellaLog(rows) {
         const tbody = $('#tabellaLog tbody');
+        const listaMobile = $('#listaLogMobile');
         const paginationContainer = $('#paginazioneLog');
         let pageSize = parseInt($('#selectPageSizeLog').val()) || 10;
         let currentPage = 1;
 
         function renderPage() {
-            tbody.html('');
+            tbody.empty();
+            listaMobile.empty();
+
             const totalPages = Math.ceil(rows.length / pageSize);
             currentPage = Math.min(currentPage, totalPages);
 
             const start = (currentPage - 1) * pageSize;
             const end = start + pageSize;
 
-            rows.slice(start, end).forEach(r => tbody.append(r));
+            const pageRows = rows.slice(start, end);
 
-            // Paginazione
+            // DESKTOP
+            pageRows.forEach(r => tbody.append(r));
+
+            // MOBILE
+            pageRows.forEach(r => {
+                const data = $(r).data('data') || '-';
+                const utente = $(r).find('td:nth-child(3)').text();
+                const versione = $(r).find('td:nth-child(4)').text();
+                const tipo = $(r).find('td:nth-child(5)').text();
+                const dettaglioHtml = $(r).find('td:nth-child(6)').html() || ""; // 🔹 mantiene il pulsante/link HTML
+
+                listaMobile.append(`
+                    <div class="mobile-card-log">
+                        <strong>${tipo}</strong>
+                        <div class="small text-muted mb-1">${data} • ${utente}</div>
+                        <div><b>Versione:</b> ${versione}</div>
+                        <div class="mt-1 d-flex justify-content-end align-items-center">
+                            ${dettaglioHtml}
+                        </div>
+                    </div>
+                `);
+            });
+
+
+
+            // PAGINAZIONE
             paginationContainer.html('');
-            const pageInfo = $('<span>').text(`Pagina ${currentPage} di ${totalPages || 1}`).addClass('me-2');
+            const total = totalPages || 1;
+            const pageInfo = $('<span>').text(`Pagina ${currentPage} di ${total}`).addClass('me-2');
             paginationContainer.append(pageInfo);
 
             const prevBtn = $('<button>')
@@ -192,9 +371,58 @@
         fetch(`/Home/DettaglioModifica?nomeTabella=${nomeTabella}&idArchivio=${idArchivio}`)
             .then(r => r.text())
             .then(html => {
-                document.getElementById("contenutoDettaglioModifica").innerHTML = html;
-                const modale = new bootstrap.Modal(document.getElementById("modaleDettaglioModifica"));
-                modale.show();
+                if (window.innerWidth >= 768) {
+                    // 💻 DESKTOP → usa modale classica Bootstrap
+                    document.getElementById("contenutoDettaglioModifica").innerHTML = html;
+                    const modale = new bootstrap.Modal(document.getElementById("modaleDettaglioModifica"));
+                    modale.show();
+                } else {
+                    // 📱 MOBILE → crea layout verticale a blocchi
+                    const contenuto = document.getElementById("contenutoDettaglioModificaMobile");
+                    contenuto.innerHTML = ""; // svuota
+
+                    // Rimuove placeholder se presente
+                    const placeholder = document.getElementById("placeholderDettaglio");
+                    if (placeholder) placeholder.remove();
+
+                    // 🔹 Converte il testo ricevuto in blocchi verticali
+                    const righe = html.split("\n").filter(r => r.trim() !== "");
+                    righe.forEach(riga => {
+                        // Divide per “:” mantenendo la parte dopo come valore
+                        const parts = riga.split(":");
+                        const titolo = parts[0]?.trim() || "";
+                        const valore = parts.slice(1).join(":").trim();
+
+                        if (titolo || valore) {
+                            const blocco = document.createElement("div");
+                            blocco.classList.add("dettaglio-blocco");
+
+                            blocco.innerHTML = `
+                            <div class="etichetta">${titolo || "&nbsp;"}</div>
+                            <div class="valore">${valore || "&nbsp;"}</div>
+                        `;
+
+                            if (valore.length > 100) blocco.classList.add("lungo");
+                            contenuto.appendChild(blocco);
+                        }
+                    });
+
+                    // Mostra la view mobile fullscreen
+                    document.getElementById("viewDettaglioModificaMobile").style.display = "block";
+                    document.body.style.overflow = "hidden"; // blocca scroll sotto
+                }
+            })
+            .catch(err => {
+                console.error("❌ Errore fetch:", err);
+                toastr.error("Errore di comunicazione con il server.");
             });
     }
+
+    function chiudiViewMobile() {
+        const view = document.getElementById("viewDettaglioModificaMobile");
+        view.style.display = "none";
+        document.body.style.overflow = "auto";
+    }
+
+
 </script>

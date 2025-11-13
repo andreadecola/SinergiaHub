@@ -90,5 +90,9 @@ namespace Sinergia.Model
         public int? ID_Owner { get; set; }
 
         public int? ID_SettoreFornitore { get; set; }
+
+        public int? ID_ServizioFornitore { get; set; }
+
+        public int? ID_CategoriaServizi { get; set; }
     }
 }

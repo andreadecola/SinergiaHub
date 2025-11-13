@@ -1,4 +1,10 @@
-﻿using Sinergia.ActionFilters;
+﻿using DocumentFormat.OpenXml.EMMA;
+using DocumentFormat.OpenXml.Packaging;   // WordprocessingDocument
+using DocumentFormat.OpenXml.Wordprocessing;
+using HtmlAgilityPack;
+using OpenXmlPowerTools;                  // HtmlConverter 
+using Rotativa;
+using Sinergia.ActionFilters;
 using Sinergia.App_Helpers;
 using Sinergia.Model;
 using Sinergia.Models;
@@ -10,16 +16,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Web;
 using System.Web.Mvc;
 using System.Web.UI.WebControls;
 using System.Xml.Linq;
-using DocumentFormat.OpenXml.Packaging;   // WordprocessingDocument
-using OpenXmlPowerTools;                  // HtmlConverter 
 using static Sinergia.Models.PraticaViewModel;
-using HtmlAgilityPack;
-using System.Text;
-using Rotativa;
 
 namespace SinergiaMvc.Controllers
 {
@@ -61,11 +64,11 @@ namespace SinergiaMvc.Controllers
             var operatoriDict = db.OperatoriSinergia.ToDictionary(c => c.ID_Cliente);
             var utentiDict = db.Utenti.ToDictionary(u => u.ID_Utente);
 
-            // 👤 Se Admin impersonifica un professionista → filtro
+            // 👤 Se Admin o Collaboratore impersonificano un professionista → filtro
             int idClienteProfessionistaSelezionato = UserManager.GetIDClienteCorrente();
-
             System.Diagnostics.Debug.WriteLine($"🟡 Sessione IDClienteProfessionistaCorrente = {idClienteProfessionistaSelezionato}");
 
+            // === ADMIN ===
             if (utenteCorrente.TipoUtente == "Admin" && idClienteProfessionistaSelezionato > 0)
             {
                 int idClienteProfessionista = idClienteProfessionistaSelezionato;
@@ -83,6 +86,7 @@ namespace SinergiaMvc.Controllers
                     )
                 );
             }
+            // === PROFESSIONISTA ===
             else if (utenteCorrente.TipoUtente == "Professionista")
             {
                 var op = db.OperatoriSinergia
@@ -103,8 +107,40 @@ namespace SinergiaMvc.Controllers
                     );
                 }
             }
+            // === COLLABORATORE ===
+            else if (utenteCorrente.TipoUtente == "Collaboratore")
+            {
+                int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
+
+                // 🔗 Recupero professionisti collegati
+                var professionistiCollegati = (from r in db.RelazioneUtenti
+                                               join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Cliente
+                                               where r.ID_UtenteAssociato == idUtenteCollegato
+                                                     && r.Stato == "Attivo"
+                                                     && o.TipoCliente == "Professionista"
+                                               select o).ToList();
+
+                // Se non ci sono → avviso
+                if (!professionistiCollegati.Any())
+                {
+                    ViewBag.IDClienteProfessionistaCorrente = null;   // forza null
+                    return PartialView("~/Views/Pratiche/_GestionePraticheList.cshtml", new List<PraticaViewModel>());
+                }
+
+                // Se ci sono → usa il primo oppure costringi a selezionare
+                int idClienteProfessionista = professionistiCollegati.First().ID_Cliente;
+
+                ViewBag.IDClienteProfessionistaCorrente = idClienteProfessionista;
+
+                query = query.Where(p =>
+                    p.ID_Owner == idClienteProfessionista
+                    || db.ClientiProfessionisti.Any(cp =>
+                           cp.ID_Cliente == p.ID_Cliente &&
+                           cp.ID_Professionista == idClienteProfessionista));
+            }
 
 
+            // === MAPPING IN VIEWMODEL ===
             var praticheList = query.ToList().Select(p =>
             {
                 string tipoCliente = "";
@@ -150,16 +186,44 @@ namespace SinergiaMvc.Controllers
                     nomeResponsabile = $"{u.Nome} {u.Cognome}";
                 }
 
-                bool haIncaricoGenerato = db.DocumentiPratiche.Any(d =>
-                    d.ID_Pratiche == p.ID_Pratiche &&
-                    (d.NomeFile.Contains("Incarico") || d.Note.Contains("Incarico")));
+                // ============================================================
+                // 📄 Recupero documenti incarico (per tipo)
+                // ============================================================
 
-                int? idDocumentoIncarico = db.DocumentiPratiche
+                // "Incarico Fisso"
+                var incaricoFisso = db.DocumentiPratiche
                     .Where(d => d.ID_Pratiche == p.ID_Pratiche &&
-                                (d.NomeFile.Contains("Incarico") || d.Note.Contains("Incarico")))
+                                d.CategoriaDocumento == "Incarico Fisso" &&
+                                (d.Stato == "Attivo" || d.Stato == "Da firmare"))
                     .OrderByDescending(d => d.DataCaricamento)
-                    .Select(d => (int?)d.ID_Documento)
                     .FirstOrDefault();
+
+                // "Incarico A Ore"
+                var incaricoAOre = db.DocumentiPratiche
+                    .Where(d => d.ID_Pratiche == p.ID_Pratiche &&
+                                d.CategoriaDocumento == "Incarico A Ore" &&
+                                (d.Stato == "Attivo" || d.Stato == "Da firmare"))
+                    .OrderByDescending(d => d.DataCaricamento)
+                    .FirstOrDefault();
+
+                // "Incarico Giudiziale"
+                var incaricoGiudiziale = db.DocumentiPratiche
+                    .Where(d => d.ID_Pratiche == p.ID_Pratiche &&
+                                d.CategoriaDocumento == "Incarico Giudiziale" &&
+                                (d.Stato == "Attivo" || d.Stato == "Da firmare"))
+                    .OrderByDescending(d => d.DataCaricamento)
+                    .FirstOrDefault();
+
+                // "Incarico Firmato (PDF)"
+                var incaricoFirmato = db.DocumentiPratiche
+                    .Where(d => d.ID_Pratiche == p.ID_Pratiche &&
+                                d.Stato == "Firmato")
+                    .OrderByDescending(d => d.DataCaricamento)
+                    .FirstOrDefault();
+
+
+
+                bool haIncaricoGenerato = incaricoFisso != null || incaricoAOre != null || incaricoGiudiziale != null;
 
                 return new PraticaViewModel
                 {
@@ -173,7 +237,6 @@ namespace SinergiaMvc.Controllers
                     ID_Cliente = p.ID_Cliente,
                     TipoCliente = tipoCliente,
 
-                    // 👇 nuovi campi gestiti
                     NomeCliente = nomeCliente,
                     ClienteRagioneSociale = ragioneSociale,
                     ClienteNomeCompleto = nomeCompleto,
@@ -192,8 +255,22 @@ namespace SinergiaMvc.Controllers
                     TerminiPagamento = p.TerminiPagamento,
                     OrePreviste = p.OrePreviste,
                     OreEffettive = p.OreEffettive,
+
+                    // ✅ nuovi campi incarichi
                     HaIncaricoGenerato = haIncaricoGenerato,
-                    ID_DocumentoIncarico = idDocumentoIncarico
+                    ID_IncaricoFisso = incaricoFisso?.ID_Documento,
+                    ID_IncaricoAOre = incaricoAOre?.ID_Documento,
+                    ID_IncaricoGiudiziale = incaricoGiudiziale?.ID_Documento,
+
+                    NomeFileIncaricoFisso = incaricoFisso?.NomeFile,
+                    NomeFileIncaricoAOre = incaricoAOre?.NomeFile,
+                    NomeFileIncaricoGiudiziale = incaricoGiudiziale?.NomeFile,
+                    // ✅ Nuovo: incarico firmato
+                    ID_IncaricoFirmato = incaricoFirmato?.ID_Documento,
+                    NomeFileIncaricoFirmato = incaricoFirmato != null
+                        ? (incaricoFirmato.NomeFile + incaricoFirmato.Estensione)
+                        : null
+
                 };
             }).ToList();
 
@@ -237,11 +314,13 @@ namespace SinergiaMvc.Controllers
                 }).ToList();
 
             ViewBag.TipoUtente = utenteCorrente.TipoUtente;
-            ViewBag.IDClienteProfessionistaCorrente = Session["IDClienteProfessionistaCorrente"] as int?;
+            // ✅ Se il professionista selezionato è > 0 lo passo alla ViewBag, altrimenti metto null
+            ViewBag.IDClienteProfessionistaCorrente = idClienteProfessionistaSelezionato > 0
+                ? (int?)idClienteProfessionistaSelezionato
+                : null;
 
             return PartialView("~/Views/Pratiche/_GestionePraticheList.cshtml", praticheList);
         }
-
 
         [HttpPost]
         public ActionResult CreaPratica(PraticaViewModel model)
@@ -310,14 +389,48 @@ namespace SinergiaMvc.Controllers
                     db.SaveChanges();
                     System.Diagnostics.Debug.WriteLine($"⏱ Dopo salvataggio Pratica: {stopwatch.ElapsedMilliseconds}ms");
 
+                    // ======================================================
+                    // 🗂️ Inserimento in tabella archivio PRATICHE_A
+                    // ======================================================
+                    try
+                    {
+                        var pratica_a = new Pratiche_a
+                        {
+                            ID_Pratica_Originale = pratica.ID_Pratiche,
+                            Titolo = pratica.Titolo,
+                            Descrizione = pratica.Descrizione,
+                            DataInizioAttivitaStimata = pratica.DataInizioAttivitaStimata,
+                            DataFineAttivitaStimata = pratica.DataFineAttivitaStimata,
+                            Stato = pratica.Stato,
+                            ID_Cliente = pratica.ID_Cliente,
+                            ID_UtenteResponsabile = pratica.ID_UtenteResponsabile,
+                            ID_UtenteCreatore = pratica.ID_UtenteCreatore,
+                            ID_Owner = pratica.ID_Owner,
+                            Budget = pratica.Budget,
+                            Note = pratica.Note,
+                            DataCreazione = pratica.DataCreazione,
+                            UltimaModifica = pratica.UltimaModifica,
+                            TrattenutaPersonalizzata = pratica.TrattenutaPersonalizzata,
+                            NumeroVersione = 1,
+                            DataArchiviazione = now,
+                            ID_UtenteArchiviazione = idUtente,
+                            ModificheTestuali = "Creazione pratica"
+                        };
+
+                        db.Pratiche_a.Add(pratica_a);
+                        db.SaveChanges();
+                        System.Diagnostics.Debug.WriteLine("✅ [CreaPratica] Inserita versione archivio in Pratiche_a.");
+                    }
+                    catch (Exception exArch)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"⚠️ [CreaPratica] Errore inserimento in Pratiche_a: {exArch.Message}");
+                    }
+
+                    // 🔄 Inserisci nuovi compensi dal JSON
                     if (!string.IsNullOrEmpty(model.CompensiJSON))
                     {
-                        System.Diagnostics.Debug.WriteLine("📦 JSON Compensi ricevuto:");
-                        System.Diagnostics.Debug.WriteLine(model.CompensiJSON);
-
-                        // Deserializzo come dizionario generico, così leggo anche le chiavi strane (_1, _2, ecc.)
                         var compensiRaw = Newtonsoft.Json.JsonConvert
-                            .DeserializeObject<List<Dictionary<string, string>>>(model.CompensiJSON);
+                            .DeserializeObject<List<Dictionary<string, object>>>(model.CompensiJSON);
 
                         if (compensiRaw != null && compensiRaw.Any())
                         {
@@ -327,54 +440,134 @@ namespace SinergiaMvc.Controllers
                                 var dettaglio = new CompensiPraticaDettaglio
                                 {
                                     ID_Pratiche = pratica.ID_Pratiche,
-                                    TipoCompenso = c.ContainsKey("Metodo") ? c["Metodo"] : null,
+                                    TipoCompenso = c.ContainsKey("Metodo") ? c["Metodo"]?.ToString() : null,
 
                                     Descrizione =
-                                      (c.ContainsKey("Descrizione") ? c["Descrizione"] :
-                                      (c.ContainsKey("Descrizione_1") ? c["Descrizione_1"] : null))
-                                      ?? (c.ContainsKey("Ruolo_1") ? c["Ruolo_1"] : null)
-                                      ?? (c.ContainsKey("Ruolo") ? c["Ruolo"] : null),
+                                        (c.ContainsKey("Descrizione") ? c["Descrizione"]?.ToString() :
+                                        (c.ContainsKey("Descrizione_1") ? c["Descrizione_1"]?.ToString() : null))
+                                        ?? (c.ContainsKey("Ruolo_1") ? c["Ruolo_1"]?.ToString() : null)
+                                        ?? (c.ContainsKey("Ruolo") ? c["Ruolo"]?.ToString() : null),
 
                                     Importo =
-                                      (c.ContainsKey("Importo") && decimal.TryParse(c["Importo"], out var imp) ? imp :
-                                      (c.ContainsKey("Importo_1") && decimal.TryParse(c["Importo_1"], out var imp1) ? imp1 : (decimal?)null))
-                                      ?? (c.ContainsKey("Tariffa_1") && decimal.TryParse(c["Tariffa_1"], out var impT) ? impT : (decimal?)null),
+                                        (c.ContainsKey("Importo") && decimal.TryParse(c["Importo"]?.ToString(), out var imp) ? imp :
+                                        (c.ContainsKey("Importo_1") && decimal.TryParse(c["Importo_1"]?.ToString(), out var imp1) ? imp1 : (decimal?)null))
+                                        ?? (c.ContainsKey("Tariffa_1") && decimal.TryParse(c["Tariffa_1"]?.ToString(), out var impT) ? impT : (decimal?)null),
 
-                                    Categoria = c.ContainsKey("Tipologia") ? c["Tipologia"] : (c.ContainsKey("Tipologia_1") ? c["Tipologia_1"] : "Contrattuale"),
+                                    Categoria = c.ContainsKey("Tipologia") ? c["Tipologia"]?.ToString()
+                                              : (c.ContainsKey("Tipologia_1") ? c["Tipologia_1"]?.ToString() : "Contrattuale"),
 
                                     ValoreStimato =
-                                      (c.ContainsKey("ValoreStimato") && decimal.TryParse(c["ValoreStimato"], out var val) ? val :
-                                      (c.ContainsKey("ValoreStimato_1") && decimal.TryParse(c["ValoreStimato_1"], out var val1) ? val1 : (decimal?)null)),
+                                        (c.ContainsKey("ValoreStimato") && decimal.TryParse(c["ValoreStimato"]?.ToString(), out var val) ? val :
+                                        (c.ContainsKey("ValoreStimato_1") && decimal.TryParse(c["ValoreStimato_1"]?.ToString(), out var val1) ? val1 : (decimal?)null)),
 
                                     Ordine = ordine++,
-                                    EstremiGiudizio = c.ContainsKey("EstremiGiudizio") ? c["EstremiGiudizio"] : null,
-                                    OggettoIncarico = c.ContainsKey("OggettoIncarico") ? c["OggettoIncarico"] : null,
+                                    EstremiGiudizio = c.ContainsKey("EstremiGiudizio") ? c["EstremiGiudizio"]?.ToString() : null,
+                                    OggettoIncarico = c.ContainsKey("OggettoIncarico") ? c["OggettoIncarico"]?.ToString() : null,
                                     DataCreazione = now,
                                     ID_UtenteCreatore = idUtente,
 
-                                    // 👇 Nuovo campo
+                                    // 👇 Intestatario
                                     ID_ProfessionistaIntestatario =
-                                          (c.ContainsKey("ID_ProfessionistaIntestatario") && int.TryParse(c["ID_ProfessionistaIntestatario"], out var idProf))
-                                          ? (int?)idProf : null
-                                        };
+                                        (c.ContainsKey("ID_ProfessionistaIntestatario") && int.TryParse(c["ID_ProfessionistaIntestatario"]?.ToString(), out var idProf))
+                                        ? (int?)idProf : null,
 
+                                    // 👇 Collaboratori salvati come stringa JSON
+                                    Collaboratori = c.ContainsKey("Collaboratori") && c["Collaboratori"] != null
+                                        ? Newtonsoft.Json.JsonConvert.SerializeObject(c["Collaboratori"])
+                                        : null
+                                };
 
-                                        db.CompensiPraticaDettaglio.Add(dettaglio);
-                                    }
-
-                                    db.SaveChanges();
-                                }
+                                db.CompensiPraticaDettaglio.Add(dettaglio);
                             }
 
-
-                    // 5️⃣ Salva file incarico
+                            db.SaveChanges();
+                        }
+                    }
+                    // ✅ Salvataggio file incarico (robusto con accenti, doppie estensioni, e fallback sicuri)
                     if (model.IncaricoProfessionale != null && model.IncaricoProfessionale.ContentLength > 0)
                     {
-                        var nomeFile = Path.GetFileName(model.IncaricoProfessionale.FileName);
-                        var cartella = Server.MapPath($"~/Documenti/Pratiche/{pratica.ID_Pratiche}/");
-                        Directory.CreateDirectory(cartella);
-                        var path = Path.Combine(cartella, nomeFile);
-                        model.IncaricoProfessionale.SaveAs(path);
+                        System.Diagnostics.Debug.WriteLine("📂 [UPLOAD INCARICO] Inizio caricamento...");
+
+                        using (var ms = new MemoryStream())
+                        {
+                            model.IncaricoProfessionale.InputStream.CopyTo(ms);
+                            var nomeOriginale = model.IncaricoProfessionale.FileName;
+                            System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] File originale: {nomeOriginale}");
+
+                            // 🧩 1️⃣ Estrazione e normalizzazione nome ed estensione
+                            var nomeFile = Path.GetFileName(nomeOriginale) ?? "Incarico";
+                            var estensione = Path.GetExtension(nomeFile)?.ToLower();
+
+                            // 🔧 Gestione file firmati digitalmente
+                            if (nomeFile.EndsWith(".p7m.pdf", StringComparison.OrdinalIgnoreCase))
+                            {
+                                estensione = ".pdf";
+                                nomeFile = Path.GetFileNameWithoutExtension(nomeFile.Replace(".p7m", ""));
+                                System.Diagnostics.Debug.WriteLine("[UPLOAD INCARICO] File .p7m.pdf → corretto come PDF");
+                            }
+                            else if (nomeFile.EndsWith(".xml.p7m", StringComparison.OrdinalIgnoreCase))
+                            {
+                                estensione = ".p7m";
+                                nomeFile = Path.GetFileNameWithoutExtension(nomeFile);
+                                System.Diagnostics.Debug.WriteLine("[UPLOAD INCARICO] File .xml.p7m → corretto come P7M");
+                            }
+
+                            // 🧩 2️⃣ Sanificazione nome file da accenti, apostrofi e simboli
+                            nomeFile = System.Text.RegularExpressions.Regex.Replace(
+                                nomeFile.Normalize(System.Text.NormalizationForm.FormC),
+                                @"[^\w\.\- ]", "_"
+                            );
+
+                            // 🧩 3️⃣ Fallback per estensione e content-type
+                            if (string.IsNullOrWhiteSpace(estensione))
+                                estensione = ".pdf";
+
+                            var tipoContenuto = model.IncaricoProfessionale.ContentType;
+                            if (string.IsNullOrWhiteSpace(tipoContenuto) || tipoContenuto == "application/octet-stream")
+                                tipoContenuto = "application/pdf";
+
+                            // 🧩 4️⃣ Controlla se esiste già un incarico per questa pratica (stesso nome)
+                            var incaricoEsistente = db.DocumentiPratiche
+                                .FirstOrDefault(d => d.ID_Pratiche == pratica.ID_Pratiche && d.NomeFile == nomeFile);
+
+                            if (incaricoEsistente != null)
+                            {
+                                // 🔄 Aggiorna file esistente
+                                incaricoEsistente.Documento = ms.ToArray();
+                                incaricoEsistente.DataCaricamento = DateTime.Now;
+                                incaricoEsistente.ID_UtenteCaricamento = idUtente;
+                                incaricoEsistente.TipoContenuto = tipoContenuto;
+                                incaricoEsistente.Estensione = estensione;
+                                incaricoEsistente.Stato = "Firmato";
+                                incaricoEsistente.Note = "Aggiornato incarico firmato (p7m/pdf)";
+                                System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] Aggiornato documento esistente: {nomeFile}");
+                            }
+                            else
+                            {
+                                // ➕ Inserisci nuovo incarico
+                                var doc = new DocumentiPratiche
+                                {
+                                    ID_Pratiche = pratica.ID_Pratiche,
+                                    NomeFile = nomeFile,
+                                    Estensione = estensione,
+                                    TipoContenuto = tipoContenuto,
+                                    Documento = ms.ToArray(),
+                                    DataCaricamento = DateTime.Now,
+                                    ID_UtenteCaricamento = idUtente,
+                                    Stato = "Firmato",
+                                    Note = "Incarico firmato (upload p7m/pdf)"
+                                };
+
+                                db.DocumentiPratiche.Add(doc);
+                                System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] Nuovo documento aggiunto: {nomeFile}");
+                            }
+
+                            // 🧩 5️⃣ Log dettagliato per debug
+                            System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] Estensione={estensione}, Tipo={tipoContenuto}, Bytes={ms.Length}");
+
+                            db.SaveChanges();
+                            System.Diagnostics.Debug.WriteLine("📁 [UPLOAD INCARICO] SaveChanges completato ✅");
+                        }
                     }
 
                     // 6️⃣ Inserisci solo Owner nel cluster
@@ -397,14 +590,34 @@ namespace SinergiaMvc.Controllers
                     {
                         foreach (var collab in model.UtentiAssociati)
                         {
-                            if (collab.ID_Utente == idOwner) continue; // evita duplicato owner
+                            if (collab.ID_Utente == idOwner)
+                                continue; // evita duplicato owner
 
+                            // 📌 Normalizzazione percentuale (accetta "33,33", "33.33", "33 %")
+                            decimal percentuale = 0;
+                            if (collab.PercentualePrevisione == 0)
+                            {
+                                // tenta di recuperare dal form il valore grezzo (se non già convertito)
+                                var raw = Request.Form[$"UtentiAssociati[{model.UtentiAssociati.IndexOf(collab)}].PercentualePrevisione"];
+                                if (!string.IsNullOrWhiteSpace(raw))
+                                {
+                                    raw = raw.Replace(',', '.').Replace("%", "").Trim();
+                                    if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                                        percentuale = parsed;
+                                }
+                            }
+                            else
+                            {
+                                percentuale = collab.PercentualePrevisione;
+                            }
+
+                            // 💾 Inserisci il collaboratore nel cluster
                             db.Cluster.Add(new Cluster
                             {
                                 ID_Pratiche = pratica.ID_Pratiche,
                                 ID_Utente = collab.ID_Utente,
-                                TipoCluster = collab.TipoCluster,
-                                PercentualePrevisione = collab.PercentualePrevisione,
+                                TipoCluster = string.IsNullOrEmpty(collab.TipoCluster) ? "Collaboratore" : collab.TipoCluster,
+                                PercentualePrevisione = percentuale,
                                 DataAssegnazione = now,
                                 ID_UtenteCreatore = idUtente
                             });
@@ -440,13 +653,23 @@ namespace SinergiaMvc.Controllers
                     }
 
                     // 9️⃣ Costi pratica
-                    if (model.CostiPratica != null)
+                    if (model.CostiPratica != null && model.CostiPratica.Any())
                     {
                         foreach (var cp in model.CostiPratica)
                         {
                             var anagrafica = db.AnagraficaCostiPratica
                                 .FirstOrDefault(a => a.ID_AnagraficaCosto == cp.ID_AnagraficaCosto);
 
+                            // 🔹 Normalizzazione date
+                            DateTime dataInserimento = cp.DataInserimento != default(DateTime)
+                                ? cp.DataInserimento
+                                : DateTime.Now;
+
+                            DateTime? dataCompetenza = cp.DataCompetenzaEconomica != default(DateTime)
+                                ? cp.DataCompetenzaEconomica
+                                : (DateTime?)null;
+
+                            // 🔹 Se c'è l’anagrafica, crea il costo collegato
                             if (anagrafica != null)
                             {
                                 db.CostiPratica.Add(new CostiPratica
@@ -455,25 +678,259 @@ namespace SinergiaMvc.Controllers
                                     ID_AnagraficaCosto = anagrafica.ID_AnagraficaCosto,
                                     Descrizione = $"{anagrafica.Nome} - {anagrafica.Descrizione}",
                                     Importo = cp.Importo,
+                                    ID_Fornitore = cp.ID_Fornitore, // ✅ nuovo campo
+                                    DataCompetenzaEconomica = dataCompetenza, // ✅ nuovo campo
                                     ID_UtenteCreatore = idUtente,
-                                    DataInserimento = now
+                                    DataInserimento = dataInserimento
                                 });
                             }
                             else
                             {
+                                // 🔹 In caso non ci sia l’anagrafica
                                 db.CostiPratica.Add(new CostiPratica
                                 {
                                     ID_Pratiche = pratica.ID_Pratiche,
                                     Descrizione = cp.Descrizione ?? "Voce non trovata",
                                     Importo = cp.Importo,
+                                    ID_Fornitore = cp.ID_Fornitore, // ✅ nuovo campo
+                                    DataCompetenzaEconomica = dataCompetenza, // ✅ nuovo campo
                                     ID_UtenteCreatore = idUtente,
-                                    DataInserimento = now
+                                    DataInserimento = dataInserimento
                                 });
                             }
                         }
                     }
 
                     db.SaveChanges();
+
+
+                    // ======================================================
+                    // 📊 [PREVISIONALE] Creazione automatica alla CreaPratica
+                    // ======================================================
+                    try
+                    {
+                        System.Diagnostics.Trace.WriteLine("🔹 [CreaPratica] Avvio creazione previsionale automatica...");
+
+                        int idPratica = pratica.ID_Pratiche;
+                        int idUtenteCreatore = idUtente;
+                        DateTime dataPrev = pratica.DataInizioAttivitaStimata ?? DateTime.Now;
+
+                        decimal budget = pratica.Budget;
+                        if (budget <= 0)
+                        {
+                            System.Diagnostics.Trace.WriteLine("⚠️ [CreaPratica] Budget nullo, nessuna previsione creata.");
+                        }
+                        else
+                        {
+                            // =====================================================
+                            // 🏛️ Recupero parametri economici base
+                            // =====================================================
+                            decimal percOwnerFee = db.RicorrenzeCosti
+                                .Where(r => r.Categoria == "Owner Fee" && r.Attivo && r.TipoValore == "Percentuale")
+                                .OrderByDescending(r => r.DataInizio)
+                                .Select(r => (decimal?)r.Valore)
+                                .FirstOrDefault() ?? 0m;
+
+                            decimal percTrattenuta = db.RicorrenzeCosti
+                                .Where(r => r.Categoria == "Trattenuta Sinergia" && r.Attivo && r.TipoValore == "Percentuale")
+                                .OrderByDescending(r => r.DataInizio)
+                                .Select(r => (decimal?)r.Valore)
+                                .FirstOrDefault() ?? 0m;
+
+                            // =====================================================
+                            // 👥 Cluster collegati alla pratica
+                            // =====================================================
+                            var clusterList = db.Cluster
+                                .Where(c => c.ID_Pratiche == idPratica && c.TipoCluster == "Collaboratore")
+                                .ToList();
+
+                            decimal sommaCluster = clusterList.Sum(c => c.PercentualePrevisione);
+
+                            // ✅ Include anche la Trattenuta Sinergia nel bilanciamento del 100%
+                            decimal percResponsabile = Math.Max(0, 100 - percOwnerFee - percTrattenuta - sommaCluster);
+
+                            // 🔍 Controllo bilanciamento
+                            decimal sommaTotale = percResponsabile + percOwnerFee + percTrattenuta + sommaCluster;
+                            if (Math.Round(sommaTotale, 2) != 100m)
+                            {
+                                System.Diagnostics.Trace.WriteLine($"⚠️ [CreaPratica] Percentuali non bilanciate: somma = {sommaTotale:N2}% (Resp={percResponsabile}, Owner={percOwnerFee}, Tratt={percTrattenuta}, Cluster={sommaCluster})");
+                            }
+
+                            System.Diagnostics.Trace.WriteLine($"📈 [CreaPratica] Percentuali → Resp={percResponsabile}%, Owner={percOwnerFee}%, Tratt={percTrattenuta}%, ClusterTot={sommaCluster}%");
+
+                            // =====================================================
+                            // 📌 Funzione helper locale
+                            // =====================================================
+                            void AggiungiPrevisione(string tipo, int? idProfessionista, decimal percentuale, decimal importo, string descrizione)
+                            {
+                                if (idProfessionista == null || importo <= 0)
+                                {
+                                    System.Diagnostics.Trace.WriteLine($"⚠️ [Previsione] Scartata riga {descrizione} (id={idProfessionista}, importo={importo})");
+                                    return;
+                                }
+
+                                var prev = new Previsione
+                                {
+                                    ID_Pratiche = idPratica,
+                                    ID_Professionista = idProfessionista,
+                                    Percentuale = percentuale,
+                                    TipoOperazione = tipo,
+                                    Descrizione = descrizione,
+                                    ImportoPrevisto = Math.Round(importo, 2),
+                                    DataPrevisione = dataPrev,
+                                    Stato = "Previsionale",
+                                    ID_UtenteCreatore = idUtenteCreatore
+                                };
+
+                                db.Previsione.Add(prev);
+                                db.SaveChanges();
+
+                                db.Previsione_a.Add(new Previsione_a
+                                {
+                                    ID_PrevisioneOriginale = prev.ID_Previsione,
+                                    ID_Pratiche = prev.ID_Pratiche,
+                                    ID_Professionista = prev.ID_Professionista,
+                                    Percentuale = prev.Percentuale,
+                                    TipoOperazione = prev.TipoOperazione,
+                                    Descrizione = prev.Descrizione,
+                                    ImportoPrevisto = prev.ImportoPrevisto,
+                                    DataPrevisione = prev.DataPrevisione,
+                                    Stato = prev.Stato,
+                                    ID_UtenteCreatore = prev.ID_UtenteCreatore,
+                                    NumeroVersione = 1,
+                                    DataArchiviazione = DateTime.Now,
+                                    ID_UtenteArchiviazione = idUtenteCreatore,
+                                    ModificheTestuali = "Creazione automatica previsionale da pratica"
+                                });
+
+                                db.SaveChanges();
+                                System.Diagnostics.Trace.WriteLine($"✅ [Previsione] Aggiunta → {descrizione}, {importo:N2} €, {percentuale:N2}% (tipo={tipo})");
+                            }
+
+                            // =====================================================
+                            // 👤 1️⃣ RESPONSABILE – quota netta
+                            // =====================================================
+                            decimal quotaResp = budget * percResponsabile / 100m;
+                            AggiungiPrevisione("Entrata", pratica.ID_UtenteResponsabile, percResponsabile, quotaResp,
+                                $"Ricavo previsto (Responsabile): {pratica.Titolo}");
+
+                            // =====================================================
+                            // 👑 2️⃣ OWNER FEE
+                            // =====================================================
+                            if (pratica.ID_Owner != null && percOwnerFee > 0)
+                            {
+                                decimal quotaOwner = budget * percOwnerFee / 100m;
+                                AggiungiPrevisione("Entrata", pratica.ID_Owner, percOwnerFee, quotaOwner,
+                                    $"Quota Owner Fee ({percOwnerFee:N2}%): {pratica.Titolo}");
+                            }
+
+                            // =====================================================
+                            // 💼 3️⃣ TRATTENUTA SINERGIA (uscita)
+                            // =====================================================
+                            if (percTrattenuta > 0)
+                            {
+                                decimal quotaTratt = budget * percTrattenuta / 100m;
+                                AggiungiPrevisione("Uscita", pratica.ID_UtenteResponsabile, percTrattenuta, quotaTratt,
+                                    $"Trattenuta Sinergia ({percTrattenuta:N2}%): {pratica.Titolo}");
+                            }
+
+                            // =====================================================
+                            // 👥 4️⃣ COLLABORATORI CLUSTER
+                            // =====================================================
+                            foreach (var c in clusterList)
+                            {
+                                decimal importoCluster = budget * c.PercentualePrevisione / 100m;
+                                AggiungiPrevisione("Entrata", c.ID_Utente, c.PercentualePrevisione, importoCluster,
+                                    $"Quota Collaboratore (Cluster): {pratica.Titolo}");
+                            }
+
+                            // =====================================================
+                            // 🧾 5️⃣ COLLABORATORI DEI COMPENSI DETTAGLIO
+                            // =====================================================
+                            // ⚠️ NOTA:
+                            // Le percentuali dei collaboratori nei CompensiPraticaDettaglio
+                            // NON si sommano alle percentuali del previsionale principale.
+                            // Rappresentano solo ripartizioni interne del singolo compenso,
+                            // non quote del budget complessivo della pratica.
+                            // =====================================================
+                            var compensiDettaglio = db.CompensiPraticaDettaglio
+                                .Where(cDett => cDett.ID_Pratiche == idPratica)
+                                .ToList();
+
+                            foreach (var comp in compensiDettaglio)
+                            {
+                                if (string.IsNullOrWhiteSpace(comp.Collaboratori))
+                                    continue;
+
+                                try
+                                {
+                                    var listaColl = Newtonsoft.Json.Linq.JArray.Parse(comp.Collaboratori);
+
+                                    foreach (Newtonsoft.Json.Linq.JObject coll in listaColl)
+                                    {
+                                        // ✅ Percentuale interna al compenso
+                                        decimal perc = 0m;
+                                        if (coll["Percentuale"] != null && decimal.TryParse(coll["Percentuale"].ToString(), out decimal tmpPerc))
+                                            perc = tmpPerc;
+                                        if (perc <= 0) continue;
+
+                                        decimal baseImporto = comp.Importo ?? 0m;
+                                        if (baseImporto <= 0) continue;
+
+                                        decimal quota = Math.Round(baseImporto * (perc / 100m), 2);
+
+                                        // ✅ ID collaboratore
+                                        int? idCollab = null;
+                                        if (coll["ID_Collaboratore"] != null && int.TryParse(coll["ID_Collaboratore"].ToString(), out int tmpId))
+                                            idCollab = tmpId;
+                                        else if (coll["ID_Utente"] != null && int.TryParse(coll["ID_Utente"].ToString(), out tmpId))
+                                            idCollab = tmpId;
+
+                                        string nomeCollab = coll["NomeCollaboratore"]?.ToString() ?? "-";
+
+                                        if (idCollab == null)
+                                        {
+                                            System.Diagnostics.Trace.WriteLine(
+                                                $"⚠️ [Previsione] Scartata riga Quota Collaboratore Compenso: {comp.Descrizione} (id=null, importo={quota:N2})");
+                                            continue;
+                                        }
+
+                                        // ✅ Evita duplicati
+                                        bool esisteGia = db.Previsione.Any(prev =>
+                                            prev.ID_Pratiche == idPratica &&
+                                            prev.ID_Professionista == idCollab &&
+                                            prev.Descrizione.Contains(comp.Descrizione));
+
+                                        if (esisteGia)
+                                        {
+                                            System.Diagnostics.Trace.WriteLine(
+                                                $"⚠️ [Previsione] Saltata (duplicato) Quota Collaboratore Compenso: {comp.Descrizione} (coll={nomeCollab})");
+                                            continue;
+                                        }
+
+                                        // ✅ Crea previsione (solo per quella quota specifica)
+                                        AggiungiPrevisione("Entrata", idCollab, perc, quota,
+                                            $"Quota Collaboratore Compenso: {comp.Descrizione} (ID_Compenso={comp.ID_RigaCompenso})");
+
+                                        System.Diagnostics.Trace.WriteLine(
+                                            $"✅ [Previsione] Aggiunta → Quota Collaboratore Compenso: {comp.Descrizione}, {quota:N2} €, {perc:N2}% (ID_Compenso={comp.ID_RigaCompenso}, ID_Collab={idCollab}, Nome={nomeCollab})");
+                                    }
+                                }
+                                catch (Exception exJson)
+                                {
+                                    System.Diagnostics.Trace.WriteLine(
+                                        $"⚠️ [Previsione] Errore JSON per compenso '{comp.Descrizione}': {exJson.Message}");
+                                }
+                            }
+
+                            System.Diagnostics.Trace.WriteLine("✅ [CreaPratica] Creazione previsionale completata con successo.");
+                        }
+                    }
+                    catch (Exception exPrev)
+                    {
+                        System.Diagnostics.Trace.WriteLine($"❌ [CreaPratica] Errore durante creazione previsionale: {exPrev}");
+                    }
+
 
                     // 1️⃣4️⃣ Versionamento - CLUSTER
                     var clusterSalvati = db.Cluster.Where(c => c.ID_Pratiche == pratica.ID_Pratiche).ToList();
@@ -512,7 +969,8 @@ namespace SinergiaMvc.Controllers
                     }
 
                     // 1️⃣6️⃣ Versionamento - COSTI PRATICA
-                    var costiPratica = db.CostiPratica.Where(c => c.ID_Pratiche == pratica.ID_Pratiche).ToList();
+                    var costiPratica = db.CostiPratica .Where(c => c.ID_Pratiche == pratica.ID_Pratiche) .ToList();
+
                     foreach (var c in costiPratica)
                     {
                         db.CostiPratica_a.Add(new CostiPratica_a
@@ -521,6 +979,8 @@ namespace SinergiaMvc.Controllers
                             ID_AnagraficaCosto = c.ID_AnagraficaCosto,
                             Descrizione = c.Descrizione,
                             Importo = c.Importo,
+                            ID_Fornitore = c.ID_Fornitore, // ✅ nuovo campo
+                            DataCompetenzaEconomica = c.DataCompetenzaEconomica, // ✅ nuovo campo
                             ID_UtenteCreatore = c.ID_UtenteCreatore,
                             DataInserimento = c.DataInserimento,
                             ID_UtenteArchiviazione = idUtente,
@@ -529,6 +989,7 @@ namespace SinergiaMvc.Controllers
                             ModificheTestuali = "Creazione Costo Pratica"
                         });
                     }
+
 
                     // 1️⃣8️⃣ Versionamento - RIMBORSI
                     var rimborsi = db.RimborsiPratica.Where(r => r.ID_Pratiche == pratica.ID_Pratiche).ToList();
@@ -589,23 +1050,52 @@ namespace SinergiaMvc.Controllers
             }
             catch (DbEntityValidationException ex)
             {
+                // ======================================================
+                // 🔍 DEBUG DETTAGLIATO ERRORI DI VALIDAZIONE ENTITY FRAMEWORK
+                // ======================================================
                 var errors = ex.EntityValidationErrors
                     .SelectMany(e => e.ValidationErrors)
                     .Select(e => $"Campo: {e.PropertyName} - Errore: {e.ErrorMessage}")
                     .ToList();
 
-                // 🔍 Log in console Output di Visual Studio
+                System.Diagnostics.Debug.WriteLine("❌ [CreaPratica] ERRORE DI VALIDAZIONE");
+                System.Diagnostics.Debug.WriteLine($"🔢 Numero errori trovati: {errors.Count}");
+
                 foreach (var errore in errors)
-                    System.Diagnostics.Debug.WriteLine("❌ " + errore);
+                    System.Diagnostics.Debug.WriteLine("   • " + errore);
+
+                // ======================================================
+                // ⚙️ IMPOSTAZIONI DI RISPOSTA
+                // ======================================================
+                Response.StatusCode = 400; // Bad Request
+                Response.TrySkipIisCustomErrors = true; // evita pagina HTML di IIS
+
+                // ======================================================
+                // 📤 RESTITUZIONE RISPOSTA JSON
+                // ======================================================
+                return Json(new
+                {
+                    success = false,
+                    message = "⚠️ Errore di validazione dei dati.",
+                    dettagli = errors
+                }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("❌ [CreaPratica] ERRORE GENERICO");
+                System.Diagnostics.Debug.WriteLine(ex.ToString());
+
+                Response.StatusCode = 500;
+                Response.TrySkipIisCustomErrors = true;
 
                 return Json(new
                 {
                     success = false,
-                    message = "Errore di validazione",
-                    dettagli = errors
-                });
+                    message = "❌ Errore durante l'aggiornamento delle voci.",
+                    dettaglio = ex.Message,
+                    stack = ex.StackTrace
+                }, JsonRequestBehavior.AllowGet);
             }
-
 
         }
 
@@ -731,6 +1221,99 @@ namespace SinergiaMvc.Controllers
                     pratica.OrePreviste = model.OrePreviste;
                     pratica.OreEffettive = model.OreEffettive;
 
+                    // ✅ 5️⃣ Salva o aggiorna file incarico nel DB (robusto con supporto PDF/P7M e nomi speciali)
+                    if (model.IncaricoProfessionale != null && model.IncaricoProfessionale.ContentLength > 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine("📂 [UPLOAD INCARICO] Inizio caricamento in ModificaPratica...");
+
+                        using (var ms = new MemoryStream())
+                        {
+                            model.IncaricoProfessionale.InputStream.CopyTo(ms);
+                            System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] File letto: {ms.Length / 1024} KB");
+
+                            // 🧩 1️⃣ Estrazione e normalizzazione nome file ed estensione
+                            var nomeOriginale = model.IncaricoProfessionale.FileName;
+                            System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] File originale: {nomeOriginale}");
+
+                            var nomeFile = Path.GetFileName(nomeOriginale) ?? "Incarico";
+                            var estensione = Path.GetExtension(nomeFile)?.ToLower();
+
+                            // 🔧 Gestione file firmati digitalmente
+                            if (nomeFile.EndsWith(".p7m.pdf", StringComparison.OrdinalIgnoreCase))
+                            {
+                                estensione = ".pdf";
+                                nomeFile = Path.GetFileNameWithoutExtension(nomeFile.Replace(".p7m", ""));
+                                System.Diagnostics.Debug.WriteLine("[UPLOAD INCARICO] File .p7m.pdf → corretto come PDF");
+                            }
+                            else if (nomeFile.EndsWith(".xml.p7m", StringComparison.OrdinalIgnoreCase))
+                            {
+                                estensione = ".p7m";
+                                nomeFile = Path.GetFileNameWithoutExtension(nomeFile);
+                                System.Diagnostics.Debug.WriteLine("[UPLOAD INCARICO] File .xml.p7m → corretto come P7M");
+                            }
+
+                            // 🧩 2️⃣ Sanificazione nome file da accenti, apostrofi o simboli strani
+                            nomeFile = System.Text.RegularExpressions.Regex.Replace(
+                                nomeFile.Normalize(System.Text.NormalizationForm.FormC),
+                                @"[^\w\.\- ]",
+                                "_"
+                            );
+
+                            // 🧩 3️⃣ Fallback sicuri per estensione e content-type
+                            if (string.IsNullOrWhiteSpace(estensione))
+                                estensione = ".pdf";
+
+                            var tipoContenuto = model.IncaricoProfessionale.ContentType;
+                            if (string.IsNullOrWhiteSpace(tipoContenuto) || tipoContenuto == "application/octet-stream")
+                                tipoContenuto = "application/pdf";
+
+                            // 🧩 4️⃣ Controllo se esiste già un incarico per la stessa pratica
+                            var incaricoEsistente = db.DocumentiPratiche
+                                .FirstOrDefault(d => d.ID_Pratiche == pratica.ID_Pratiche && d.Stato == "Firmato");
+
+                            if (incaricoEsistente != null)
+                            {
+                                // 🔄 Aggiorna incarico esistente
+                                incaricoEsistente.NomeFile = nomeFile;
+                                incaricoEsistente.Estensione = estensione;
+                                incaricoEsistente.TipoContenuto = tipoContenuto;
+                                incaricoEsistente.Documento = ms.ToArray();
+                                incaricoEsistente.DataCaricamento = now;
+                                incaricoEsistente.ID_UtenteCaricamento = idUtente;
+                                incaricoEsistente.Note = "Aggiornato incarico firmato (p7m/pdf)";
+                                incaricoEsistente.Stato = "Firmato";
+
+                                System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] Aggiornato documento esistente: {nomeFile}");
+                            }
+                            else
+                            {
+                                // ➕ Crea nuovo incarico
+                                var doc = new DocumentiPratiche
+                                {
+                                    ID_Pratiche = pratica.ID_Pratiche,
+                                    NomeFile = nomeFile,
+                                    Estensione = estensione,
+                                    TipoContenuto = tipoContenuto,
+                                    Documento = ms.ToArray(),
+                                    DataCaricamento = now,
+                                    ID_UtenteCaricamento = idUtente,
+                                    Stato = "Firmato",
+                                    Note = "Incarico firmato (upload p7m/pdf)"
+                                };
+
+                                db.DocumentiPratiche.Add(doc);
+                                System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] Nuovo documento aggiunto: {nomeFile}");
+                            }
+
+                            // 🧩 5️⃣ Log finale di verifica
+                            System.Diagnostics.Debug.WriteLine($"[UPLOAD INCARICO] Estensione={estensione}, Tipo={tipoContenuto}, Bytes={ms.Length}");
+
+                            db.SaveChanges();
+                            System.Diagnostics.Debug.WriteLine("📁 [UPLOAD INCARICO] SaveChanges completato ✅");
+                        }
+
+                        System.Diagnostics.Debug.WriteLine("[UPLOAD INCARICO] Fine caricamento incarico in ModificaPratica ✅");
+                    }
 
                     // 🔄 Gestione Compensi Pratica Dettaglio (con versionamento)
                     var compensiEsistenti = db.CompensiPraticaDettaglio
@@ -762,16 +1345,18 @@ namespace SinergiaMvc.Controllers
                             DataArchiviazione = now,
                             ID_UtenteArchiviazione = idUtente,
                             ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
+                            Collaboratori = c.Collaboratori, // già JSON
                             ModificheTestuali = "Modifica Compenso"
                         });
                     }
+
                     db.CompensiPraticaDettaglio.RemoveRange(compensiEsistenti);
 
                     // 🔄 Inserisci nuovi compensi dal JSON
                     if (!string.IsNullOrEmpty(model.CompensiJSON))
                     {
                         var compensiRaw = Newtonsoft.Json.JsonConvert
-                            .DeserializeObject<List<Dictionary<string, string>>>(model.CompensiJSON);
+                            .DeserializeObject<List<Dictionary<string, object>>>(model.CompensiJSON);
 
                         if (compensiRaw != null && compensiRaw.Any())
                         {
@@ -781,32 +1366,47 @@ namespace SinergiaMvc.Controllers
                                 var nuovoCompenso = new CompensiPraticaDettaglio
                                 {
                                     ID_Pratiche = pratica.ID_Pratiche,
-                                    TipoCompenso = c.ContainsKey("Metodo") ? c["Metodo"] : null,
+                                    TipoCompenso = c.ContainsKey("Metodo") ? c["Metodo"]?.ToString() : null,
 
                                     Descrizione =
-                                     (c.ContainsKey("Descrizione") ? c["Descrizione"] : (c.ContainsKey("Descrizione_1") ? c["Descrizione_1"] : null)) ?? (c.ContainsKey("Ruolo_1") ? c["Ruolo_1"] : null)?? (c.ContainsKey("Ruolo") ? c["Ruolo"] : null),
+                                        (c.ContainsKey("Descrizione") ? c["Descrizione"]?.ToString() :
+                                        (c.ContainsKey("Descrizione_1") ? c["Descrizione_1"]?.ToString() : null))
+                                        ?? (c.ContainsKey("Ruolo_1") ? c["Ruolo_1"]?.ToString() : null)
+                                        ?? (c.ContainsKey("Ruolo") ? c["Ruolo"]?.ToString() : null),
 
-                                    Importo = (c.ContainsKey("Importo") && decimal.TryParse(c["Importo"], out var imp) ? imp :(c.ContainsKey("Importo_1") && decimal.TryParse(c["Importo_1"], out var imp1) ? imp1 : (decimal?)null)) ?? (c.ContainsKey("Tariffa_1") && decimal.TryParse(c["Tariffa_1"], out var impT) ? impT : (decimal?)null),
+                                    Importo =
+                                        (c.ContainsKey("Importo") && decimal.TryParse(c["Importo"]?.ToString(), out var imp) ? imp :
+                                        (c.ContainsKey("Importo_1") && decimal.TryParse(c["Importo_1"]?.ToString(), out var imp1) ? imp1 : (decimal?)null))
+                                        ?? (c.ContainsKey("Tariffa_1") && decimal.TryParse(c["Tariffa_1"]?.ToString(), out var impT) ? impT : (decimal?)null),
 
-                                    Categoria = c.ContainsKey("Tipologia") ? c["Tipologia"] : (c.ContainsKey("Tipologia_1") ? c["Tipologia_1"] : "Contrattuale"),
+                                    Categoria = c.ContainsKey("Tipologia") ? c["Tipologia"]?.ToString()
+                                              : (c.ContainsKey("Tipologia_1") ? c["Tipologia_1"]?.ToString() : "Contrattuale"),
 
-                                    ValoreStimato = (c.ContainsKey("ValoreStimato") && decimal.TryParse(c["ValoreStimato"], out var val) ? val :(c.ContainsKey("ValoreStimato_1") && decimal.TryParse(c["ValoreStimato_1"], out var val1) ? val1 : (decimal?)null)),
+                                    ValoreStimato =
+                                        (c.ContainsKey("ValoreStimato") && decimal.TryParse(c["ValoreStimato"]?.ToString(), out var val) ? val :
+                                        (c.ContainsKey("ValoreStimato_1") && decimal.TryParse(c["ValoreStimato_1"]?.ToString(), out var val1) ? val1 : (decimal?)null)),
 
                                     Ordine = ordine++,
-                                    EstremiGiudizio = c.ContainsKey("EstremiGiudizio") ? c["EstremiGiudizio"] : null,
-                                    OggettoIncarico = c.ContainsKey("OggettoIncarico") ? c["OggettoIncarico"] : null,
+                                    EstremiGiudizio = c.ContainsKey("EstremiGiudizio") ? c["EstremiGiudizio"]?.ToString() : null,
+                                    OggettoIncarico = c.ContainsKey("OggettoIncarico") ? c["OggettoIncarico"]?.ToString() : null,
                                     DataCreazione = now,
                                     ID_UtenteCreatore = idUtente,
 
-                                    // 👇 nuovo campo
-                                    ID_ProfessionistaIntestatario =(c.ContainsKey("ID_ProfessionistaIntestatario") && int.TryParse(c["ID_ProfessionistaIntestatario"], out var idProf)) ? (int?)idProf : null
-                                };
+                                    ID_ProfessionistaIntestatario =
+                                        (c.ContainsKey("ID_ProfessionistaIntestatario") && int.TryParse(c["ID_ProfessionistaIntestatario"]?.ToString(), out var idProf))
+                                        ? (int?)idProf : null,
 
+                                    // 👇 Collaboratori salvati come stringa JSON
+                                    Collaboratori = c.ContainsKey("Collaboratori") && c["Collaboratori"] != null
+                                        ? Newtonsoft.Json.JsonConvert.SerializeObject(c["Collaboratori"])
+                                        : null
+                                };
 
                                 db.CompensiPraticaDettaglio.Add(nuovoCompenso);
                             }
                         }
                     }
+
 
                     // ... (inizio del metodo già definito sopra)
 
@@ -824,14 +1424,18 @@ namespace SinergiaMvc.Controllers
                             DataAssegnazione = c.DataAssegnazione,
                             DataArchiviazione = now,
                             ID_UtenteArchiviazione = idUtente,
-                            NumeroVersione = (db.Cluster_a.Where(x => x.ID_Cluster_Originale == c.ID_Cluster).Max(x => (int?)x.NumeroVersione) ?? 0) + 1
+                            NumeroVersione = (db.Cluster_a.Where(x => x.ID_Cluster_Originale == c.ID_Cluster)
+                                .Max(x => (int?)x.NumeroVersione) ?? 0) + 1
                         });
                     }
                     db.Cluster.RemoveRange(clusterEsistenti);
 
-                    var ownerFee = db.TipologieCosti.FirstOrDefault(t => t.Nome == "Owner Fee" && t.Stato == "Attivo" && t.Tipo == "Percentuale");
+                    // 💰 Owner Fee
+                    var ownerFee = db.TipologieCosti
+                        .FirstOrDefault(t => t.Nome == "Owner Fee" && t.Stato == "Attivo" && t.Tipo == "Percentuale");
                     decimal percentualeOwner = ownerFee?.ValorePercentuale ?? 5;
 
+                    // ➕ Inserisci di nuovo l’owner
                     var clusterOwner = new Cluster
                     {
                         ID_Pratiche = pratica.ID_Pratiche,
@@ -843,23 +1447,303 @@ namespace SinergiaMvc.Controllers
                     };
                     db.Cluster.Add(clusterOwner);
 
+                    // 👥 Collaboratori
                     if (model.UtentiAssociati != null)
                     {
                         foreach (var u in model.UtentiAssociati)
                         {
                             if (u.ID_Utente == idOwner) continue;
+
+                            // 📌 Normalizzazione percentuale (accetta 33,33 - 33.33 - 33 %)
+                            decimal percentuale = 0;
+                            if (u.PercentualePrevisione == 0)
+                            {
+                                // tenta di recuperare il valore grezzo dal form
+                                var raw = Request.Form[$"UtentiAssociati[{model.UtentiAssociati.IndexOf(u)}].PercentualePrevisione"];
+                                if (!string.IsNullOrWhiteSpace(raw))
+                                {
+                                    raw = raw.Replace(',', '.').Replace("%", "").Trim();
+                                    if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                                        percentuale = parsed;
+                                }
+                            }
+                            else
+                            {
+                                percentuale = u.PercentualePrevisione;
+                            }
+
+                            // 💾 Aggiungi collaboratore nel cluster
                             db.Cluster.Add(new Cluster
                             {
                                 ID_Pratiche = pratica.ID_Pratiche,
                                 ID_Utente = u.ID_Utente,
-                                TipoCluster = u.TipoCluster,
-                                PercentualePrevisione = u.PercentualePrevisione,
+                                TipoCluster = string.IsNullOrEmpty(u.TipoCluster) ? "Collaboratore" : u.TipoCluster,
+                                PercentualePrevisione = percentuale,
                                 DataAssegnazione = now,
                                 ID_UtenteCreatore = idUtente
                             });
                         }
                     }
+
                     db.SaveChanges();
+
+                    // ======================================================
+                    // 📊 [PREVISIONALE] Rigenerazione automatica in ModificaPratica
+                    // ======================================================
+                    try
+                    {
+                        System.Diagnostics.Trace.WriteLine("🔄 [ModificaPratica] Avvio rigenerazione previsionale...");
+
+                        int idPratica = pratica.ID_Pratiche;
+                        int idUtenteCreatore = idUtente;
+                        DateTime dataPrev = pratica.DataInizioAttivitaStimata ?? DateTime.Now;
+
+                        decimal budget = pratica.Budget;
+                        if (budget <= 0)
+                        {
+                            System.Diagnostics.Trace.WriteLine("⚠️ [ModificaPratica] Budget nullo, previsionale non aggiornato.");
+                        }
+                        else
+                        {
+                            // 🔄 Elimina eventuali righe previsionali precedenti della pratica
+                            var previsioniVecchie = db.Previsione.Where(p => p.ID_Pratiche == idPratica).ToList();
+                            if (previsioniVecchie.Any())
+                            {
+                                foreach (var p in previsioniVecchie)
+                                {
+                                    db.Previsione_a.Add(new Previsione_a
+                                    {
+                                        ID_PrevisioneOriginale = p.ID_Previsione,
+                                        ID_Pratiche = p.ID_Pratiche,
+                                        ID_Professionista = p.ID_Professionista,
+                                        Percentuale = p.Percentuale,
+                                        TipoOperazione = p.TipoOperazione,
+                                        Descrizione = p.Descrizione,
+                                        ImportoPrevisto = p.ImportoPrevisto,
+                                        DataPrevisione = p.DataPrevisione,
+                                        Stato = p.Stato,
+                                        ID_UtenteCreatore = p.ID_UtenteCreatore,
+                                        NumeroVersione = (db.Previsione_a
+                                            .Where(x => x.ID_PrevisioneOriginale == p.ID_Previsione)
+                                            .Max(x => (int?)x.NumeroVersione) ?? 0) + 1,
+                                        DataArchiviazione = DateTime.Now,
+                                        ID_UtenteArchiviazione = idUtenteCreatore,
+                                        ModificheTestuali = "Archiviazione automatica per rigenerazione previsionale"
+                                    });
+                                }
+
+                                db.Previsione.RemoveRange(previsioniVecchie);
+                                db.SaveChanges();
+                                System.Diagnostics.Trace.WriteLine($"🧹 [ModificaPratica] Rimosse {previsioniVecchie.Count} previsioni precedenti.");
+                            }
+
+                            // =====================================================
+                            // 🏛️ Recupero parametri economici base
+                            // =====================================================
+                            decimal percOwnerFee = db.RicorrenzeCosti
+                                .Where(r => r.Categoria == "Owner Fee" && r.Attivo && r.TipoValore == "Percentuale")
+                                .OrderByDescending(r => r.DataInizio)
+                                .Select(r => (decimal?)r.Valore)
+                                .FirstOrDefault() ?? 0m;
+
+                            decimal percTrattenuta = db.RicorrenzeCosti
+                                .Where(r => r.Categoria == "Trattenuta Sinergia" && r.Attivo && r.TipoValore == "Percentuale")
+                                .OrderByDescending(r => r.DataInizio)
+                                .Select(r => (decimal?)r.Valore)
+                                .FirstOrDefault() ?? 0m;
+
+                            // =====================================================
+                            // 👥 Cluster collegati alla pratica
+                            // =====================================================
+                            var clusterList = db.Cluster
+                                .Where(c => c.ID_Pratiche == idPratica && c.TipoCluster == "Collaboratore")
+                                .ToList();
+
+                            decimal sommaCluster = clusterList.Sum(c => c.PercentualePrevisione);
+                            decimal percResponsabile = Math.Max(0, 100 - percOwnerFee - sommaCluster);
+
+                            System.Diagnostics.Trace.WriteLine($"📈 [ModificaPratica] Percentuali → Resp={percResponsabile}%, Owner={percOwnerFee}%, ClusterTot={sommaCluster}%");
+
+                            // =====================================================
+                            // 📌 Helper per inserire nuova previsione
+                            // =====================================================
+                            void AggiungiPrevisione(string tipo, int? idProfessionista, decimal percentuale, decimal importo, string descrizione)
+                            {
+                                if (idProfessionista == null || importo <= 0)
+                                {
+                                    System.Diagnostics.Trace.WriteLine($"⚠️ [Previsione] Scartata: {descrizione} (id={idProfessionista}, importo={importo})");
+                                    return;
+                                }
+
+                                var prev = new Previsione
+                                {
+                                    ID_Pratiche = idPratica,
+                                    ID_Professionista = idProfessionista,
+                                    Percentuale = percentuale,
+                                    TipoOperazione = tipo,
+                                    Descrizione = descrizione,
+                                    ImportoPrevisto = Math.Round(importo, 2),
+                                    DataPrevisione = dataPrev,
+                                    Stato = "Previsionale",
+                                    ID_UtenteCreatore = idUtenteCreatore
+                                };
+
+                                db.Previsione.Add(prev);
+                                db.SaveChanges();
+
+                                db.Previsione_a.Add(new Previsione_a
+                                {
+                                    ID_PrevisioneOriginale = prev.ID_Previsione,
+                                    ID_Pratiche = prev.ID_Pratiche,
+                                    ID_Professionista = prev.ID_Professionista,
+                                    Percentuale = prev.Percentuale,
+                                    TipoOperazione = prev.TipoOperazione,
+                                    Descrizione = prev.Descrizione,
+                                    ImportoPrevisto = prev.ImportoPrevisto,
+                                    DataPrevisione = prev.DataPrevisione,
+                                    Stato = prev.Stato,
+                                    ID_UtenteCreatore = prev.ID_UtenteCreatore,
+                                    NumeroVersione = 1,
+                                    DataArchiviazione = DateTime.Now,
+                                    ID_UtenteArchiviazione = idUtenteCreatore,
+                                    ModificheTestuali = "Rigenerazione automatica previsionale da ModificaPratica"
+                                });
+
+                                db.SaveChanges();
+                                System.Diagnostics.Trace.WriteLine($"✅ [Previsione] Inserita → {descrizione}, {importo:N2} €, {percentuale:N2}% (tipo={tipo})");
+                            }
+
+                            // =====================================================
+                            // 👤 1️⃣ RESPONSABILE – quota netta
+                            // =====================================================
+                            decimal quotaResp = budget * percResponsabile / 100m;
+                            AggiungiPrevisione("Entrata", pratica.ID_UtenteResponsabile, percResponsabile, quotaResp, $"Ricavo previsto (Responsabile): {pratica.Titolo}");
+
+                            // =====================================================
+                            // 👑 2️⃣ OWNER FEE
+                            // =====================================================
+                            if (pratica.ID_Owner != null && percOwnerFee > 0)
+                            {
+                                decimal quotaOwner = budget * percOwnerFee / 100m;
+                                AggiungiPrevisione("Entrata", pratica.ID_Owner, percOwnerFee, quotaOwner, $"Quota Owner Fee ({percOwnerFee:N2}%): {pratica.Titolo}");
+                            }
+
+                            // =====================================================
+                            // 💼 3️⃣ TRATTENUTA SINERGIA (uscita)
+                            // =====================================================
+                            if (percTrattenuta > 0)
+                            {
+                                decimal quotaTratt = budget * percTrattenuta / 100m;
+                                AggiungiPrevisione("Uscita", pratica.ID_UtenteResponsabile, percTrattenuta, quotaTratt, $"Trattenuta Sinergia ({percTrattenuta:N2}%): {pratica.Titolo}");
+                            }
+
+                            // =====================================================
+                            // 👥 4️⃣ COLLABORATORI CLUSTER
+                            // =====================================================
+                            foreach (var c in clusterList)
+                            {
+                                decimal importoCluster = budget * c.PercentualePrevisione / 100m;
+                                AggiungiPrevisione("Entrata", c.ID_Utente, c.PercentualePrevisione, importoCluster,
+                                    $"Quota Collaboratore (Cluster): {pratica.Titolo}");
+                            }
+
+                            // =====================================================
+                            // 🧾 5️⃣ COLLABORATORI DEI COMPENSI DETTAGLIO (Compatibile v6)
+                            // =====================================================
+                            var compensiDettaglio = db.CompensiPraticaDettaglio
+                                .Where(cc => cc.ID_Pratiche == idPratica)
+                                .ToList();
+
+                            foreach (var comp in compensiDettaglio)
+                            {
+                                if (string.IsNullOrWhiteSpace(comp.Collaboratori))
+                                    continue;
+
+                                try
+                                {
+                                    var listaColl = Newtonsoft.Json.Linq.JArray.Parse(comp.Collaboratori);
+
+                                    foreach (Newtonsoft.Json.Linq.JObject coll in listaColl)
+                                    {
+                                        // ✅ Percentuale
+                                        decimal perc = 0m;
+                                        decimal tmpPerc;
+                                        if (coll["Percentuale"] != null && decimal.TryParse(coll["Percentuale"].ToString(), out tmpPerc))
+                                            perc = tmpPerc;
+                                        if (perc <= 0) continue;
+
+                                        // ✅ Importo base
+                                        decimal baseImporto = comp.Importo ?? 0m;
+                                        if (baseImporto <= 0) continue;
+
+                                        decimal quota = Math.Round(baseImporto * (perc / 100m), 2);
+
+                                        // ✅ Recupero ID collaboratore
+                                        int? idCollab = null;
+                                        int tmpId;
+                                        if (coll["ID_Collaboratore"] != null && int.TryParse(coll["ID_Collaboratore"].ToString(), out tmpId))
+                                            idCollab = tmpId;
+                                        else if (coll["ID_Utente"] != null && int.TryParse(coll["ID_Utente"].ToString(), out tmpId))
+                                            idCollab = tmpId;
+
+                                        // ✅ Nome collaboratore (solo log)
+                                        string nomeCollab = "-";
+                                        if (coll["NomeCollaboratore"] != null)
+                                            nomeCollab = coll["NomeCollaboratore"].ToString();
+
+                                        if (idCollab == null)
+                                        {
+                                            System.Diagnostics.Trace.WriteLine(
+                                                string.Format("⚠️ [Previsione] Scartata riga Quota Collaboratore Compenso: {0} (id=null, importo={1:N2})",
+                                                comp.Descrizione, quota));
+                                            continue;
+                                        }
+
+                                        // ✅ Controllo duplicati → stessa pratica, collaboratore e compenso
+                                        bool esisteGia = db.Previsione.Any(prev =>
+                                            prev.ID_Pratiche == idPratica &&
+                                            prev.ID_Professionista == idCollab &&
+                                            prev.Descrizione.Contains(comp.Descrizione));
+
+                                        if (esisteGia)
+                                        {
+                                            System.Diagnostics.Trace.WriteLine(
+                                                string.Format("⚠️ [Previsione] Saltata (duplicato) Quota Collaboratore Compenso: {0} (coll={1})",
+                                                comp.Descrizione, nomeCollab));
+                                            continue;
+                                        }
+
+                                        // ✅ Crea previsione legata al compenso specifico
+                                        AggiungiPrevisione(
+                                            "Entrata",
+                                            idCollab,
+                                            perc,
+                                            quota,
+                                            string.Format("Quota Collaboratore Compenso: {0} (ID_Compenso={1})",
+                                            comp.Descrizione, comp.ID_RigaCompenso)
+                                        );
+
+                                        System.Diagnostics.Trace.WriteLine(
+                                            string.Format("✅ [Previsione] Aggiunta → Quota Collaboratore Compenso: {0}, {1:N2} €, {2:N2}% (ID_Compenso={3}, ID_Collab={4}, Nome={5})",
+                                            comp.Descrizione, quota, perc, comp.ID_RigaCompenso, idCollab, nomeCollab));
+                                    }
+                                }
+                                catch (Exception exJson)
+                                {
+                                    System.Diagnostics.Trace.WriteLine(
+                                        string.Format("⚠️ [Previsione] Errore JSON per compenso '{0}': {1}", comp.Descrizione, exJson.Message));
+                                }
+                            }
+
+
+                            System.Diagnostics.Trace.WriteLine("✅ [ModificaPratica] Rigenerazione previsionale completata con successo.");
+                        }
+                    }
+                    catch (Exception exPrev)
+                    {
+                        System.Diagnostics.Trace.WriteLine($"❌ [ModificaPratica] Errore rigenerazione previsionale: {exPrev}");
+                    }
+
 
                     // 🔄 Relazioni
                     var relazioniEsistenti = db.RelazionePraticheUtenti.Where(r => r.ID_Pratiche == pratica.ID_Pratiche).ToList();
@@ -942,7 +1826,13 @@ namespace SinergiaMvc.Controllers
                     db.SaveChanges();
 
                     // 🔄 Costi Pratica
-                    var costiPraticaEsistenti = db.CostiPratica.Where(c => c.ID_Pratiche == pratica.ID_Pratiche).ToList();
+                    var costiPraticaEsistenti = db.CostiPratica
+                        .Where(c => c.ID_Pratiche == pratica.ID_Pratiche)
+                        .ToList();
+
+                    // ============================================================
+                    // 📚 1️⃣ ARCHIVIAZIONE VERSIONE PRECEDENTE (CostiPratica_a)
+                    // ============================================================
                     foreach (var c in costiPraticaEsistenti)
                     {
                         db.CostiPratica_a.Add(new CostiPratica_a
@@ -953,33 +1843,71 @@ namespace SinergiaMvc.Controllers
                             Importo = c.Importo,
                             ID_AnagraficaCosto = c.ID_AnagraficaCosto,
                             ID_ClienteAssociato = c.ID_ClienteAssociato,
+                            ID_Fornitore = c.ID_Fornitore, // ✅ nuovo campo
+                            DataCompetenzaEconomica = c.DataCompetenzaEconomica, // ✅ nuovo campo
                             DataInserimento = c.DataInserimento,
                             ID_UtenteCreatore = c.ID_UtenteCreatore,
                             DataArchiviazione = now,
                             ID_UtenteArchiviazione = idUtente,
-                            NumeroVersione = (db.CostiPratica_a.Where(x => x.ID_CostoPratica_Originale == c.ID_CostoPratica).Max(x => (int?)x.NumeroVersione) ?? 0) + 1
+                            NumeroVersione = (db.CostiPratica_a
+                                .Where(x => x.ID_CostoPratica_Originale == c.ID_CostoPratica)
+                                .Max(x => (int?)x.NumeroVersione) ?? 0) + 1,
+                            ModificheTestuali = "Modifica Costi Pratica"
                         });
                     }
+
+                    // 🧹 Rimuove i vecchi costi prima di reinserirli
                     db.CostiPratica.RemoveRange(costiPraticaEsistenti);
 
-                    if (model.CostiPratica != null)
+                    // ============================================================
+                    // 🆕 2️⃣ INSERIMENTO NUOVI COSTI
+                    // ============================================================
+                    if (model.CostiPratica != null && model.CostiPratica.Any())
                     {
                         foreach (var costo in model.CostiPratica)
                         {
                             if (costo.ID_AnagraficaCosto <= 0)
                                 continue;
 
-                            var voceAnagrafica = db.AnagraficaCostiPratica.FirstOrDefault(a => a.ID_AnagraficaCosto == costo.ID_AnagraficaCosto);
+                            var voceAnagrafica = db.AnagraficaCostiPratica
+                                .FirstOrDefault(a => a.ID_AnagraficaCosto == costo.ID_AnagraficaCosto);
+
+                            // 🔹 Normalizza date
+                            DateTime dataInserimento = costo.DataInserimento != default(DateTime)
+                                ? costo.DataInserimento
+                                : DateTime.Now;
+
+                            DateTime? dataCompetenza = costo.DataCompetenzaEconomica != default(DateTime)
+                                ? costo.DataCompetenzaEconomica
+                                : (DateTime?)null;
+
                             if (voceAnagrafica != null)
                             {
                                 db.CostiPratica.Add(new CostiPratica
                                 {
                                     ID_Pratiche = pratica.ID_Pratiche,
-                                    Descrizione = voceAnagrafica.Nome + " - " + voceAnagrafica.Descrizione,
+                                    Descrizione = $"{voceAnagrafica.Nome} - {voceAnagrafica.Descrizione}",
                                     ID_AnagraficaCosto = voceAnagrafica.ID_AnagraficaCosto,
                                     Importo = costo.Importo,
                                     ID_ClienteAssociato = costo.ID_ClienteAssociato,
-                                    DataInserimento = now,
+                                    ID_Fornitore = costo.ID_Fornitore, // ✅ nuovo campo
+                                    DataCompetenzaEconomica = dataCompetenza, // ✅ nuovo campo
+                                    DataInserimento = dataInserimento,
+                                    ID_UtenteCreatore = idUtente
+                                });
+                            }
+                            else
+                            {
+                                // 🔹 fallback se non c’è anagrafica
+                                db.CostiPratica.Add(new CostiPratica
+                                {
+                                    ID_Pratiche = pratica.ID_Pratiche,
+                                    Descrizione = costo.Descrizione ?? "Voce non trovata",
+                                    Importo = costo.Importo,
+                                    ID_ClienteAssociato = costo.ID_ClienteAssociato,
+                                    ID_Fornitore = costo.ID_Fornitore,
+                                    DataCompetenzaEconomica = dataCompetenza,
+                                    DataInserimento = dataInserimento,
                                     ID_UtenteCreatore = idUtente
                                 });
                             }
@@ -987,6 +1915,7 @@ namespace SinergiaMvc.Controllers
                     }
 
                     db.SaveChanges();
+
 
                     // 🔔 Notifiche
                     if (model.InviaNotificheAutomatiche)
@@ -1015,10 +1944,11 @@ namespace SinergiaMvc.Controllers
                         db.SaveChanges();
                     }
 
-                    if (model.Stato == " In Lavorazione")
+                    if (model.Stato == "In lavorazione") // 👈 correggi stringa
                     {
                         bool filePDFPresente = db.DocumentiPratiche.Any(d =>
                             d.ID_Pratiche == pratica.ID_Pratiche &&
+                            d.Documento != null &&
                             d.NomeFile.ToLower().EndsWith(".pdf"));
 
                         if (!filePDFPresente)
@@ -1026,11 +1956,10 @@ namespace SinergiaMvc.Controllers
                             return Json(new
                             {
                                 success = false,
-                                message = "⚠️ Non puoi passare allo stato 'Lavorazione' senza aver caricato un file PDF di incarico."
+                                message = "⚠️ Devi caricare un incarico firmato prima di passare allo stato 'In lavorazione'."
                             });
                         }
                     }
-
 
                     if (pratica.Stato == "Conclusa")
                     {
@@ -1044,12 +1973,54 @@ namespace SinergiaMvc.Controllers
             }
             catch (DbEntityValidationException ex)
             {
-                var dettagli = ex.EntityValidationErrors.SelectMany(x => x.ValidationErrors).Select(e => $"{e.PropertyName}: {e.ErrorMessage}");
-                return Json(new { success = false, message = $"Errore validazione: {string.Join("; ", dettagli)}" });
+                // ===============================
+                // 🔍 GESTIONE ERRORI DI VALIDAZIONE EF
+                // ===============================
+                var errors = ex.EntityValidationErrors
+                    .SelectMany(e => e.ValidationErrors)
+                    .Select(e => $"Campo: {e.PropertyName} - Errore: {e.ErrorMessage}")
+                    .ToList();
+
+                System.Diagnostics.Debug.WriteLine("❌ [ModificaPratica] ERRORE DI VALIDAZIONE");
+                foreach (var errore in errors)
+                    System.Diagnostics.Debug.WriteLine("   • " + errore);
+
+                Response.StatusCode = 400;
+                Response.TrySkipIisCustomErrors = true;
+
+                return Json(new
+                {
+                    success = false,
+                    message = "⚠️ Errore di validazione dei dati.",
+                    dettagli = errors
+                }, JsonRequestBehavior.AllowGet);
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = $"Errore generico: {ex.Message}" });
+                // ===============================
+                // 🔍 GESTIONE ERRORI GENERICI (con inner exception profonda)
+                // ===============================
+                Exception innerMost = ex;
+                while (innerMost.InnerException != null)
+                    innerMost = innerMost.InnerException;
+
+                string innerMessage = innerMost?.Message ?? "(nessuna inner exception)";
+                string innerStack = innerMost?.StackTrace ?? "";
+
+                System.Diagnostics.Debug.WriteLine("❌ [ModificaPratica] ERRORE GENERICO");
+                System.Diagnostics.Debug.WriteLine(ex.ToString());
+                System.Diagnostics.Debug.WriteLine($"🔍 Inner Exception (profonda): {innerMessage}");
+
+                Response.StatusCode = 500;
+                Response.TrySkipIisCustomErrors = true;
+
+                return Json(new
+                {
+                    success = false,
+                    message = "❌ Errore durante l'aggiornamento della pratica.",
+                    dettaglio = innerMessage,
+                    stack = ex.StackTrace
+                }, JsonRequestBehavior.AllowGet);
             }
         }
 
@@ -1112,19 +2083,6 @@ namespace SinergiaMvc.Controllers
                             db.Set<A>().Add(factory(item));
                     }
 
-                    Archivia(db.Cluster.Where(c => c.ID_Pratiche == id), c => new Cluster_a
-                    {
-                        ID_Cluster_Originale = c.ID_Cluster,
-                        ID_Pratiche = c.ID_Pratiche,
-                        ID_Utente = c.ID_Utente,
-                        TipoCluster = c.TipoCluster,
-                        PercentualePrevisione = c.PercentualePrevisione,
-                        DataAssegnazione = c.DataAssegnazione,
-                        DataArchiviazione = now,
-                        ID_UtenteArchiviazione = userId,
-                        NumeroVersione = (db.Cluster_a.Where(x => x.ID_Cluster_Originale == c.ID_Cluster).Max(x => (int?)x.NumeroVersione) ?? 0) + 1
-                    });
-
                     Archivia(db.RelazionePraticheUtenti.Where(r => r.ID_Pratiche == id), r => new RelazionePraticheUtenti_a
                     {
                         ID_Relazione_Originale = r.ID_Relazione,
@@ -1150,20 +2108,32 @@ namespace SinergiaMvc.Controllers
                         NumeroVersione = 1
                     });
 
-                    Archivia(db.CostiPratica.Where(c => c.ID_Pratiche == id), c => new CostiPratica_a
-                    {
-                        ID_CostoPratica_Originale = c.ID_CostoPratica,
-                        ID_Pratiche = c.ID_Pratiche,
-                        Descrizione = c.Descrizione,
-                        Importo = c.Importo,
-                        ID_AnagraficaCosto = c.ID_AnagraficaCosto,
-                        ID_ClienteAssociato = c.ID_ClienteAssociato,
-                        DataInserimento = c.DataInserimento,
-                        ID_UtenteCreatore = c.ID_UtenteCreatore,
-                        DataArchiviazione = now,
-                        ID_UtenteArchiviazione = userId,
-                        NumeroVersione = 1
-                    });
+                    // ============================================================
+                    // 🗑️ ARCHIVIAZIONE COSTI PRATICA PRIMA DELL’ELIMINAZIONE
+                    // ============================================================
+                    Archivia(
+                        db.CostiPratica.Where(c => c.ID_Pratiche == id),
+                        c => new CostiPratica_a
+                        {
+                            ID_CostoPratica_Originale = c.ID_CostoPratica,
+                            ID_Pratiche = c.ID_Pratiche,
+                            Descrizione = c.Descrizione,
+                            Importo = c.Importo,
+                            ID_AnagraficaCosto = c.ID_AnagraficaCosto,
+                            ID_ClienteAssociato = c.ID_ClienteAssociato,
+                            ID_Fornitore = c.ID_Fornitore, // ✅ nuovo campo
+                            DataCompetenzaEconomica = c.DataCompetenzaEconomica, // ✅ nuovo campo
+                            DataInserimento = c.DataInserimento,
+                            ID_UtenteCreatore = c.ID_UtenteCreatore,
+                            DataArchiviazione = now,
+                            ID_UtenteArchiviazione = userId,
+                            NumeroVersione = (db.CostiPratica_a
+                                .Where(x => x.ID_CostoPratica_Originale == c.ID_CostoPratica)
+                                .Max(x => (int?)x.NumeroVersione) ?? 0) + 1,
+                            ModificheTestuali = "Eliminazione Costo Pratica"
+                        }
+                    );
+
 
                     Archivia(db.DocumentiPratiche.Where(d => d.ID_Pratiche == id), d => new DocumentiPratiche_a
                     {
@@ -1182,15 +2152,44 @@ namespace SinergiaMvc.Controllers
                         NumeroVersione = 1
                     });
 
-                    var compensiEsistenti = db.CompensiPraticaDettaglio
-                              .Where(c => c.ID_Pratiche == id)
-                              .ToList();
-
-                    foreach (var c in compensiEsistenti)
+                    // ======================================================
+                    // 📦 Archivia e rimuovi CLUSTER
+                    // ======================================================
+                    var clusters = db.Cluster.Where(c => c.ID_Pratiche == id).ToList();
+                    foreach (var c in clusters)
                     {
-                        int UltimaVersione = db.CompensiPraticaDettaglio_a
+                        int ver = db.Cluster_a.Where(x => x.ID_Cluster_Originale == c.ID_Cluster)
+                            .Max(x => (int?)x.NumeroVersione) ?? 0;
+
+                        db.Cluster_a.Add(new Cluster_a
+                        {
+                            ID_Cluster_Originale = c.ID_Cluster,
+                            ID_Pratiche = c.ID_Pratiche,
+                            ID_Utente = c.ID_Utente,
+                            TipoCluster = c.TipoCluster,
+                            PercentualePrevisione = c.PercentualePrevisione,
+                            DataAssegnazione = c.DataAssegnazione,
+                            DataArchiviazione = now,
+                            ID_UtenteArchiviazione = userId,
+                            NumeroVersione = ver + 1
+                        });
+                    }
+
+                    if (clusters.Any())
+                    {
+                        db.Cluster.RemoveRange(clusters);
+                        System.Diagnostics.Debug.WriteLine($"📉 [EliminaPratica] Cluster rimossi: {clusters.Count}");
+                    }
+
+                    // ======================================================
+                    // 🧾 Archivia e rimuovi COMPENSI DETTAGLIO
+                    // ======================================================
+                    var compensi = db.CompensiPraticaDettaglio.Where(c => c.ID_Pratiche == id).ToList();
+                    foreach (var c in compensi)
+                    {
+                        int ver = db.CompensiPraticaDettaglio_a
                             .Where(x => x.ID_RigaCompensoOriginale == c.ID_RigaCompenso)
-                            .Select(x => (int?)x.NumeroVersione).Max() ?? 0;
+                            .Max(x => (int?)x.NumeroVersione) ?? 0;
 
                         db.CompensiPraticaDettaglio_a.Add(new CompensiPraticaDettaglio_a
                         {
@@ -1208,15 +2207,59 @@ namespace SinergiaMvc.Controllers
                             ID_UtenteCreatore = c.ID_UtenteCreatore,
                             UltimaModifica = c.UltimaModifica,
                             ID_UtenteUltimaModifica = c.ID_UtenteUltimaModifica,
+                            Collaboratori = c.Collaboratori,
+                            ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
                             DataArchiviazione = now,
                             ID_UtenteArchiviazione = userId,
-                            NumeroVersione = UltimaVersione + 1,
-                            ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
-                            ModificheTestuali = $"Archiviazione compenso in fase di eliminazione pratica (ID {pratica.ID_Pratiche})"
+                            NumeroVersione = ver + 1,
+                            ModificheTestuali = $"Archiviazione compenso eliminato (Pratica ID={id})"
                         });
                     }
 
+                    if (compensi.Any())
+                    {
+                        db.CompensiPraticaDettaglio.RemoveRange(compensi);
+                        System.Diagnostics.Debug.WriteLine($"📉 [EliminaPratica] Compensi rimossi: {compensi.Count}");
+                    }
+
+
                     db.SaveChanges();
+
+                    // ======================================================
+                    // 📊 ARCHIVIAZIONE E RIMOZIONE PREVISIONALE
+                    // ======================================================
+                    var previsioni = db.Previsione.Where(p => p.ID_Pratiche == id).ToList();
+                    if (previsioni.Any())
+                    {
+                        foreach (var p in previsioni)
+                        {
+                            db.Previsione_a.Add(new Previsione_a
+                            {
+                                ID_PrevisioneOriginale = p.ID_Previsione,
+                                ID_Pratiche = p.ID_Pratiche,
+                                ID_Professionista = p.ID_Professionista,
+                                Percentuale = p.Percentuale,
+                                TipoOperazione = p.TipoOperazione,
+                                Descrizione = p.Descrizione,
+                                ImportoPrevisto = p.ImportoPrevisto,
+                                DataPrevisione = p.DataPrevisione,
+                                Stato = p.Stato,
+                                ID_UtenteCreatore = p.ID_UtenteCreatore,
+                                NumeroVersione = (db.Previsione_a
+                                    .Where(x => x.ID_PrevisioneOriginale == p.ID_Previsione)
+                                    .Max(x => (int?)x.NumeroVersione) ?? 0) + 1,
+                                DataArchiviazione = now,
+                                ID_UtenteArchiviazione = userId,
+                                ModificheTestuali = $"Archiviazione automatica in fase di eliminazione pratica (ID={id})"
+                            });
+                        }
+
+                        db.Previsione.RemoveRange(previsioni);
+                        System.Diagnostics.Debug.WriteLine($"📉 [EliminaPratica] Previsioni archiviate e rimosse: {previsioni.Count}");
+                    }
+
+                    db.SaveChanges();
+
 
                     // 🔁 Eliminazione logica
                     pratica.Stato = "Eliminato";
@@ -1268,39 +2311,43 @@ namespace SinergiaMvc.Controllers
         public ActionResult GetPratica(int id)
         {
             var pratica = db.Pratiche
-                 .Where(p => p.ID_Pratiche == id && p.Stato != "Eliminato")
-                 .AsEnumerable()   // 👈 forza esecuzione in memoria
-                 .Select(p => new PraticaViewModel
-                 {
-                     ID_Pratiche = p.ID_Pratiche,
-                     Titolo = p.Titolo,
-                     Descrizione = p.Descrizione,
-                     DataInizioAttivitaStimata = p.DataInizioAttivitaStimata,
-                     DataFineAttivitaStimata = p.DataFineAttivitaStimata,
-                     Stato = p.Stato,
-                     ID_Cliente = p.ID_Cliente,
-                     ID_UtenteResponsabile = p.ID_UtenteResponsabile,
-                     ID_UtenteUltimaModifica = p.ID_UtenteUltimaModifica,
-                     ID_Owner = p.ID_Owner,
-                     TrattenutaPersonalizzata = p.TrattenutaPersonalizzata,
-                     Budget = p.Budget,
-                     BudgetFormattato = p.Budget.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
-                     DataCreazione = p.DataCreazione,
-                     UltimaModifica = p.UltimaModifica,
-                     Note = p.Note,
-                     Tipologia = p.Tipologia,
-                     ImportoFisso = p.ImportoFisso,
-                     TariffaOraria = p.TariffaOraria,
-                     AccontoGiudiziale = p.AccontoGiudiziale,
-                     GradoGiudizio = p.GradoGiudizio,
-                     TerminiPagamento = p.TerminiPagamento,
-                     OrePreviste = p.OrePreviste,
-                     OreEffettive = p.OreEffettive
-                 })
-                 .FirstOrDefault();
+                .Where(p => p.ID_Pratiche == id && p.Stato != "Eliminato")
+                .Select(p => new PraticaViewModel
+                {
+                    ID_Pratiche = p.ID_Pratiche,
+                    Titolo = p.Titolo,
+                    Descrizione = p.Descrizione,
+                    DataInizioAttivitaStimata = p.DataInizioAttivitaStimata,
+                    DataFineAttivitaStimata = p.DataFineAttivitaStimata,
+                    Stato = p.Stato,
+                    ID_Cliente = p.ID_Cliente,
+                    ID_UtenteResponsabile = p.ID_UtenteResponsabile,
+                    ID_UtenteUltimaModifica = p.ID_UtenteUltimaModifica,
+                    ID_Owner = p.ID_Owner,
+                    TrattenutaPersonalizzata = p.TrattenutaPersonalizzata,
+                    Budget = p.Budget,
+                    DataCreazione = p.DataCreazione,
+                    UltimaModifica = p.UltimaModifica,
+                    Note = p.Note,
+                    Tipologia = p.Tipologia,
+                    ImportoFisso = p.ImportoFisso,
+                    TariffaOraria = p.TariffaOraria,
+                    AccontoGiudiziale = p.AccontoGiudiziale,
+                    GradoGiudizio = p.GradoGiudizio,
+                    TerminiPagamento = p.TerminiPagamento,
+                    OrePreviste = p.OrePreviste,
+                    OreEffettive = p.OreEffettive
+                })
+                .FirstOrDefault();
 
             if (pratica == null)
                 return Json(new { success = false, message = "Pratica non trovata." }, JsonRequestBehavior.AllowGet);
+
+            // 👤 Nome responsabile
+            var nomeResponsabile = db.Utenti
+                .Where(u => u.ID_Utente == pratica.ID_UtenteResponsabile)
+                .Select(u => u.Nome + " " + u.Cognome)
+                .FirstOrDefault();
 
             // 👤 Owner
             var nomeOwner = (from o in db.OperatoriSinergia
@@ -1308,18 +2355,13 @@ namespace SinergiaMvc.Controllers
                              select (o.Nome + " " + o.Cognome) ?? o.TipoRagioneSociale)
                             .FirstOrDefault();
 
-            // 👤 Responsabile
-            var nomeResponsabile = db.Utenti
-                .Where(u => u.ID_Utente == pratica.ID_UtenteResponsabile)
-                .Select(u => u.Nome + " " + u.Cognome)
-                .FirstOrDefault();
-
             // 🏢 Cliente
             var nomeCliente = (from cli in db.Clienti
                                where cli.ID_Cliente == pratica.ID_Cliente
                                select string.IsNullOrEmpty(cli.RagioneSociale)
                                       ? (cli.Nome + " " + cli.Cognome)
-                                      : cli.RagioneSociale).FirstOrDefault();
+                                      : cli.RagioneSociale)
+                              .FirstOrDefault();
 
             // 👥 Collaboratori (cluster)
             var utentiAssociati = db.Cluster
@@ -1335,18 +2377,28 @@ namespace SinergiaMvc.Controllers
                 })
                 .ToList();
 
-            // 📋 Costi
-            var costiPratica = (from c in db.CostiPratica
-                                join a in db.AnagraficaCostiPratica on c.ID_AnagraficaCosto equals a.ID_AnagraficaCosto into joined
-                                from a in joined.DefaultIfEmpty()
-                                where c.ID_Pratiche == id
-                                select new
-                                {
-                                    c.ID_CostoPratica,
-                                    c.ID_AnagraficaCosto,
-                                    Descrizione = (c.Descrizione ?? ((a.Nome ?? "") + " - " + (a.Descrizione ?? ""))).Trim(),
-                                    c.Importo
-                                }).ToList();
+            // 📋 Costi pratica (versione aggiornata con nuovi campi)
+            var costiPratica = (
+                from c in db.CostiPratica
+                join a in db.AnagraficaCostiPratica on c.ID_AnagraficaCosto equals a.ID_AnagraficaCosto into joined
+                from a in joined.DefaultIfEmpty()
+                join f in db.OperatoriSinergia on c.ID_Fornitore equals f.ID_Cliente into joinedFornitori
+                from f in joinedFornitori.DefaultIfEmpty()
+                where c.ID_Pratiche == id
+                select new
+                {
+                    c.ID_CostoPratica,
+                    c.ID_AnagraficaCosto,
+                    Descrizione = (c.Descrizione ?? ((a.Nome ?? "") + " - " + (a.Descrizione ?? ""))).Trim(),
+                    c.Importo,
+                    c.DataCompetenzaEconomica,     // ✅ nuovo campo
+                    c.ID_Fornitore,                // ✅ nuovo campo
+                    NomeFornitore = f != null
+                        ? (f.Nome + " " + f.Cognome + (string.IsNullOrEmpty(f.PIVA) ? "" : " (" + f.PIVA + ")")).Trim()
+                        : null,                    // ✅ restituisce nome completo del fornitore
+                    c.DataInserimento              // utile per ordinare o mostrare in modale
+                }).ToList();
+
 
             // 💰 Rimborsi
             var rimborsi = db.RimborsiPratica
@@ -1355,98 +2407,266 @@ namespace SinergiaMvc.Controllers
                 {
                     r.Descrizione,
                     r.Importo
-                }).ToList();
-
-            // 💵 Compensi Pratica Dettaglio (per visualizzazione)
-            var compensiDettaglio = db.CompensiPraticaDettaglio
-                .Where(c => c.ID_Pratiche == id)
-                .Select(c => new
-                {
-                    c.ID_RigaCompenso,
-                    c.TipoCompenso,
-                    c.Descrizione,
-                    c.Importo,
-                    c.Categoria,
-                    c.ValoreStimato,
-                    c.Ordine,
-                    c.EstremiGiudizio,
-                    c.OggettoIncarico,
-                    c.DataCreazione,
-                    Creatore = db.Utenti
-                        .Where(u => u.ID_Utente == c.ID_UtenteCreatore)
-                        .Select(u => u.Nome + " " + u.Cognome)
-                        .FirstOrDefault(),
-                    UltimaModifica = c.UltimaModifica,
-                    UltimoModificatore = db.Utenti
-                        .Where(u => u.ID_Utente == c.ID_UtenteUltimaModifica)
-                        .Select(u => u.Nome + " " + u.Cognome)
-                        .FirstOrDefault(),
-
-                    // 👇 nuovo campo
-                    ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
-                    NomeProfessionistaIntestatario = db.Utenti
-                        .Where(u => u.ID_Utente == c.ID_ProfessionistaIntestatario)
-                        .Select(u => u.Nome + " " + u.Cognome)
-                        .FirstOrDefault()
-                })
-                .OrderBy(c => c.Ordine)
-                .ToList();
-
-
-            // 🔄 Compensi JSON per frontend
-            var compensiRaw = db.CompensiPraticaDettaglio
-                .Where(c => c.ID_Pratiche == id)
-                .OrderBy(c => c.Ordine)
-                .ToList() // materializza prima
-                .Select(c => new
-                {
-                    Metodo = c.TipoCompenso ?? "",
-                    // 👇 Usa sempre Descrizione, ma se è vuota e il metodo è "A ore" → fallback su Ruolo
-                    Descrizione_1 = !string.IsNullOrEmpty(c.Descrizione)
-                        ? c.Descrizione
-                        : (c.TipoCompenso == "A ore" ? c.Descrizione : ""),
-                    Importo_1 = c.Importo.HasValue ? c.Importo.Value.ToString("0.##") : "",
-                    Tipologia_1 = c.Categoria ?? "Contrattuale",
-                    ValoreStimato_1 = c.ValoreStimato.HasValue ? c.ValoreStimato.Value.ToString("0.##") : "",
-                    EstremiGiudizio = c.EstremiGiudizio ?? "",
-                    OggettoIncarico = c.OggettoIncarico ?? "",
-                    ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
-                    // 👇 AGGIUNGI QUESTO
-                    IntestatarioNome = db.Utenti
-                    .Where(u => u.ID_Utente == c.ID_ProfessionistaIntestatario)
-                    .Select(u => u.Nome + " " + u.Cognome)
-                    .FirstOrDefault()
                 })
                 .ToList();
 
-
-            // 📄 Documento incarico (ultimo caricato, sia HTML che PDF)
+            // 📄 Documento incarico (ultimo caricato, HTML o PDF)
             var documentoIncarico = db.DocumentiPratiche
                 .Where(d => d.ID_Pratiche == id &&
                             (d.Estensione == ".html" || d.Estensione == ".pdf"))
                 .OrderByDescending(d => d.DataCaricamento)
+                .Select(d => new
+                {
+                    d.ID_Documento,
+                    d.NomeFile,
+                    d.Estensione,
+                    d.TipoContenuto,
+                    d.DataCaricamento
+                })
                 .FirstOrDefault();
 
             return Json(new
             {
                 success = true,
                 data = pratica,
-                nomeOwner,
-                nomeResponsabile,
-                nomeCliente,
+                responsabile = nomeResponsabile,
+                nomeOwner = nomeOwner,   // 👈 lo chiami come già lo usi nel JS
+                cliente = nomeCliente,
                 utentiAssociati,
                 costi = costiPratica,
                 rimborsi,
-                compensiDettaglio,
-                compensiRaw, // 👈 aggiunto
-                incarico = documentoIncarico?.NomeFile,
-                incaricoHtml = documentoIncarico?.Estensione == ".html"
-                    ? System.Text.Encoding.UTF8.GetString(documentoIncarico.Documento)
-                    : null
+                incarico = documentoIncarico
             }, JsonRequestBehavior.AllowGet);
         }
 
+        [HttpGet]
+        public JsonResult GetCompensiPratica(int idPratica)
+        {
+            Debug.WriteLine($"[GetCompensiPratica] idPratica={idPratica}");
 
+            // 🟢 Caso NUOVA PRATICA → compensi vuoti
+            if (idPratica <= 0)
+            {
+                Debug.WriteLine("[GetCompensiPratica] Nuova pratica → ritorno JSON vuoto");
+                return Json(new
+                {
+                    success = true,
+                    dettaglio = new List<object>(),
+                    raw = new List<object>(),
+                    intestatari = new List<object>()
+                }, JsonRequestBehavior.AllowGet);
+            }
+
+            try
+            {
+                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == idPratica);
+                if (pratica == null)
+                {
+                    return Json(new { success = false, message = "Pratica non trovata." }, JsonRequestBehavior.AllowGet);
+                }
+
+                // 1️⃣ Compensi già salvati
+                var compensiDettaglio = db.CompensiPraticaDettaglio
+                    .Where(c => c.ID_Pratiche == idPratica)
+                    .AsEnumerable()
+                    .Select(c =>
+                    {
+                        Debug.WriteLine($"-- RigaCompenso {c.ID_RigaCompenso} --");
+                        Debug.WriteLine($"   TipoCompenso={c.TipoCompenso}, Categoria={c.Categoria}, Importo={c.Importo}, ID_Intestatario={c.ID_ProfessionistaIntestatario}");
+
+                        var nomeIntestatario = db.Utenti
+                            .Where(u => u.ID_Utente == c.ID_ProfessionistaIntestatario)
+                            .Select(u => u.Nome + " " + u.Cognome)
+                            .FirstOrDefault();
+
+                        var listaCollab = new List<object>();
+                        if (!string.IsNullOrEmpty(c.Collaboratori))
+                        {
+                            var parsed = Newtonsoft.Json.JsonConvert.DeserializeObject<List<CollaboratoreCompensoDTO>>(c.Collaboratori);
+                            foreach (var col in parsed)
+                            {
+                                var nomeCollab = db.Utenti
+                                    .Where(u => u.ID_Utente == col.ID_Collaboratore)
+                                    .Select(u => u.Nome + " " + u.Cognome)
+                                    .FirstOrDefault();
+
+                                listaCollab.Add(new
+                                {
+                                    col.ID_Collaboratore,
+                                    col.Percentuale,
+                                    NomeCollaboratore = nomeCollab
+                                });
+                            }
+                        }
+
+                        return new
+                        {
+                            c.ID_RigaCompenso,
+                            Metodo = c.TipoCompenso,
+                            Tipologia = string.IsNullOrEmpty(c.Categoria) ? c.TipoCompenso : c.Categoria,
+                            c.Descrizione,
+                            c.Importo,
+                            c.ValoreStimato,
+                            c.Ordine,
+                            c.EstremiGiudizio,
+                            c.OggettoIncarico,
+                            c.DataCreazione,
+                            Creatore = db.Utenti.Where(u => u.ID_Utente == c.ID_UtenteCreatore)
+                                .Select(u => u.Nome + " " + u.Cognome).FirstOrDefault(),
+                            UltimaModifica = c.UltimaModifica,
+                            UltimoModificatore = db.Utenti.Where(u => u.ID_Utente == c.ID_UtenteUltimaModifica)
+                                .Select(u => u.Nome + " " + u.Cognome).FirstOrDefault(),
+                            ID_ProfessionistaIntestatario = c.ID_ProfessionistaIntestatario,
+                            NomeProfessionistaIntestatario = nomeIntestatario,
+                            Collaboratori = listaCollab
+                        };
+                    })
+                    .OrderBy(c => c.Ordine)
+                    .ToList();
+
+                // 2️⃣ Recupero intestatari possibili
+                var intestatariPossibili = new List<dynamic>();
+
+                // Owner
+                if (pratica.ID_Owner.HasValue)
+                {
+                    var owner = (from o in db.OperatoriSinergia
+                                 join u in db.Utenti on o.ID_UtenteCollegato equals u.ID_Utente
+                                 where o.ID_Cliente == pratica.ID_Owner
+                                 select new { ID = u.ID_Utente, Nome = u.Nome + " " + u.Cognome })
+                                .FirstOrDefault();
+                    if (owner != null) intestatariPossibili.Add(owner);
+                }
+
+                // Responsabile
+                if (pratica.ID_UtenteResponsabile > 0)
+                {
+                    var resp = db.Utenti
+                        .Where(u => u.ID_Utente == pratica.ID_UtenteResponsabile)
+                        .Select(u => new { ID = u.ID_Utente, Nome = u.Nome + " " + u.Cognome })
+                        .FirstOrDefault();
+                    if (resp != null) intestatariPossibili.Add(resp);
+                }
+
+                // Professionisti collegati al cliente
+                var collegati = (from cp in db.ClientiProfessionisti
+                                 join o in db.OperatoriSinergia on cp.ID_Professionista equals o.ID_Cliente
+                                 join u in db.Utenti on o.ID_UtenteCollegato equals u.ID_Utente
+                                 where cp.ID_Cliente == pratica.ID_Cliente
+                                 select new { ID = u.ID_Utente, Nome = u.Nome + " " + u.Cognome })
+                                 .ToList();
+
+                intestatariPossibili.AddRange(collegati);
+
+                var intestatariFinali = intestatariPossibili
+                    .GroupBy(x => x.ID)
+                    .Select(g => g.First())
+                    .ToList();
+
+                return Json(new
+                {
+                    success = true,
+                    dettaglio = compensiDettaglio,
+                    raw = compensiDettaglio,
+                    intestatari = intestatariFinali
+                }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[GetCompensiPratica][ERRORE] {ex}");
+                return Json(new { success = false, message = "Errore server: " + ex.Message }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
+        [HttpGet]
+        public JsonResult GetIntestatariPratica(int? idPratica, int? idCliente)
+        {
+            Debug.WriteLine($"[GetIntestatariPratica] idPratica={idPratica}, idCliente={idCliente}");
+
+            var intestatariPossibili = new List<dynamic>();
+
+            try
+            {
+                if (idPratica.HasValue && idPratica > 0)
+                {
+                    // 🔹 Pratica esistente → recupero dalla tabella
+                    var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == idPratica.Value);
+                    if (pratica == null)
+                        return Json(new { success = false, message = "Pratica non trovata." }, JsonRequestBehavior.AllowGet);
+
+                    // Owner
+                    if (pratica.ID_Owner.HasValue)
+                    {
+                        var owner = (from o in db.OperatoriSinergia
+                                     join u in db.Utenti on o.ID_UtenteCollegato equals u.ID_Utente
+                                     where o.ID_Cliente == pratica.ID_Owner
+                                     select new { ID = u.ID_Utente, Nome = u.Nome + " " + u.Cognome })
+                                     .FirstOrDefault();
+                        if (owner != null) intestatariPossibili.Add(owner);
+                    }
+
+                    // Responsabile
+                    if (pratica.ID_UtenteResponsabile > 0)
+                    {
+                        var resp = db.Utenti
+                            .Where(u => u.ID_Utente == pratica.ID_UtenteResponsabile)
+                            .Select(u => new { ID = u.ID_Utente, Nome = u.Nome + " " + u.Cognome })
+                            .FirstOrDefault();
+                        if (resp != null) intestatariPossibili.Add(resp);
+                    }
+
+                    // Collegati al cliente
+                    idCliente = pratica.ID_Cliente;
+                }
+
+                // 🔹 Caso nuova pratica → uso direttamente idCliente
+                if (idCliente.HasValue && idCliente > 0)
+                {
+                    // Recupero anche l'owner del cliente selezionato
+                    var idOperatore = db.Clienti
+                        .Where(c => c.ID_Cliente == idCliente.Value)
+                        .Select(c => c.ID_Operatore)
+                        .FirstOrDefault();
+
+                    if (idOperatore > 0)
+                    {
+                        var owner = (from o in db.OperatoriSinergia
+                                     join u in db.Utenti on o.ID_UtenteCollegato equals u.ID_Utente
+                                     where o.ID_Cliente == idOperatore
+                                     select new { ID = u.ID_Utente, Nome = u.Nome + " " + u.Cognome })
+                                     .FirstOrDefault();
+
+                        if (owner != null) intestatariPossibili.Add(owner);
+                    }
+
+                    // Tutti i professionisti collegati
+                    var collegati = (from cp in db.ClientiProfessionisti
+                                     join o in db.OperatoriSinergia on cp.ID_Professionista equals o.ID_Cliente
+                                     join u in db.Utenti on o.ID_UtenteCollegato equals u.ID_Utente
+                                     where cp.ID_Cliente == idCliente.Value
+                                     select new { ID = u.ID_Utente, Nome = u.Nome + " " + u.Cognome })
+                                     .ToList();
+
+                    intestatariPossibili.AddRange(collegati);
+                }
+
+                var intestatariFinali = intestatariPossibili
+                    .GroupBy(x => x.ID)
+                    .Select(g => g.First())
+                    .ToList();
+
+                return Json(new
+                {
+                    success = true,
+                    intestatari = intestatariFinali
+                }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[GetIntestatariPratica][ERRORE] {ex}");
+                return Json(new { success = false, message = "Errore server: " + ex.Message }, JsonRequestBehavior.AllowGet);
+            }
+        }
 
         [HttpPost]
         public ActionResult RiattivaPratica(int id)
@@ -1607,8 +2827,6 @@ namespace SinergiaMvc.Controllers
                 return Json(new { success = false, message = "Errore durante la riattivazione: " + ex.Message });
             }
         }
-
-
 
         [HttpPost]
         public ActionResult RecuperaPratica(int id)
@@ -1776,71 +2994,66 @@ namespace SinergiaMvc.Controllers
             }
         }
 
+        //[HttpGet]
 
-        // Gestione Template
+        //public ActionResult GetTemplateByProfessionista(int idProfessionista)
+        //{
+        //    try
+        //    {
+        //        using (var db = new SinergiaDB())
+        //        {
+        //            // 🔍 Recupera la professione associata all'operatore (professionista)
+        //            var idProfessione = db.OperatoriSinergia
+        //                .Where(o => o.ID_Cliente == idProfessionista && o.TipoCliente == "Professionista")
+        //                .Select(o => o.ID_Professione)
+        //                .FirstOrDefault();
 
-        [HttpGet]
-        public ActionResult GetTemplateByProfessionista(int idProfessionista)
-        {
-            try
-            {
-                using (var db = new SinergiaDB())
-                {
-                    // 🔍 Recupera la professione associata all'operatore (professionista)
-                    var idProfessione = db.OperatoriSinergia
-                        .Where(o => o.ID_Cliente == idProfessionista && o.TipoCliente == "Professionista")
-                        .Select(o => o.ID_Professione)
-                        .FirstOrDefault();
+        //            if (idProfessione == 0 || idProfessione == null)
+        //            {
+        //                return Json(new { success = false, message = "Professione non associata a questo professionista." }, JsonRequestBehavior.AllowGet);
+        //            }
 
-                    if (idProfessione == 0 || idProfessione == null)
-                    {
-                        return Json(new { success = false, message = "Professione non associata a questo professionista." }, JsonRequestBehavior.AllowGet);
-                    }
+        //            // 🔍 Recupera il template attivo per quella professione
+        //            var template = db.TemplateIncarichi
+        //                .Where(t => t.ID_Professione == idProfessione && t.Stato == "Attivo")
+        //                .Select(t => new
+        //                {
+        //                    t.IDTemplateIncarichi,
+        //                    t.NomeTemplate,
+        //                    t.ContenutoHtml
+        //                })
+        //                .FirstOrDefault();
 
-                    // 🔍 Recupera il template attivo per quella professione
-                    var template = db.TemplateIncarichi
-                        .Where(t => t.ID_Professione == idProfessione && t.Stato == "Attivo")
-                        .Select(t => new
-                        {
-                            t.IDTemplateIncarichi,
-                            t.NomeTemplate,
-                            t.ContenutoHtml
-                        })
-                        .FirstOrDefault();
+        //            if (template == null)
+        //            {
+        //                return Json(new { success = false, message = "Nessun template attivo trovato per questa professione." }, JsonRequestBehavior.AllowGet);
+        //            }
 
-                    if (template == null)
-                    {
-                        return Json(new { success = false, message = "Nessun template attivo trovato per questa professione." }, JsonRequestBehavior.AllowGet);
-                    }
+        //            return Json(new { success = true, data = template }, JsonRequestBehavior.AllowGet);
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return Json(new
+        //        {
+        //            success = false,
+        //            message = "Errore durante il recupero del template: " + ex.Message
+        //        }, JsonRequestBehavior.AllowGet);
+        //    }
+        //} 
 
-                    return Json(new { success = true, data = template }, JsonRequestBehavior.AllowGet);
-                }
-            }
-            catch (Exception ex)
-            {
-                return Json(new
-                {
-                    success = false,
-                    message = "Errore durante il recupero del template: " + ex.Message
-                }, JsonRequestBehavior.AllowGet);
-            }
-        }
-
+        /* Gestione Template*/
 
         [HttpGet]
         public ActionResult GeneraFoglioIncarico(int idPratica)
         {
             try
             {
-                // 🔁 Recupera la pratica con join esplicita sul cliente
+                // 🔍 Recupero la pratica + cliente collegato
                 var praticaJoin = (from p in db.Pratiche
                                    join c in db.Clienti on p.ID_Cliente equals c.ID_Cliente
                                    where p.ID_Pratiche == idPratica
-                                   select new
-                                   {
-                                       Pratica = p,
-                                       Cliente = c
-                                   }).FirstOrDefault();
+                                   select new { Pratica = p, Cliente = c }).FirstOrDefault();
 
                 if (praticaJoin == null)
                     return Json(new { success = false, message = "Pratica non trovata." }, JsonRequestBehavior.AllowGet);
@@ -1848,73 +3061,636 @@ namespace SinergiaMvc.Controllers
                 var pratica = praticaJoin.Pratica;
                 var cliente = praticaJoin.Cliente;
 
-                // 🔍 Recupera il professionista owner collegato alla pratica
+                // 🔍 Recupero professionista responsabile
                 var professionista = db.OperatoriSinergia
-                    .FirstOrDefault(o => o.ID_Cliente == pratica.ID_UtenteResponsabile && o.TipoCliente == "Professionista");
+                    .FirstOrDefault(o => o.ID_UtenteCollegato == pratica.ID_UtenteResponsabile
+                                      && o.TipoCliente == "Professionista");
 
                 if (professionista == null)
                     return Json(new { success = false, message = "Professionista non trovato." }, JsonRequestBehavior.AllowGet);
 
-                // 🔍 Carica il template incarico attivo per la professione
-                var template = db.TemplateIncarichi
-                    .FirstOrDefault(t => t.ID_Professione == professionista.ID_Professione && t.Stato == "Attivo");
+                // 🔍 Recupero clienti associati al professionista
+                var clientiAssociati = (from cp in db.ClientiProfessionisti
+                                        join cl in db.Clienti on cp.ID_Cliente equals cl.ID_Cliente
+                                        where cp.ID_Professionista == professionista.ID_Cliente
+                                        select cl).ToList();
 
-                if (template == null)
-                    return Json(new { success = false, message = "Template incarico non trovato per la professione." }, JsonRequestBehavior.AllowGet);
+                // 🔍 Responsabile (utente collegato al responsabile pratica)
+                var responsabile = db.Utenti.FirstOrDefault(u => u.ID_Utente == pratica.ID_UtenteResponsabile);
 
-                // ✅ Sostituzione dei placeholder
-                string contenuto = template.ContenutoHtml;
-
+                // ==========================================================
+                // 📌 Costruzione segnaposti
+                // ==========================================================
                 string nomeCliente = cliente.RagioneSociale
-                ?? (!string.IsNullOrEmpty(cliente.Cognome) || !string.IsNullOrEmpty(cliente.Nome)
-                   ? $"{cliente.Cognome} {cliente.Nome}"
-                      : "Cliente");
+                    ?? (!string.IsNullOrEmpty(cliente.Cognome) || !string.IsNullOrEmpty(cliente.Nome)
+                        ? $"{cliente.Cognome} {cliente.Nome}"
+                        : "Cliente");
 
-                contenuto = contenuto.Replace("[NOME_CLIENTE]", nomeCliente);
-                contenuto = contenuto.Replace("[TITOLO_PRATICA]", pratica.Titolo);
-                contenuto = contenuto.Replace("[DATA_INIZIO]", pratica.DataInizioAttivitaStimata?.ToString("dd/MM/yyyy") ?? "");
-                contenuto = contenuto.Replace("[DATA_FINE]", pratica.DataFineAttivitaStimata?.ToString("dd/MM/yyyy") ?? "");
-                contenuto = contenuto.Replace("[BUDGET]", pratica.Budget.ToString("N2") + " €");
-
-                // 🔁 Altri placeholder
-                string nomeProfessionista = $"{professionista.Nome} {professionista.Cognome}".Trim();
-                // 🔍 Recupera il nome della città
                 string luogo = "";
                 if (cliente.ID_Citta.HasValue)
                 {
                     var citta = db.Citta.FirstOrDefault(c => c.ID_BPCitta == cliente.ID_Citta.Value);
-                    if (citta != null)
-                        luogo = citta.NameLocalita;
+                    if (citta != null) luogo = citta.NameLocalita;
+                }
+                var nomeCompletoCliente = !string.IsNullOrEmpty(cliente.RagioneSociale)
+                     ? cliente.RagioneSociale   // Se è azienda → "Studio Rossi SRL"
+                     : $"{cliente.Cognome} {cliente.Nome}".Trim(); // Se è persona fisica → "De Cola Andrea"
+
+                // ==========================================================
+                // 📌 Costruzione segnaposti
+                // ==========================================================
+                // ✅ Percorso assoluto compatibile con Rotativa
+                string logoPath = "file:///" + Server.MapPath("~/Content/img/Icons/Logo Nuovo.png").Replace("\\", "/");
+
+                var placeholdersBase = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    // === CLIENTE ===
+                    ["[CLIENTE]"] = !string.IsNullOrEmpty(cliente.RagioneSociale)
+                        ? cliente.RagioneSociale
+                        : (!string.IsNullOrEmpty(cliente.Nome) || !string.IsNullOrEmpty(cliente.Cognome)
+                            ? $"{cliente.Cognome} {cliente.Nome}".Trim()
+                            : "__________"),
+
+                    ["[NOME CLIENTE]"] = !string.IsNullOrEmpty(cliente.Nome) ? cliente.Nome : "__________",
+                    ["[COGNOME CLIENTE]"] = !string.IsNullOrEmpty(cliente.Cognome) ? cliente.Cognome : "__________",
+
+                    // 👇 aggiunto placeholder corto [NOME COGNOME]
+                    ["[NOME COGNOME]"] = (!string.IsNullOrEmpty(cliente.Nome) || !string.IsNullOrEmpty(cliente.Cognome))
+                        ? $"{cliente.Cognome} {cliente.Nome}".Trim()
+                        : "__________",
+
+                    ["[RAGIONE SOCIALE]"] = !string.IsNullOrEmpty(cliente.RagioneSociale) ? cliente.RagioneSociale : "__________",
+                    ["[CF CLIENTE]"] = !string.IsNullOrEmpty(cliente.CodiceFiscale) ? cliente.CodiceFiscale : "__________",
+                    ["[P.IVA CLIENTE]"] = !string.IsNullOrEmpty(cliente.PIVA) ? cliente.PIVA : "__________",
+                    ["[INDIRIZZO CLIENTE]"] = !string.IsNullOrEmpty(cliente.Indirizzo) ? cliente.Indirizzo : "__________",
+                    ["[INDIRIZZO ]"] = !string.IsNullOrEmpty(cliente.Indirizzo) ? cliente.Indirizzo : "__________",
+                    ["[SEDE LEGALE CLIENTE]"] = !string.IsNullOrEmpty(cliente.Indirizzo) ? cliente.Indirizzo : "__________",
+                    ["[CITTA CLIENTE]"] = !string.IsNullOrEmpty(luogo) ? luogo : "__________",
+                    ["[PROVINCIA CLIENTE]"] = "__________", // di solito vuota
+                    ["[PROVINCIA ]"] = "__________",
+
+                    // 🔹 AGGIUNTI - opzionali (non tutti i clienti li hanno)
+                    ["[CITTA_NASCITA]"] = cliente.GetType().GetProperty("CittaNascita")?.GetValue(cliente)?.ToString() ?? "__________",
+                    ["[DATA_NASCITA]"] = cliente.GetType().GetProperty("DataNascita")?.GetValue(cliente) is DateTime dn
+                            ? dn.ToString("dd/MM/yyyy")
+                            : "__________",
+
+                    // === PROFESSIONISTA ===
+                    ["[PROFESSIONISTA RESPONSABILE]"] = !string.IsNullOrWhiteSpace($"{professionista.Nome} {professionista.Cognome}".Trim())
+                        ? $"{professionista.Nome} {professionista.Cognome}".Trim()
+                        : "__________",
+                    ["[CF PROFESSIONISTA]"] = !string.IsNullOrEmpty(professionista.CodiceFiscale) ? professionista.CodiceFiscale : "__________",
+                    ["[INDIRIZZO PROFESSIONISTA]"] = !string.IsNullOrEmpty(professionista.Indirizzo) ? professionista.Indirizzo : "__________",
+                    ["[P.IVA PROFESSIONISTA]"] = !string.IsNullOrEmpty(professionista.PIVA) ? professionista.PIVA : "__________",
+
+                    ["[INDIRIZZO RESPONSABILE]"] = !string.IsNullOrEmpty(professionista.Indirizzo) ? professionista.Indirizzo : "__________",
+                    ["[LOGO_RESPONSABILE]"] = $@"
+                            <div style='width:100%; text-align:left; margin:0; padding:0;'>
+                                <img src='{Url.Content("~/Content/img/Icons/Logo Nuovo.png")}'
+                                     alt='Logo Sinergia'
+                                     style='display:block; height:120px; width:auto;
+                                            margin:0; padding:0;
+                                            border:none; outline:none;
+                                            background:none; line-height:0;
+                                            -webkit-print-color-adjust:exact;'
+                                />
+                            </div>",
+
+                    // === RESPONSABILE ===
+                    ["[NOME RESPONSABILE]"] = responsabile != null ? $"{responsabile.Nome} {responsabile.Cognome}" : "__________",
+                    ["[RUOLO RESPONSABILE]"] = !string.IsNullOrEmpty(responsabile?.Ruolo) ? responsabile.Ruolo : "__________",
+
+                    // === PRATICA ===
+                    ["[TITOLO PRATICA]"] = !string.IsNullOrEmpty(pratica.Titolo) ? pratica.Titolo : "__________",
+                    ["[DESCRIZIONE PRATICA]"] = !string.IsNullOrEmpty(pratica.Descrizione) ? pratica.Descrizione : "__________",
+                    ["[DATA INIZIO]"] = pratica.DataInizioAttivitaStimata?.ToString("dd/MM/yyyy") ?? "__________",
+                    ["[DATA FINE]"] = pratica.DataFineAttivitaStimata?.ToString("dd/MM/yyyy") ?? "__________",
+                    ["[BUDGET]"] = pratica.Budget > 0 ? pratica.Budget.ToString("N2") + " €" : "__________",
+
+                    // === ALTRI CAMPI ===
+                    ["[LUOGO]"] = !string.IsNullOrEmpty(luogo) ? luogo : "__________",
+                    ["[DATA_GENERAZIONE]"] = DateTime.Now.ToString("dd/MM/yyyy"),
+                    ["[DATA GENERAZIONE]"] = DateTime.Now.ToString("dd/MM/yyyy"),
+                    ["DATA GENERAZIONE"] = DateTime.Now.ToString("dd/MM/yyyy"),
+
+                    // campi a ore 
+                    ["[OGGETTO_INCARICO]"] = "__________",
+                    ["[DESCRIZIONE_RUOLO]"] = "__________",
+                    ["[IMPORTO_ORARIO]"] = "__________",
+                    //["[NUMERO_PROGRESSIVO]"] = "__________",
+                    ["[PARTITA IVA CLIENTE]"] = !string.IsNullOrEmpty(cliente.PIVA) ? cliente.PIVA : "__________",
+                };
+
+                if (clientiAssociati.Any())
+                {
+                    placeholdersBase["[CLIENTI ASSOCIATI]"] = string.Join(", ",
+                        clientiAssociati.Select(c =>
+                            !string.IsNullOrEmpty(c.RagioneSociale)
+                                ? c.RagioneSociale
+                                : $"{c.Nome} {c.Cognome}".Trim()));
                 }
 
-                string dataGenerazione = DateTime.Now.ToString("dd/MM/yyyy");
-
-                contenuto = contenuto.Replace("[NOME_PROFESSIONISTA]", nomeProfessionista);
-                contenuto = contenuto.Replace("[LUOGO]", luogo);
-                contenuto = contenuto.Replace("[DATA_GENERAZIONE]", dataGenerazione);
-
-                // 🔁 Conversione newline in <br />
-                contenuto = contenuto.Replace("\r\n", "<br />")
-                                     .Replace("\n", "<br />")
-                                     .Replace("\\n", "<br />"); // <- aggiungi questa
+                // 🔍 Debug per il nome e cognome
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Placeholder [NOME COGNOME] → '{placeholdersBase["[NOME COGNOME]"]}'");
 
 
-                return Json(new
+                // ==========================================================
+                // 📌 Recupero compensi e template
+                // ==========================================================
+                var compensi = db.CompensiPraticaDettaglio
+                    .Where(cd => cd.ID_Pratiche == idPratica)
+                    .ToList();
+
+                // 🔍 Debug compensi
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Compensi trovati per pratica {idPratica}: {compensi.Count}");
+                foreach (var c in compensi)
                 {
-                    success = true,
-                    html = contenuto
-                }, JsonRequestBehavior.AllowGet);
+                    System.Diagnostics.Debug.WriteLine(
+                        $"   Ordine={c.Ordine}, Tipo={c.TipoCompenso}, Desc={c.Descrizione}, Importo={c.Importo}");
+                }
+
+                var tipiCompenso = compensi
+                    .Select(c => c.TipoCompenso)
+                    .Distinct()
+                    .ToList();
+
+                var templates = db.TemplateIncarichi
+                    .Where(t => t.Stato == "Attivo")
+                    .ToList();
+
+                var risultati = new List<object>();
+                foreach (var tipo in tipiCompenso)
+                {
+                    var template = templates.FirstOrDefault(t => t.TipoCompenso == tipo);
+                    if (template == null) continue;
+
+                    // 🔁 Normalizza prima i segnaposti spezzati
+                    string contenuto = NormalizzaSegnaposti(template.ContenutoHtml);
+
+                    // 🔍 DEBUG
+                    LogSegnaposti(contenuto);
+
+                    // ==============================================
+                    // 🔍 DEBUG: Verifica tabella originale nel template
+                    // ==============================================
+                    System.Diagnostics.Debug.WriteLine("===== DEBUG TEMPLATE ORIGINALE GIUDIZIALE =====");
+                    var debugMatch = Regex.Match(contenuto,
+                        @"<table[\s\S]*?</table>",
+                        RegexOptions.IgnoreCase);
+
+                    if (debugMatch.Success)
+                    {
+                        System.Diagnostics.Debug.WriteLine(debugMatch.Value);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("⚠️ Nessuna tabella trovata nel template!");
+                    }
+                    System.Diagnostics.Debug.WriteLine("===============================================");
+
+
+                    // 🔁 Compensi per tipo corrente
+                    var compensiTipo = compensi
+                        .Where(c => c.TipoCompenso == tipo)
+                        .OrderBy(c => c.Ordine)
+                        .ToList();
+
+                    // ==========================================================
+                    // 🔹 GESTIONE SPECIFICA PER TEMPLATE "A ORE"
+                    // ==========================================================
+                    if (tipo.Equals("A ore", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // 1️⃣ Oggetto incarico
+                        string oggetto = compensiTipo
+                            .Where(c => !string.IsNullOrWhiteSpace(c.OggettoIncarico))
+                            .Select(c => c.OggettoIncarico)
+                            .FirstOrDefault() ?? "__________";
+                        contenuto = contenuto.Replace("[OGGETTO_INCARICO]", oggetto);
+
+                        // 2️⃣ Descrizione ruolo (campo A)
+                        string descrizioneRuolo = compensiTipo
+                            .Where(c => !string.IsNullOrWhiteSpace(c.Descrizione))
+                            .Select(c => c.Descrizione)
+                            .FirstOrDefault() ?? "__________";
+                        contenuto = contenuto.Replace("[DESCRIZIONE_RUOLO]", descrizioneRuolo);
+
+                        // 3️⃣ Importo orario (campo B)
+                        string importoOrario = compensiTipo
+                            .Where(c => c.Importo.HasValue)
+                            .Select(c => $"{c.Importo.Value:N2} €")
+                            .FirstOrDefault() ?? "__________";
+                        contenuto = contenuto.Replace("[IMPORTO_ORARIO]", importoOrario);
+
+                        // 4️⃣ Numero progressivo (campo C)
+                        contenuto = contenuto.Replace("[NUMERO_PROGRESSIVO]", "1");
+
+                        // 5️⃣ Costruzione blocco compensi (per eventuale tabella)
+                        var righeCompensi = compensiTipo.Select((c, i) =>
+                        {
+                            string desc = !string.IsNullOrWhiteSpace(c.Descrizione) ? c.Descrizione.Trim() : "__________";
+                            string imp = c.Importo.HasValue ? $"{c.Importo.Value:N2} €" : "__________";
+                            return $"{i + 1}) {desc} - {imp}";
+                        });
+                        string bloccoCompensi = string.Join("<br/>", righeCompensi);
+                        contenuto = contenuto.Replace("[TABELLA_COMPENSI]", bloccoCompensi);
+
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Oggetto incarico (A ORE): {oggetto}");
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Descrizione ruolo (A ORE): {descrizioneRuolo}");
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Importo orario (A ORE): {importoOrario}");
+                    }
+
+                    // 🔁 Sostituzione placeholder base
+                    foreach (var kv in placeholdersBase)
+                    {
+                        contenuto = contenuto.Replace(kv.Key, kv.Value ?? "");
+                    }
+
+                    // ==========================================================
+                    // 🔹 LOGICA STANDARD COMUNE (TUTTI I TIPI)
+                    // ==========================================================
+                    if (compensiTipo.Any())
+                    {
+                        // ✅ Controlla se tutte le descrizioni sono identiche
+                        bool tutteUguali = compensiTipo
+                            .Select(c => c.Descrizione?.Trim().ToLowerInvariant())
+                            .Distinct()
+                            .Count() == 1;
+
+                        string listaDescrizioni;
+                        string listaDescrizioniConNumero;
+                        string listaProgressivi;
+
+                        // ==========================================================
+                        // 🔸 SEZIONE SPECIFICA PER "GIUDIZIALE"
+                        // ==========================================================
+                        if (tipo.Equals("Giudiziale", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // 🔹 Se ci sono più descrizioni, le concateniamo in un'unica riga (per testo)
+                            string unioneDescrizioni = string.Join(", ",
+                                compensiTipo.Select(c => System.Net.WebUtility.HtmlEncode(c.Descrizione?.Trim() ?? "__________")));
+
+                            // ❌ Tolto il "1)" per evitare duplicazione con [NUMERO_PROGRESSIVO]
+                            listaDescrizioni = unioneDescrizioni;
+                            listaDescrizioniConNumero = unioneDescrizioni;
+                            listaProgressivi = "1";
+                            contenuto = Regex.Replace(contenuto, @"\[\s*NUMERO_PROGRESSIVO\s*\]", listaProgressivi, RegexOptions.IgnoreCase);
+
+                        }
+                        else if (tutteUguali)
+                        {
+                            string unica = compensiTipo.First().Descrizione;
+                            listaDescrizioni = unica;
+                            listaDescrizioniConNumero = "1 " + unica;
+                            listaProgressivi = "1";
+                        }
+
+                        else
+                        {
+                            // 🔹 Logica standard per tutti gli altri tipi
+                            listaDescrizioni = string.Join(", ",
+                                compensiTipo.Select(c => c.Descrizione));
+
+                            listaDescrizioniConNumero = string.Join(", ",
+                                compensiTipo.Select((c, i) =>
+                                    $"<span style='white-space:nowrap;'>{i + 1}: {System.Net.WebUtility.HtmlEncode(c.Descrizione ?? "")}</span>"));
+
+                            listaProgressivi = string.Join(", ",
+                                compensiTipo.Select((c, i) => (i + 1).ToString()));
+                        }
+
+                        // ==========================================================
+                        // 🔸 SEZIONE CALCOLI E IMPORTI
+                        // ==========================================================
+                        string listaImporti = string.Join("<br/>",
+                            compensiTipo.Select(c => $"<div style='text-align:right;'>{c.Importo?.ToString("N2")} €</div>"));
+
+                        decimal imponibile = compensiTipo.Sum(c => c.Importo ?? 0m);
+                        decimal cpa = Math.Round(imponibile * 0.04m, 2);
+                        decimal imponibileIva = imponibile + cpa;
+                        decimal iva = Math.Round(imponibileIva * 0.22m, 2);
+                        decimal totale = imponibileIva + iva;
+
+                        string listaCategorie = string.Join(", ", compensiTipo.Select(c => c.Categoria));
+
+                        // 🔁 Sostituzioni base
+                        contenuto = Regex.Replace(
+                            contenuto,
+                            @"\[PROGRESSIVO\]\s*:\s*\[IMPORTO\]\s*\[CATEGORIA\]",
+                            string.Join(", ", compensiTipo.Select((c, i) =>
+                                $"<span style='white-space:nowrap;'>{i + 1}: {c.Importo?.ToString("N2")} € {c.Categoria}</span>")),
+                            RegexOptions.IgnoreCase
+                        );
+
+                        contenuto = contenuto.Replace("[PROGRESSIVO]", listaProgressivi);
+                        contenuto = contenuto.Replace("[DESCRIZIONE_ATTIVITA]", listaDescrizioni);
+                        contenuto = contenuto.Replace("[IMPORTO]", listaImporti);
+                        contenuto = contenuto.Replace("[CATEGORIA]", listaCategorie);
+
+                        // 🔹 Valori calcolati
+                        contenuto = Regex.Replace(contenuto, @"\[\s*CPA\s*\]", $"<div style='text-align:right;'>{cpa:N2} €</div>", RegexOptions.IgnoreCase);
+                        contenuto = Regex.Replace(contenuto, @"\[\s*IMPONIBILE\s*\]", $"<div style='text-align:right;'>{imponibileIva:N2} €</div>", RegexOptions.IgnoreCase);
+                        contenuto = Regex.Replace(contenuto, @"\[\s*IVA\s*\]", $"<div style='text-align:right;'>{iva:N2} €</div>", RegexOptions.IgnoreCase);
+                        contenuto = Regex.Replace(contenuto, @"\[\s*TOTALE\s*\](?!_AVERE)", $"<div style='text-align:right;'>{totale:N2} €</div>", RegexOptions.IgnoreCase);
+                        contenuto = Regex.Replace(contenuto, @"\[\s*TOTALE_AVERE\s*\]", $"<div style='text-align:right;'>{totale:N2} €</div>", RegexOptions.IgnoreCase);
+
+                        if (tipo.Equals("Giudiziale", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // ==========================================
+                            // 🔹 Gestione speciale per GIUDIZIALE (tabella 30%, righe più alte)
+                            // ==========================================
+
+                            string estremi = compensiTipo
+                                .Where(c => !string.IsNullOrWhiteSpace(c.EstremiGiudizio))
+                                .Select(c => c.EstremiGiudizio)
+                                .FirstOrDefault() ?? "__________";
+                            contenuto = contenuto.Replace("[ESTREMI_GIUDIZIO]", estremi);
+
+                            var matchTabella = Regex.Match(contenuto, @"(<table[^>]*>)([\s\S]*?)(</table>)", RegexOptions.IgnoreCase);
+
+                            if (matchTabella.Success)
+                            {
+                                string tabellaOriginale = matchTabella.Value;
+
+                                // 🔹 Righe con maggiore altezza e spaziatura verticale
+                                var righeHtml = compensiTipo.Select((c, i) =>
+                                {
+                                    string numero = (i + 1).ToString();
+                                    string descrizione = !string.IsNullOrWhiteSpace(c.Descrizione)
+                                        ? System.Net.WebUtility.HtmlEncode(c.Descrizione.Trim())
+                                        : "__________";
+                                    string importo = c.Importo.HasValue
+                                        ? $"{c.Importo.Value:N2} €"
+                                        : "__________";
+
+                                    return $@"
+                                <tr style='border-bottom:0.5px solid #000; line-height:1.4; height:20px;'>
+                                    <td style='border:0.5px solid #000; padding:4px 3px; font-size:8pt; width:70%; vertical-align:middle;'>
+                                        {numero}) {descrizione}
+                                    </td>
+                                    <td style='border:0.5px solid #000; padding:4px 3px; font-size:10pt; width:30%; text-align:right; white-space:nowrap; vertical-align:middle;'>
+                                        {importo}
+                                    </td>
+                                </tr>";
+                                });
+
+                                // 🔹 Tabella centrata (30% larghezza) con righe più alte
+                                string nuovaTabella = $@"
+                                <table style='width:30%; margin:auto; border-collapse:collapse; border:0.5px solid #000; font-size:10pt; line-height:1.4;'>
+                                    <tbody>
+                                        {string.Join("", righeHtml)}
+                                    </tbody>
+                                </table>";
+
+                                contenuto = Regex.Replace(
+                                    contenuto,
+                                    @"<table[\s\S]*?</table>",
+                                    nuovaTabella,
+                                    RegexOptions.IgnoreCase | RegexOptions.Singleline
+                                );
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.WriteLine("⚠️ Nessuna tabella trovata nel template GIUDIZIALE!");
+                            }
+
+                            System.Diagnostics.Debug.WriteLine($"[DEBUG GIUDIZIALE] Tabella GIUDIZIALE (30%) con righe alte generata con {compensiTipo.Count} righe.");
+                        }
+
+
+                        // 🔍 Debug riepilogo
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] Sostituito [DESCRIZIONE_ATTIVITA] → " + listaDescrizioni);
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] Calcolato Totale → " + totale.ToString("N2"));
+                    }
+                    else
+                    {
+                        // ==========================================================
+                        // 🔹 CASO NESSUN COMPENSO
+                        // ==========================================================
+                        contenuto = contenuto
+                            .Replace("[DESCRIZIONE_ATTIVITA]", "<em>Nessuna attività</em>")
+                            .Replace("[IMPORTO]", "-")
+                            .Replace("[IMPONIBILE]", "<div style='text-align:right;'>0,00 €</div>")
+                            .Replace("[CPA]", "<div style='text-align:right;'>0,00 €</div>")
+                            .Replace("[IVA]", "<div style='text-align:right;'>0,00 €</div>")
+                            .Replace("[TOTALE]", "<div style='text-align:right;'>0,00 €</div>")
+                            .Replace("[TOTALE_AVERE]", "<div style='text-align:right;'>0,00 €</div>");
+                    }
+
+                    // ==========================================================
+                    // 🔹 GESTIONE SPECIFICA PER TEMPLATE "A ORE"
+                    // ==========================================================
+                    if (tipo == "A ore")
+                    {
+                        var righeCompensi = compensiTipo.Select((c, i) =>
+                        {
+                            string descrizione = !string.IsNullOrWhiteSpace(c.Descrizione)
+                                ? c.Descrizione.Trim()
+                                : "__________";
+                            string importo = c.Importo.HasValue
+                                ? $"{c.Importo.Value:N2} €"
+                                : "__________";
+                            return $"{i + 1}) {descrizione} - {importo}";
+                        });
+
+                        string bloccoCompensi = string.Join("<br/>", righeCompensi);
+
+                        // 3️⃣ Sostituzioni placeholder
+                        contenuto = Regex.Replace(
+                            contenuto,
+                            @"\[\s*TABELLA_COMPENSI\s*\]",
+                            bloccoCompensi,
+                            RegexOptions.IgnoreCase
+                        );
+
+                        // 4️⃣ Pulizia eventuali residui
+                        contenuto = Regex.Replace(
+                            contenuto,
+                            @"\[(OGGETTO_INCARICO|DESCRIZIONE_RUOLO|IMPORTO_ORARIO|NUMERO_PROGRESSIVO|TABELLA_COMPENSI)\]",
+                            "__________",
+                            RegexOptions.IgnoreCase
+                        );
+                    }
+
+                    // ⬇️ SOLO ALLA FINE rimuovo quadre residue rimaste
+                    contenuto = Regex.Replace(
+                        contenuto,
+                        @"\[(?:[A-Z0-9_ ]+)\]",
+                        m => m.Value.Trim('[', ']'),
+                        RegexOptions.IgnoreCase
+                    );
+
+                    // 🔹 Aggiungi separatore tra i template per evitare che si attacchino
+                    contenuto += "<div style='margin:40px 0; border-top:1px solid #ccc;'></div>";
+
+                    risultati.Add(new
+                    {
+                        TipoCompenso = tipo,
+                        Html = contenuto
+                    });
+                }
+
+                // ==========================================================
+                // 🧩 DEBUG: Log riepilogativo dei template generati
+                // ==========================================================
+                foreach (var t in risultati)
+                {
+                    var tipo = t.GetType().GetProperty("TipoCompenso")?.GetValue(t, null);
+                    var html = t.GetType().GetProperty("Html")?.GetValue(t, null) as string;
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[DEBUG ADD TEMPLATE] TipoCompenso={tipo}, Lunghezza HTML={html?.Length ?? 0}"
+                    );
+                }
+
+                // ==========================================================
+                // 🧩 DEBUG: Log JSON generato nel backend (solo struttura)
+                // ==========================================================
+                try
+                {
+                    string jsonDebug = Newtonsoft.Json.JsonConvert.SerializeObject(
+                        new
+                        {
+                            success = true,
+                            templates = risultati.Select(r => new
+                            {
+                                TipoCompenso = r.GetType().GetProperty("TipoCompenso")?.GetValue(r, null),
+                                LunghezzaHtml = ((string)r.GetType().GetProperty("Html")?.GetValue(r, null))?.Length ?? 0
+                            })
+                        },
+                        Newtonsoft.Json.Formatting.Indented
+                    );
+
+                    System.Diagnostics.Debug.WriteLine("=== DEBUG: JSON TEMPLATES ===");
+                    System.Diagnostics.Debug.WriteLine(jsonDebug);
+                    System.Diagnostics.Debug.WriteLine("==============================");
+                }
+                catch (Exception logEx)
+                {
+                    System.Diagnostics.Debug.WriteLine("[ERRORE DEBUG JSON]: " + logEx.Message);
+                }
+
+
+
+                return Json(new { success = true, templates = risultati }, JsonRequestBehavior.AllowGet);
 
             }
             catch (Exception ex)
             {
+                // 🔍 Costruisci messaggio dettagliato
+                string dettagli = ex.Message;
+
+                if (ex.InnerException != null)
+                    dettagli += " | INNER: " + ex.InnerException.Message;
+
+                if (ex.InnerException?.InnerException != null)
+                    dettagli += " | INNER2: " + ex.InnerException.InnerException.Message;
+
+                // 🔁 Ritorna al client il messaggio completo
                 return Json(new
                 {
                     success = false,
-                    message = "Errore durante la generazione dell’incarico: " + ex.Message
+                    message = $"❌ Errore durante la generazione foglio incarico: {dettagli}"
                 }, JsonRequestBehavior.AllowGet);
             }
         }
+
+        /// <summary>
+        /// Logga a console tutti i segnaposti presenti nel contenuto (con quadre o senza).
+        /// </summary>
+        private void LogSegnaposti(string contenuto)
+        {
+            System.Diagnostics.Debug.WriteLine("===== SEGNAPOSTI TROVATI =====");
+
+            // Cattura con quadre [QUALCOSA]
+            var matchesQuadre = Regex.Matches(contenuto, @"\[[^\]]+\]");
+            foreach (Match m in matchesQuadre)
+            {
+                System.Diagnostics.Debug.WriteLine("Con quadre: " + m.Value);
+            }
+
+            // Cattura parole chiave senza quadre tipo PROGRESSIVO, IMPORTO, CATEGORIA
+            var matchesPlain = Regex.Matches(contenuto, @"\b(PROGRESSIVO|IMPORTO|CATEGORIA)\b", RegexOptions.IgnoreCase);
+            foreach (Match m in matchesPlain)
+            {
+                System.Diagnostics.Debug.WriteLine("Senza quadre: " + m.Value);
+            }
+
+            System.Diagnostics.Debug.WriteLine("================================");
+        }
+
+        private string NormalizzaSegnaposti(string html)
+        {
+            if (string.IsNullOrWhiteSpace(html))
+                return html;
+
+            // 1. Normalizza quadre sporche generate da Word
+            html = Regex.Replace(html, @"\[\s*", "[");   // "[  NOME" → "[NOME"
+            html = Regex.Replace(html, @"\s*\]", "]");   // "NOME   ]" → "NOME]"
+
+            // 2. Correggi segnaposti doppi [[NOME COGNOME]]
+            html = Regex.Replace(html, @"\[{2,}", "[");  // [[ → [
+            html = Regex.Replace(html, @"\]{2,}", "]");  // ]] → ]
+
+            // 3. Segnaposti generici [ ... ] con tag/spazi in mezzo
+            html = Regex.Replace(html,
+                @"\[\s*([A-Z0-9_. ]+?)\s*\]",   // accetta solo lettere maiuscole/numeri/underscore/punto/spazi
+                m => $"[{m.Groups[1].Value.Trim()}]",
+                RegexOptions.IgnoreCase);
+
+
+            // 4. Normalizza underscore
+            html = Regex.Replace(html,
+                @"(<span[^>]*>)?_{3,}(<\/span>)?",
+                "[VUOTO]",
+                RegexOptions.IgnoreCase);
+
+            // 5. Segnaposti speciali spezzati da Word
+            // NOME COGNOME CLIENTE
+            html = Regex.Replace(html,
+                @"N\s*O\s*M\s*E\s*(</?\w+[^>]*>\s*)*C\s*O\s*G\s*N\s*O\s*M\s*E\s*(</?\w+[^>]*>\s*)*C\s*L\s*I\s*E\s*N\s*T\s*E",
+                "[NOME COGNOME CLIENTE]",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            // NOME COGNOME semplice (NON già racchiuso tra [])
+            html = Regex.Replace(html,
+                @"(?<!\[)N\s*O\s*M\s*E\s*(</?\w+[^>]*>\s*)*C\s*O\s*G\s*N\s*O\s*M\s*E(?!\s*C\s*L\s*I\s*E\s*N\s*T\s*E)(?!\])",
+                "[NOME COGNOME]",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            // 6. Blocchi multipli PROGRESSIVO + IMPORTO + CATEGORIA
+            html = Regex.Replace(html,
+                @"\[\s*PROGRESSIVO\s*\](?:\s|<[^>]+>)*:(?:\s|<[^>]+>)*\[\s*IMPORTO\s*\](?:\s|<[^>]+>)*\[\s*CATEGORIA\s*\]",
+                "[PROGRESSIVO]: [IMPORTO] [CATEGORIA]",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            html = Regex.Replace(html,
+                @"PROGRESSIVO(?:\s|<[^>]+>)*:(?:\s|<[^>]+>)*\[\s*IMPORTO\s*\](?:\s|<[^>]+>)*\[\s*CATEGORIA\s*\]",
+                "[PROGRESSIVO]: [IMPORTO] [CATEGORIA]",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            html = Regex.Replace(html,
+                @"PROGRESSIVO(?:\s|<[^>]+>)*:(?:\s|<[^>]+>)*IMPORTO(?:\s|<[^>]+>)*CATEGORIA",
+                "[PROGRESSIVO]: [IMPORTO] [CATEGORIA]",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            return html;
+        }
+
+
+        private string CostruisciListaCompensiLineare(List<CompensiPraticaDettaglio> compensi)
+        {
+            if (compensi == null || !compensi.Any())
+                return "<p><em>Nessun compenso inserito</em></p>";
+
+            var sb = new StringBuilder();
+            int i = 1;
+            foreach (var c in compensi.OrderBy(c => c.Ordine))
+            {
+                sb.Append($"{i}) {c.Descrizione} - {c.Importo:N2} €<br/>");
+                i++;
+            }
+            return sb.ToString();
+        }
+
         // caricato dall esterno
         [HttpPost]
         public ActionResult SalvaFoglioIncaricoFirmato(int idPratica, HttpPostedFileBase file)
@@ -1999,29 +3775,6 @@ namespace SinergiaMvc.Controllers
         }
 
 
-        [HttpGet]
-        public ActionResult ScaricaFoglioIncarico(int idDocumento)
-        {
-            var doc = db.DocumentiPratiche.FirstOrDefault(d => d.ID_Documento == idDocumento);
-            if (doc == null || doc.Documento == null || doc.Documento.Length == 0)
-                return Content("Documento non trovato o vuoto.");
-
-            // Recupera la pratica per il nome
-            var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == doc.ID_Pratiche);
-
-            string nomeFile = doc.NomeFile;
-
-            if (pratica != null)
-            {
-                // Crea un nome file usando il titolo della pratica, pulito da caratteri invalidi
-                string titoloPulito = string.Concat(pratica.Titolo.Split(System.IO.Path.GetInvalidFileNameChars()));
-                nomeFile = $"Incarico_{titoloPulito}.pdf";
-            }
-
-            return File(doc.Documento, "application/pdf", nomeFile);
-        }
-
-
         [HttpPost]
         [ValidateInput(false)]
         public ActionResult GeneraPDFIncaricoDaHtml()
@@ -2031,39 +3784,216 @@ namespace SinergiaMvc.Controllers
                 if (!int.TryParse(Request.Form["idPratica"], out int idPratica))
                     return Json(new { success = false, message = "ID pratica non valido." });
 
-                // Usa Request.Unvalidated per leggere i dati html senza validazione
+                // ✅ Lettura HTML non validato
                 string html = Request.Unvalidated["html"];
+
+                // 👇 qui viene definito tipoCompenso (nuovo parametro dal frontend)
+                string tipoCompenso = Request.Form["tipoCompenso"];
+                if (string.IsNullOrWhiteSpace(tipoCompenso))
+                    tipoCompenso = "Generico";  // fallback
 
                 var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == idPratica);
                 if (pratica == null)
                     return Json(new { success = false, message = "Pratica non trovata." });
 
-                // Percorso cartella App_Data\Incarichi
-                string debugFolder = Server.MapPath("~/App_Data/Incarichi");
-                if (!System.IO.Directory.Exists(debugFolder))
+                // ======================================================
+                // 🧹 PULIZIA HTML (rimozione elementi inutili e rettangolini Word)
+                // ======================================================
+
+                // 🔸 1. Rimuovi background color e stili inutili
+                html = Regex.Replace(html,
+                    @"background(-color)?:\s*[^;""']+;?",
+                    "",
+                    RegexOptions.IgnoreCase);
+
+                // 🔸 2. Rimuovi <div> vuoti con bordi o dimensioni
+                html = Regex.Replace(html,
+                    @"<div[^>]*(border|width|height)[^>]*>\s*</div>",
+                    "",
+                    RegexOptions.IgnoreCase);
+
+                // 🔸 3. Rimuovi <span> vuoti con width/height (causa rettangolini)
+                html = Regex.Replace(html,
+                    @"<span[^>]*(width|height)\s*:\s*\d+(\.\d+)?(pt|in|cm|mm)[^>]*>\s*</span>",
+                    "",
+                    RegexOptions.IgnoreCase);
+
+                // 🔸 4. Rimuovi paragrafi contenenti solo <span> vuoti
+                html = Regex.Replace(html,
+                    @"<p[^>]*>\s*(<span[^>]*(width|height)\s*:\s*\d+(\.\d+)?(pt|in|cm|mm)[^>]*>\s*</span>)+\s*</p>",
+                    "",
+                    RegexOptions.IgnoreCase);
+
+                // 🔸 5. Rimuovi paragrafi o div completamente vuoti
+                html = Regex.Replace(html, @"<p[^>]*>(\s|&nbsp;)*</p>", "", RegexOptions.IgnoreCase);
+                html = Regex.Replace(html, @"<div[^>]*>(\s|&nbsp;)*</div>", "", RegexOptions.IgnoreCase);
+                html = html.Trim();
+
+                // 🔥 Rimuove immagini senza src (quelle che creano il quadratino vuoto)
+                html = Regex.Replace(html, @"<img[^>]*(src\s*=\s*['""]\s*['""][^>]*)?>", "", RegexOptions.IgnoreCase);
+                // ======================================================
+                // 📄 Sostituzione marker di separazione tra template
+                // (gestisce anche i casi HTML-encodati da Word o browser)
+                // ======================================================
+                html = html.Replace("<!-- TEMPLATE_SEPARATOR -->", "<div class='page-break'></div>");
+                html = html.Replace("&lt;!-- TEMPLATE_SEPARATOR --&gt;", "<div class='page-break'></div>");
+                html = html.Replace("<!--TEMPLATE_SEPARATOR-->", "<div class='page-break'></div>");
+                html = html.Replace("&lt;!--TEMPLATE_SEPARATOR--&gt;", "<div class='page-break'></div>");
+
+                // 🔍 Log diagnostico (opzionale)
+                int countSeparators = Regex.Matches(html, "page-break", RegexOptions.IgnoreCase).Count;
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Trovati {countSeparators} separatori di pagina nel template HTML");
+
+                // ======================================================
+                // 🧱 Evita che le tabelle (es. compensi) vengano spezzate tra due pagine
+                //     e ingloba anche il testo o span immediatamente precedenti
+                // ======================================================
+                if (!html.Contains("class='avoid-break'"))
                 {
-                    System.IO.Directory.CreateDirectory(debugFolder);
+                    var lines = html.Split(new[] { "\n", "\r\n" }, StringSplitOptions.None).ToList();
+                    for (int i = 1; i < lines.Count; i++)
+                    {
+                        if (lines[i].Contains("<table") && !lines[i].Contains("avoid-break"))
+                        {
+                            string prev = lines[i - 1].Trim();
+                            if (!string.IsNullOrEmpty(prev) && (prev.Contains("<span") || prev.Contains("€")))
+                            {
+                                lines[i - 1] = $"<div class='avoid-break'>{lines[i - 1]}";
+                                lines[i] = lines[i] + "</div>";
+                            }
+                        }
+                    }
+                    html = string.Join("\n", lines);
                 }
 
-                // Nome file personalizzato con ID pratica e timestamp
-                string nomeFileDebug = $"_incarico_pratica_{idPratica}_{DateTime.Now:yyyyMMddHHmmss}.html";
-                string filePath = System.IO.Path.Combine(debugFolder, nomeFileDebug);
 
-                // Salva il file HTML di debug
-                System.IO.File.WriteAllText(filePath, html);
+                // ======================================================
+                // 💄 CSS globale per evitare la divisione delle tabelle
+                // ======================================================
+                string cssNoBreak = @"
+                <style>
+                .avoid-break {
+                    page-break-before: auto !important;
+                    page-break-after: auto !important;
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    display: block !important;
+                    margin: 10px 0 !important;
+                }
+                table {
+                    border-collapse: collapse !important;
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    margin: auto !important;
+                    margin-bottom: 10px !important;
+                }
+                tr, td, th {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    border: 1px solid #000 !important;
+                    vertical-align: middle !important;
+                }
+                td, th {
+                    padding: 3px 6px !important;
+                    font-size: 10pt !important;
+                }
 
-                string nomeFile = $"Incarico_{pratica.ID_Pratiche}_{DateTime.Now:yyyyMMddHHmmss}.pdf";
+                /* ✅ Imposta numerazione di pagina (per browser o PDF compatibili) */
+        @page {
+                    @bottom-center {
+                        content: 'Pagina ' counter(page) ' di ' counter(pages);
+                        font-size: 9pt;
+                        color: #666;
+                    }
+                }
 
+                /* ✅ Footer visivo compatibile anche con Rotativa */
+                .footer-page {
+                    text-align: center;
+                    font-size: 9pt;
+                    color: #666;
+                    margin-top: 20px;
+                }
+                </style>";
+
+
+                html = cssNoBreak + html;
+
+                // ======================================================
+                // 🧾 DEBUG: salva HTML pulito (facoltativo)
+                // ======================================================
+                string debugPath = Server.MapPath("~/Content/test_html.txt");
+                System.IO.File.WriteAllText(debugPath, html);
+                System.Diagnostics.Debug.WriteLine($"🧩 HTML pulito salvato in: {debugPath}");
+
+                // ======================================================
+                // 📄 Nome file PDF
+                // ======================================================
+                string titoloSanificato = pratica.Titolo;
+                if (!string.IsNullOrEmpty(titoloSanificato))
+                {
+                    foreach (var c in Path.GetInvalidFileNameChars())
+                        titoloSanificato = titoloSanificato.Replace(c, '_');
+                }
+                else
+                {
+                    titoloSanificato = pratica.ID_Pratiche.ToString();
+                }
+
+                string nomeFile = $"Incarico_{titoloSanificato}_{DateTime.Now:yyyyMMddHHmmss}.pdf";
+
+                // ======================================================
+                // 🔍 DEBUG VISIVO per identificare il quadratino misterioso
+                // ======================================================
+                try
+                {
+                    string debugHtml = html;
+
+                    // 🔴 Evidenzia immagini senza src
+                    debugHtml = Regex.Replace(debugHtml,
+                        @"<img([^>]*)(src\s*=\s*['""]\s*['""])?([^>]*)>",
+                        "<div style='border:2px solid red; background:#ffeeee; padding:5px; margin:5px;'>IMG VUOTO TROVATO</div>",
+                        RegexOptions.IgnoreCase);
+
+                    // 🟡 Evidenzia eventuali v:shape di Word
+                    debugHtml = Regex.Replace(debugHtml,
+                        @"<v:shape[^>]*>.*?</v:shape>",
+                        "<div style='border:2px dashed orange; background:#fff4cc; padding:5px; margin:5px;'>V:SHAPE TROVATO</div>",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+                    // 🟡 Evidenzia eventuali object
+                    debugHtml = Regex.Replace(debugHtml,
+                        @"<object[^>]*>.*?</object>",
+                        "<div style='border:2px dashed orange; background:#fff4cc; padding:5px; margin:5px;'>OBJECT TROVATO</div>",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+                    // 📝 Salva file HTML per analisi visiva
+                    string debugFilePath = Server.MapPath("~/Content/debug_html_logo.html");
+                    System.IO.File.WriteAllText(debugFilePath, debugHtml);
+                    System.Diagnostics.Debug.WriteLine("🔍 File debug HTML salvato in: " + debugFilePath);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("⚠️ Errore durante il debug HTML: " + ex.Message);
+                }
+
+                // ======================================================
+                // 🖨️ Generazione PDF con Rotativa
+                // ======================================================
                 var pdf = new Rotativa.ViewAsPdf("~/Views/TemplateIncarichi/TemplateCompilato.cshtml", (object)html)
-
                 {
                     FileName = nomeFile,
                     PageSize = Rotativa.Options.Size.A4,
-                    PageMargins = new Rotativa.Options.Margins(10, 10, 10, 10)
+                    PageMargins = new Rotativa.Options.Margins(15, 15, 25, 15),
+                    CustomSwitches = "--disable-forms --disable-javascript --print-media-type --disable-smart-shrinking"
                 };
 
                 byte[] pdfBytes = pdf.BuildPdf(ControllerContext);
 
+
+                // ======================================================
+                // 💾 Salvataggio in DocumentiPratiche
+                // ======================================================
                 var documento = new DocumentiPratiche
                 {
                     ID_Pratiche = pratica.ID_Pratiche,
@@ -2074,189 +4004,250 @@ namespace SinergiaMvc.Controllers
                     Stato = "Da firmare",
                     DataCaricamento = DateTime.Now,
                     ID_UtenteCaricamento = UserManager.GetIDUtenteCollegato(),
+                    CategoriaDocumento = $"Incarico {tipoCompenso}",
                     Note = "Incarico generato da template"
                 };
 
                 db.DocumentiPratiche.Add(documento);
                 db.SaveChanges();
 
-                return Json(new { success = true, message = "PDF generato e salvato correttamente." });
+                return Json(new { success = true, message = "✅ PDF generato e salvato correttamente." });
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Errore generazione PDF: " + ex.Message });
+                return Json(new { success = false, message = "❌ Errore generazione PDF: " + ex.Message });
             }
         }
 
 
-        // Fine Gestione Template 
+
+        /*Fine Gestione Template */
 
         [HttpGet]
         public ActionResult DettaglioPratica(int id, string tipoCliente)
         {
-            int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
+            System.Diagnostics.Trace.WriteLine("══════════════════════════════════════════════════════");
+            System.Diagnostics.Trace.WriteLine($"📄 [DettaglioPratica] ID Pratica = {id}, TipoCliente = {tipoCliente}");
 
-            var praticaEntity = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == id && p.Stato != "Eliminato");
-            if (praticaEntity == null)
-                return View("~/Views/Shared/Error.cshtml", model: "Pratica non trovata.");
-
-            var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == praticaEntity.ID_Cliente);
-            string nomeCliente = cliente != null ? $"{cliente.Nome} {cliente.Cognome}".Trim() : "Cliente sconosciuto";
-
-            // ✅ Recupero Nome e Cognome del professionista direttamente da OperatoriSinergia se è l'owner
-            string nomeResponsabile = "Professionista sconosciuto";
-
-            // 1. Prova come collegato (caso collaboratore)
-            var operatoreCollegato = db.OperatoriSinergia
-                .FirstOrDefault(o => o.ID_UtenteCollegato == praticaEntity.ID_UtenteResponsabile);
-
-            if (operatoreCollegato != null && operatoreCollegato.ID_Owner != null)
+            try
             {
-                var owner = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Cliente == operatoreCollegato.ID_Owner);
-                if (owner != null)
-                    nomeResponsabile = $"{owner.Nome} {owner.Cognome}".Trim();
-            }
-            else
-            {
-                // 2. Prova come owner diretto (caso ID_Cliente = ID_UtenteResponsabile)
-                var ownerDiretto = db.OperatoriSinergia
-                    .FirstOrDefault(o => o.ID_Cliente == praticaEntity.ID_UtenteResponsabile);
+                int idUtenteCollegato = UserManager.GetIDUtenteCollegato();
+                System.Diagnostics.Trace.WriteLine($"👤 Utente collegato: {idUtenteCollegato}");
 
-                if (ownerDiretto != null)
-                    nomeResponsabile = $"{ownerDiretto.Nome} {ownerDiretto.Cognome}".Trim();
-            }
+                // =====================================================
+                // 🔍 PRATICA BASE
+                // =====================================================
+                var praticaEntity = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == id && p.Stato != "Eliminato");
+                if (praticaEntity == null)
+                {
+                    System.Diagnostics.Trace.WriteLine("❌ Pratica non trovata o eliminata.");
+                    return View("~/Views/Shared/Error.cshtml", model: "Pratica non trovata o eliminata.");
+                }
 
-            // 🔎 Recupero Cluster collegati alla pratica
-            var clusterList = (
-                from c in db.Cluster
-                join u in db.Utenti on c.ID_Utente equals u.ID_Utente
-                where c.ID_Pratiche == id
-                select new ClusterViewModel
+                // =====================================================
+                // 🧾 CLIENTE + OWNER
+                // =====================================================
+                var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == praticaEntity.ID_Cliente);
+                string nomeCliente = cliente != null ? $"{cliente.Nome} {cliente.Cognome}".Trim() : "Cliente sconosciuto";
+
+                string nomeOwnerCliente = "-";
+                if (cliente?.ID_Operatore != null)
+                {
+                    var ownerCliente = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Cliente == cliente.ID_Operatore);
+                    if (ownerCliente != null)
+                        nomeOwnerCliente = $"{ownerCliente.Nome} {ownerCliente.Cognome}".Trim();
+                }
+
+                System.Diagnostics.Trace.WriteLine($"🏢 Cliente: {nomeCliente} | Owner cliente: {nomeOwnerCliente}");
+
+                // =====================================================
+                // 👨‍💼 RESPONSABILE
+                // =====================================================
+                string nomeResponsabile = "Professionista sconosciuto";
+                var operatoreCollegato = db.OperatoriSinergia
+                    .FirstOrDefault(o => o.ID_UtenteCollegato == praticaEntity.ID_UtenteResponsabile);
+
+                if (operatoreCollegato != null)
+                {
+                    if (operatoreCollegato.ID_Owner != null)
+                    {
+                        var owner = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Cliente == operatoreCollegato.ID_Owner);
+                        if (owner != null)
+                            nomeResponsabile = $"{owner.Nome} {owner.Cognome}".Trim();
+                    }
+                    else
+                    {
+                        nomeResponsabile = $"{operatoreCollegato.Nome} {operatoreCollegato.Cognome}".Trim();
+                    }
+                }
+
+                System.Diagnostics.Trace.WriteLine($"👨‍💼 Responsabile: {nomeResponsabile}");
+
+                // =====================================================
+                // 👥 CLUSTER ASSOCIATI (fix LINQ to Entities)
+                // =====================================================
+                var clusterRaw = (
+                    from c in db.Cluster
+                    join u in db.Utenti on c.ID_Utente equals u.ID_Utente into joinU
+                    from u in joinU.DefaultIfEmpty()
+                    join o in db.OperatoriSinergia on c.ID_Utente equals o.ID_Cliente into joinO
+                    from o in joinO.DefaultIfEmpty()
+                    where c.ID_Pratiche == id
+                    select new
+                    {
+                        c.ID_Pratiche,
+                        c.ID_Utente,
+                        c.TipoCluster,
+                        c.PercentualePrevisione,
+                        c.DataAssegnazione,
+                        NomeU = u.Nome,
+                        CognomeU = u.Cognome,
+                        NomeO = o.Nome,
+                        CognomeO = o.Cognome
+                    }
+                ).ToList(); // 💾 query eseguita in SQL
+
+                var clusterList = clusterRaw.Select(c => new ClusterViewModel
                 {
                     ID_Pratiche = c.ID_Pratiche,
                     ID_Utente = c.ID_Utente,
                     TipoCluster = c.TipoCluster,
                     PercentualePrevisione = c.PercentualePrevisione,
                     DataAssegnazione = c.DataAssegnazione,
-                    NomeUtente = u.Nome + " " + u.Cognome,
-                    ImportoCalcolato = (praticaEntity.Budget) * (c.PercentualePrevisione / 100)
+                    NomeUtente = !string.IsNullOrEmpty(c.NomeU)
+                        ? $"{c.NomeU} {c.CognomeU}".Trim()
+                        : (!string.IsNullOrEmpty(c.NomeO)
+                            ? $"{c.NomeO} {c.CognomeO}".Trim()
+                            : "—"),
+                    ImportoCalcolato = praticaEntity.Budget * (c.PercentualePrevisione / 100)
+                }).ToList();
+
+                System.Diagnostics.Trace.WriteLine($"📊 Cluster trovati: {clusterList.Count}");
+                foreach (var c in clusterList)
+                    System.Diagnostics.Trace.WriteLine($"   • {c.NomeUtente} - {c.TipoCluster} ({c.PercentualePrevisione}% → {c.ImportoCalcolato:N2} €)");
+
+                // =====================================================
+                // 💼 COLLABORATORI DA COMPENSI DETTAGLIO
+                // =====================================================
+                var listaCollaboratoriDettaglio = new List<CollaboratoreDettaglioViewModel>();
+                var compensiDettaglio = db.CompensiPraticaDettaglio
+                    .Where(cd => cd.ID_Pratiche == id)
+                    .ToList();
+
+                foreach (var dett in compensiDettaglio)
+                {
+                    if (!string.IsNullOrEmpty(dett.Collaboratori))
+                    {
+                        try
+                        {
+                            var collabs = Newtonsoft.Json.JsonConvert.DeserializeObject<List<dynamic>>(dett.Collaboratori);
+
+                            foreach (var c in collabs)
+                            {
+                                decimal perc = (decimal?)(c.Percentuale ?? 0) ?? 0;
+                                decimal importoRiga = dett.Importo ?? 0;
+                                decimal quota = Math.Round(importoRiga * (perc / 100m), 2);
+
+                                listaCollaboratoriDettaglio.Add(new CollaboratoreDettaglioViewModel
+                                {
+                                    Nome = (string)(c.NomeCollaboratore ?? "-"),
+                                    Percentuale = perc,
+                                    Importo = quota,
+                                    NomeCompenso = $"{(dett.TipoCompenso ?? "-")} - {(dett.Descrizione ?? "-")}"
+                                });
+                            }
+                        }
+                        catch (Exception jsonEx)
+                        {
+                            System.Diagnostics.Trace.WriteLine($"⚠️ Errore parse JSON collaboratori: {jsonEx.Message}");
+                        }
+                    }
                 }
-            ).ToList();
 
-            // 📝 Debug output
-            System.Diagnostics.Debug.WriteLine("=== CLUSTER LIST ===");
-            System.Diagnostics.Debug.WriteLine($"Cluster trovati: {clusterList.Count}");
-            foreach (var cl in clusterList)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"ID_Pratiche: {cl.ID_Pratiche}, " +
-                    $"Utente: {cl.NomeUtente}, " +
-                    $"Percentuale: {cl.PercentualePrevisione}, " +
-                    $"Importo: {cl.ImportoCalcolato}");
+                System.Diagnostics.Trace.WriteLine($"👥 Collaboratori CompensiDettaglio: {listaCollaboratoriDettaglio.Count}");
+                foreach (var collab in listaCollaboratoriDettaglio)
+                    System.Diagnostics.Trace.WriteLine($"   • {collab.Nome} ({collab.Percentuale}% → {collab.Importo:N2} €) → Compenso: {collab.NomeCompenso}");
+
+                // =====================================================
+                // 🧾 AVVISI PARCELLA
+                // =====================================================
+                var avvisiParcella = db.AvvisiParcella
+                    .Where(a => a.ID_Pratiche == id && a.Stato != "Annullato")
+                    .Select(a => new AvvisoParcellaViewModel
+                    {
+                        ID_AvvisoParcelle = a.ID_AvvisoParcelle,
+                        TitoloAvviso = a.TitoloAvviso, // 👈 campo reale del DB
+                        DataAvviso = a.DataAvviso,
+                        Importo = a.Importo,
+                        MetodoPagamento = a.MetodoPagamento,
+                        Stato = a.Stato,
+                        ImportoIVA = a.ImportoIVA,
+                        AliquotaIVA = a.AliquotaIVA,
+                        ContributoIntegrativoImporto = a.ContributoIntegrativoImporto,
+                        ContributoIntegrativoPercentuale = a.ContributoIntegrativoPercentuale
+                    })
+                    .ToList();
+
+                System.Diagnostics.Trace.WriteLine($"🧾 Avvisi parcella trovati: {avvisiParcella.Count}");
+                foreach (var a in avvisiParcella)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"   • [{a.DataAvviso:dd/MM/yyyy}] {a.TitoloAvviso ?? "(senza titolo)"} → {a.Importo:N2} € | IVA: {a.ImportoIVA:N2} | CI: {a.ContributoIntegrativoImporto:N2}"
+                    );
+                }
+
+                // =====================================================
+                // 💰 TOTALE RIEPILOGO
+                // =====================================================
+                decimal totaleCompensi = compensiDettaglio.Sum(c => (decimal?)c.Importo) ?? 0;
+                decimal totaleRimborsi = db.RimborsiPratica.Where(r => r.ID_Pratiche == id).Sum(r => (decimal?)r.Importo) ?? 0;
+                decimal totaleCosti = db.CostiPratica.Where(c => c.ID_Pratiche == id).Sum(c => (decimal?)c.Importo) ?? 0;
+
+                System.Diagnostics.Trace.WriteLine($"💶 Totali → Compensi: {totaleCompensi:N2}, Rimborsi: {totaleRimborsi:N2}, Costi: {totaleCosti:N2}");
+
+                // =====================================================
+                // 📦 COSTRUZIONE MODEL COMPLETO
+                // =====================================================
+                var pratica = new PraticaViewModel
+                {
+                    ID_Pratiche = praticaEntity.ID_Pratiche,
+                    Titolo = praticaEntity.Titolo,
+                    Stato = praticaEntity.Stato,
+                    Budget = praticaEntity.Budget,
+                    NomeCliente = nomeCliente,
+                    NomeUtenteResponsabile = nomeResponsabile,
+                    Note = praticaEntity.Note,
+                    DataCreazione = praticaEntity.DataCreazione // 👈 AGGIUNTO
+                };
+
+
+                var model = new VisualizzaDettaglioPraticaViewModel
+                {
+                    Pratica = pratica,
+                    Cluster = clusterList,
+                    TotaleCompensi = totaleCompensi,
+                    TotaleRimborsi = totaleRimborsi,
+                    TotaleCosti = totaleCosti,
+                    AvvisiParcella = avvisiParcella,
+                    CollaboratoriDettaglio = listaCollaboratoriDettaglio
+                };
+
+                System.Diagnostics.Trace.WriteLine("✅ MODEL PRONTO PER LA VIEW");
+                System.Diagnostics.Trace.WriteLine("══════════════════════════════════════════════════════");
+
+                return View("~/Views/Pratiche/VisualizzaDettaglio.cshtml", model);
             }
-            System.Diagnostics.Debug.WriteLine("====================");
-
-            var pratica = new PraticaViewModel
+            catch (Exception ex)
             {
-                ID_Pratiche = praticaEntity.ID_Pratiche,
-                Titolo = praticaEntity.Titolo,
-                Descrizione = praticaEntity.Descrizione,
-                DataInizioAttivitaStimata = praticaEntity.DataInizioAttivitaStimata,
-                DataFineAttivitaStimata = praticaEntity.DataFineAttivitaStimata,
-                Stato = praticaEntity.Stato,
-                ID_Cliente = praticaEntity.ID_Cliente,
-                ID_UtenteResponsabile = praticaEntity.ID_UtenteResponsabile,
-                ID_UtenteUltimaModifica = praticaEntity.ID_UtenteUltimaModifica,
-                Budget = praticaEntity.Budget,
-                DataCreazione = praticaEntity.DataCreazione,
-                UltimaModifica = praticaEntity.UltimaModifica,
-                Note = praticaEntity.Note,
-                NomeCliente = nomeCliente,
-                TipoCliente = cliente?.TipoCliente ?? "N/D",
-                NomeUtenteResponsabile = nomeResponsabile
-            };
+                System.Diagnostics.Trace.WriteLine("❌ ECCEZIONE IN [DettaglioPratica]");
+                System.Diagnostics.Trace.WriteLine($"   Messaggio: {ex.Message}");
+                System.Diagnostics.Trace.WriteLine($"   StackTrace: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                    System.Diagnostics.Trace.WriteLine($"   Inner: {ex.InnerException.Message}");
 
-            pratica.Compensi = db.CompensiPratica
-                .Where(c => c.ID_Pratiche == id)
-                .Select(c => new CompensoViewModel
-                {
-                    Tipo = c.Tipo,
-                    Descrizione = c.Descrizione,
-                    Importo = c.Importo
-                }).ToList();
-
-            pratica.Rimborsi = db.RimborsiPratica
-                .Where(r => r.ID_Pratiche == id)
-                .Select(r => new RimborsoViewModel
-                {
-                    Descrizione = r.Descrizione,
-                    Importo = r.Importo
-                }).ToList();
-
-            pratica.CostiPratica = db.CostiPratica
-                .Where(c => c.ID_Pratiche == id)
-                .Select(c => new CostoPraticaViewModel
-                {
-                    Descrizione = c.Descrizione,
-                    Importo = c.Importo ?? 0,
-                    ID_ClienteAssociato = c.ID_ClienteAssociato,
-                    NomeFornitoreManuale = c.ID_ClienteAssociato.HasValue
-                        ? db.Clienti.Where(cl => cl.ID_Cliente == c.ID_ClienteAssociato.Value).Select(cl => cl.Nome).FirstOrDefault()
-                        : null
-                }).ToList();
-
-            var utentiAssociati = (from rel in db.RelazionePraticheUtenti
-                                   join u in db.Utenti on rel.ID_Utente equals u.ID_Utente
-                                   where rel.ID_Pratiche == id
-                                   select new UtenteViewModel
-                                   {
-                                       ID_Utente = u.ID_Utente,
-                                       Nome = u.Nome,
-                                       Cognome = u.Cognome
-                                   }).ToList();
-
-            var avvisiParcella = db.AvvisiParcella
-                .Where(a => a.ID_Pratiche == id && a.Stato != "Annullato")
-                .Select(a => new AvvisoParcellaViewModel
-                {
-                    ID_AvvisoParcelle = a.ID_AvvisoParcelle,
-                    ID_Pratiche = a.ID_Pratiche.Value,
-                    DataAvviso = a.DataAvviso,
-                    Importo = a.Importo,
-                    Stato = a.Stato,
-                    MetodoPagamento = a.MetodoPagamento,
-                    ContributoIntegrativoPercentuale = a.ContributoIntegrativoPercentuale,
-                    ContributoIntegrativoImporto = a.ContributoIntegrativoImporto,
-                    AliquotaIVA = a.AliquotaIVA,
-                    ImportoIVA = a.ImportoIVA,
-                    NomePratica = pratica.Titolo
-                }).ToList();
-
-            // ✅ Usa CompensiPraticaDettaglio (e gestisci null con ?? 0)
-            decimal totaleCompensi = db.CompensiPraticaDettaglio
-                .Where(c => c.ID_Pratiche == id)
-                .Sum(c => (decimal?)c.Importo) ?? 0;
-
-            decimal totaleRimborsi = pratica.Rimborsi.Sum(r => r.Importo);
-            decimal totaleCosti = pratica.CostiPratica.Sum(c => c.Importo );
-
-            decimal totalePercentuale = clusterList.Sum(c => c.PercentualePrevisione );
-            decimal importoFinale = (pratica.Budget) * (totalePercentuale / 100);
-
-
-            var model = new VisualizzaDettaglioPraticaViewModel
-            {
-                Pratica = pratica,
-                Cluster = clusterList,
-                ImportoFinale = importoFinale,
-                Utenti = utentiAssociati,
-                TotaleCompensi = totaleCompensi,
-                TotaleRimborsi = totaleRimborsi,
-                TotaleCosti = totaleCosti,
-                AvvisiParcella = avvisiParcella
-            };
-
-            return View("~/Views/Pratiche/VisualizzaDettaglio.cshtml", model);
+                return View("~/Views/Shared/Error.cshtml",
+                    model: $"Errore durante il caricamento del dettaglio pratica. Dettaglio tecnico: {ex.Message}");
+            }
         }
 
 
@@ -2351,14 +4342,44 @@ namespace SinergiaMvc.Controllers
         }
 
         [HttpGet]
-        public ActionResult DownloadDocumentoPratica(int id)
+        public ActionResult DownloadDocumentoPratica(int idDocumento)
         {
-            var documento = db.DocumentiPratiche.FirstOrDefault(d => d.ID_Documento == id && d.Stato == "Attivo");
-            if (documento == null)
-                return HttpNotFound("Documento non trovato.");
+            try
+            {
+                var documento = db.DocumentiPratiche.FirstOrDefault(d => d.ID_Documento == idDocumento);
+                if (documento == null)
+                    return HttpNotFound("Documento non trovato.");
 
-            return File(documento.Documento, documento.TipoContenuto, documento.NomeFile);
+                var fileBytes = documento.Documento;
+                if (fileBytes == null || fileBytes.Length == 0)
+                    return HttpNotFound("Contenuto del file non disponibile.");
+
+                // 🧩 Normalizza nome, estensione e tipo
+                string nomeFile = documento.NomeFile;
+                string estensione = documento.Estensione?.ToLower() ?? "";
+                string contentType = documento.TipoContenuto ?? "application/octet-stream";
+
+                if (estensione == ".p7m" || nomeFile.EndsWith(".p7m", StringComparison.OrdinalIgnoreCase))
+                    contentType = "application/pkcs7-mime";
+
+                if (estensione == ".pdf" || nomeFile.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                    contentType = "application/pdf";
+
+                if (!nomeFile.EndsWith(estensione, StringComparison.OrdinalIgnoreCase))
+                    nomeFile += estensione;
+
+                // 💾 Restituisci file scaricabile
+                Response.AddHeader("Content-Disposition", $"attachment; filename=\"{nomeFile}\"");
+                return File(fileBytes, contentType);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERRORE DownloadDocumentoPratica] {ex.Message}");
+                return new HttpStatusCodeResult(500, "Errore durante il download del documento.");
+            }
         }
+
+
 
         [HttpPost]
         public ActionResult EliminaDocumentoPratica(int id)
@@ -2383,20 +4404,85 @@ namespace SinergiaMvc.Controllers
 
         // questo metodo mi serve per selezionare gli utenti da inserire in una pratica
         [HttpGet]
-        public JsonResult GetUtentiAttivi()
+        public JsonResult GetUtentiAttivi(int? idCliente)
         {
-            var utentiAttivi = db.Utenti
-                .Where(u => u.Stato == "Attivo" && u.TipoUtente == "Professionista") // filtro qui
-                .Select(u => new
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[GetUtentiAttivi] INIZIO - idCliente={idCliente}");
+
+                int? idOwner = null;
+
+                if (idCliente.HasValue && idCliente > 0)
                 {
-                    u.ID_Utente,
-                    NomeCompleto = u.Nome + " " + u.Cognome
-                })
-                .ToList();
+                    // 🔹 1. Cerco come Cliente
+                    int? idOperatore = db.Clienti
+                        .Where(c => c.ID_Cliente == idCliente.Value)
+                        .Select(c => c.ID_Operatore)
+                        .FirstOrDefault();
 
-            return Json(utentiAttivi, JsonRequestBehavior.AllowGet);
+                    if (idOperatore > 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Step1A] Interpretato come Cliente {idCliente} → ID_Operatore={idOperatore}");
+                    }
+                    else
+                    {
+                        idOperatore = idCliente.Value;
+                        System.Diagnostics.Debug.WriteLine($"[Step1B] Interpretato come Operatore → {idOperatore}");
+                    }
+
+                    // 🔹 2. Traduco in ID_UtenteOwner
+                    if (idOperatore > 0)
+                    {
+                        idOwner = db.OperatoriSinergia
+                            .Where(o => o.ID_Cliente == idOperatore)
+                            .Select(o => o.ID_UtenteCollegato)
+                            .FirstOrDefault();
+
+                        System.Diagnostics.Debug.WriteLine($"[Step2] Operatore={idOperatore} → UtenteOwner={idOwner}");
+                    }
+                }
+                else
+                {
+                    // 🔹 Caso nuova pratica → prendo owner dalla sessione
+                    int idUtenteLoggato = UserManager.GetIDUtenteCollegato();
+                    idOwner = idUtenteLoggato;
+                    System.Diagnostics.Debug.WriteLine($"[StepNuovaPratica] Nuova pratica → escludo sempre Owner corrente {idOwner}");
+                }
+
+                // 🔹 Recupero professionisti attivi
+                var utentiQuery = db.Utenti
+                    .Where(u => u.Stato == "Attivo" && u.TipoUtente == "Professionista");
+
+                var utentiPrimaDelFiltro = utentiQuery.ToList();
+                System.Diagnostics.Debug.WriteLine($"[Step3] Professionisti attivi trovati={utentiPrimaDelFiltro.Count}");
+
+                // 🔹 Escludo l'owner (sia in nuova che in modifica pratica)
+                var utentiAttivi = utentiPrimaDelFiltro
+                    .Where(u => !idOwner.HasValue || u.ID_Utente != idOwner.Value)
+                    .Select(u => new
+                    {
+                        u.ID_Utente,
+                        NomeCompleto = u.Nome + " " + u.Cognome,
+                        Ruolo = u.TipoUtente
+                    })
+                    .ToList();
+
+                System.Diagnostics.Debug.WriteLine($"[Step4] Lista finale dopo esclusione → Count={utentiAttivi.Count}");
+                foreach (var u in utentiAttivi)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Step4] → {u.ID_Utente} {u.NomeCompleto}");
+                }
+
+                System.Diagnostics.Debug.WriteLine("[GetUtentiAttivi] FINE");
+
+                return Json(utentiAttivi, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[GetUtentiAttivi][ERRORE] {ex}");
+                return Json(new { success = false, message = "Errore server: " + ex.Message }, JsonRequestBehavior.AllowGet);
+            }
         }
-
 
         [HttpPost]
         public ActionResult CreaUtenteDaPratica(UtenteViewModel model)
@@ -2514,13 +4600,14 @@ namespace SinergiaMvc.Controllers
                            (c.ID_Operatore == idProfessionista ||
                             db.ClientiProfessionisti.Any(cp => cp.ID_Cliente == c.ID_Cliente &&
                                                                cp.ID_Professionista == idProfessionista)))
-                .Select(c => new
-                {
-                    c.ID_Cliente,
-                    Nome = string.IsNullOrEmpty(c.RagioneSociale)
-                            ? (c.Nome + " " + c.Cognome)
-                            : c.RagioneSociale
-                })
+              .Select(c => new
+              {
+                  c.ID_Cliente,
+                  Nome = string.IsNullOrEmpty(c.RagioneSociale)
+            ? (c.Cognome + " " + c.Nome) // ✅ Cognome prima del Nome
+            : c.RagioneSociale
+              })
+
                 .OrderBy(c => c.Nome)
                 .ToList();
 
@@ -2571,6 +4658,141 @@ namespace SinergiaMvc.Controllers
                 return Json(new { success = false, message = "Errore durante il caricamento: " + ex.Message }, JsonRequestBehavior.AllowGet);
             }
         }
+
+        [HttpGet]
+        public ActionResult GetFornitoriAttivi()
+        {
+            try
+            {
+                using (var db = new SinergiaDB())
+                {
+                    // ======================================================
+                    // 🏢 FORNITORI: Operatori di tipo "Azienda" e attivi
+                    // ======================================================
+                    var fornitori = db.OperatoriSinergia
+                        .Where(o => o.TipoCliente == "Azienda" && o.Stato == "Attivo")
+                        .OrderBy(o => o.Nome)
+                        .ToList() // forza esecuzione SQL
+                        .Select(o => new
+                        {
+                            o.ID_Cliente,
+                            Nome = !string.IsNullOrEmpty(o.PIVA)
+                                ? o.Nome + " (" + o.PIVA + ")"
+                                : o.Nome
+                        })
+                        .ToList();
+
+                    // ======================================================
+                    // ✅ Risposta JSON
+                    // ======================================================
+                    return Json(new
+                    {
+                        success = true,
+                        data = fornitori
+                    }, JsonRequestBehavior.AllowGet);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("❌ [GetFornitoriAttivi] Errore: " + ex.Message);
+                if (ex.InnerException != null)
+                    System.Diagnostics.Trace.WriteLine("🔹 Inner: " + ex.InnerException.Message);
+
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante il caricamento fornitori: " + ex.Message
+                }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
+        /// <summary>
+        /// 🔍 Recupera la categoria associata a un costo dell’anagrafica costi pratica.
+        /// Usato per filtrare i fornitori compatibili.
+        /// </summary>
+        [HttpGet]
+        public ActionResult GetCategoriaByCosto(int idCosto)
+        {
+            try
+            {
+                if (idCosto <= 0)
+                    return Json(new { success = false, message = "ID costo non valido." }, JsonRequestBehavior.AllowGet);
+
+                // Recupera ID categoria collegata all'anagrafica del costo
+                var idCategoria = db.AnagraficaCostiPratica
+                    .Where(c => c.ID_AnagraficaCosto == idCosto)
+                    .Select(c => c.ID_Categoria)
+                    .FirstOrDefault();
+
+                if (idCategoria == 0)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Categoria non trovata per questo costo."
+                    }, JsonRequestBehavior.AllowGet);
+                }
+
+                return Json(new
+                {
+                    success = true,
+                    idCategoria
+                }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("❌ [GetCategoriaByCosto] Errore: " + ex.Message);
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante il recupero categoria: " + ex.Message
+                }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
+        /// <summary>
+        /// 🏢 Restituisce la lista dei fornitori attivi appartenenti a una determinata categoria di servizi.
+        /// </summary>
+        [HttpGet]
+        public ActionResult GetFornitoriByCategoria(int idCategoria)
+        {
+            try
+            {
+                // Se non c’è categoria → ritorna tutti i fornitori attivi (fallback)
+                var query = db.OperatoriSinergia
+                    .Where(f => f.TipoCliente == "Azienda" && f.EFornitore == true && f.Stato == "Attivo");
+
+                if (idCategoria > 0)
+                    query = query.Where(f => f.ID_CategoriaServizi == idCategoria);
+
+                var fornitori = query
+                    .OrderBy(f => f.Nome)
+                    .Select(f => new
+                    {
+                        f.ID_Cliente,
+                        Nome = !string.IsNullOrEmpty(f.PIVA)
+                            ? f.Nome + " (" + f.PIVA + ")"
+                            : f.Nome
+                    })
+                    .ToList();
+
+                return Json(new
+                {
+                    success = true,
+                    data = fornitori
+                }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("❌ [GetFornitoriByCategoria] Errore: " + ex.Message);
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante il recupero fornitori: " + ex.Message
+                }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
 
         [HttpGet]
         public JsonResult GetOwnerCliente(int idCliente)
@@ -2731,9 +4953,6 @@ namespace SinergiaMvc.Controllers
                 PageOrientation = Rotativa.Options.Orientation.Landscape
             };
         }
-
-
-
 
         #endregion
 
@@ -3428,7 +5647,6 @@ namespace SinergiaMvc.Controllers
         }
 
 
-
         [HttpGet]
         public ActionResult GetRicorrenzaCostoGenerale(int idAnagraficaCosto)
         {
@@ -3442,11 +5660,36 @@ namespace SinergiaMvc.Controllers
                 if (ricorrenza == null)
                     return Json(new { success = false }, JsonRequestBehavior.AllowGet);
 
-                // Recupero anche il nome del costo generale
+                // 🔍 Recupero nome del costo
                 var nomeCosto = db.TipologieCosti
                     .Where(t => t.ID_TipoCosto == idAnagraficaCosto)
                     .Select(t => t.Nome)
                     .FirstOrDefault() ?? "-";
+
+                // ================================================================
+                // 🎯 Determina categoria finale in base al nome del costo
+                // ================================================================
+                string categoriaFinale = ricorrenza.Categoria;
+
+                if (string.IsNullOrEmpty(categoriaFinale) || categoriaFinale == "Costo Generale")
+                {
+                    // confronti precisi
+                    switch (nomeCosto.Trim())
+                    {
+                        case "Owner Fee":
+                            categoriaFinale = "Owner Fee";
+                            break;
+
+                        case "Trattenuta Sinergia 20%":
+                        case "Trattenuta Sinergia":
+                            categoriaFinale = "Trattenuta Sinergia";
+                            break;
+
+                        default:
+                            categoriaFinale = "Costo Generale";
+                            break;
+                    }
+                }
 
                 return Json(new
                 {
@@ -3457,7 +5700,7 @@ namespace SinergiaMvc.Controllers
                         ID_TipoCosto = ricorrenza.ID_TipoCostoGenerale,
                         ID_Professione = ricorrenza.ID_Professione,
                         ID_Professionista = ricorrenza.ID_Professionista,
-                        Categoria = ricorrenza.Categoria,
+                        Categoria = categoriaFinale,
                         Periodicita = ricorrenza.Periodicita,
                         TipoValore = ricorrenza.TipoValore,
                         Valore = ricorrenza.Valore,
@@ -3474,9 +5717,6 @@ namespace SinergiaMvc.Controllers
             }
         }
 
-
-
-
         [HttpPost]
         public ActionResult SalvaRicorrenzaCostoGenerale(RicorrenzaCostoViewModel model)
         {
@@ -3488,15 +5728,20 @@ namespace SinergiaMvc.Controllers
                 RicorrenzeCosti ricorrenza;
                 bool isModifica = model.ID_Ricorrenza.HasValue;
 
-                // 🔍 Validazione manuale base
+                // ====================================================
+                // 🔍 Validazione base
+                // ====================================================
                 if (model.ID_AnagraficaCosto <= 0 || string.IsNullOrEmpty(model.Categoria) ||
                     string.IsNullOrEmpty(model.TipoValore) || model.Valore == null)
                 {
                     return Json(new { success = false, message = "Compilare tutti i campi obbligatori." });
                 }
 
-                // ✅ Costi speciali (senza periodicità/data)
-                bool èSpeciale = model.Categoria == "Trattenuta Sinergia" || model.Categoria == "Owner Fee";
+                // ====================================================
+                // ⚙️ Costi speciali (senza periodicità / date)
+                // ====================================================
+                bool èSpeciale = model.Categoria?.Trim() == "Trattenuta Sinergia" || model.Categoria?.Trim() == "Owner Fee";
+
                 if (!èSpeciale)
                 {
                     // Per le altre categorie → periodicità e data inizio sono obbligatorie
@@ -3511,16 +5756,23 @@ namespace SinergiaMvc.Controllers
                     model.Periodicita = null;
                     model.DataInizio = null;
                     model.DataFine = null;
+
+                    System.Diagnostics.Trace.WriteLine($"⚙️ Ricorrenza speciale '{model.Categoria}' salvata senza periodicità né date.");
                 }
 
-                // 🧠 Una Tantum → se DataInizio = DataFine, imposta Giornaliero se manca
-                if (model.DataInizio.HasValue && model.DataFine.HasValue && model.DataInizio.Value == model.DataFine.Value)
+                // ====================================================
+                // 🧠 Una Tantum → se DataInizio = DataFine, imposta Giornaliero
+                // ====================================================
+                if (!èSpeciale && model.DataInizio.HasValue && model.DataFine.HasValue &&
+                    model.DataInizio.Value == model.DataFine.Value)
                 {
                     if (string.IsNullOrEmpty(model.Periodicita))
                         model.Periodicita = "Giornaliero";
                 }
 
-                // 🎯 Assegna il professionista effettivo se non impostato
+                // ====================================================
+                // 🎯 Assegna il professionista effettivo se mancante
+                // ====================================================
                 if (model.Categoria == "Costo Generale" && (model.ID_Professionista == null || model.ID_Professionista == 0))
                 {
                     var professionista = db.OperatoriSinergia
@@ -3533,6 +5785,9 @@ namespace SinergiaMvc.Controllers
                     }
                 }
 
+                // ====================================================
+                // ✏️ Inserimento o modifica
+                // ====================================================
                 if (isModifica)
                 {
                     ricorrenza = db.RicorrenzeCosti.FirstOrDefault(r => r.ID_Ricorrenza == model.ID_Ricorrenza);
@@ -3541,10 +5796,10 @@ namespace SinergiaMvc.Controllers
 
                     ricorrenza.ID_Professionista = model.ID_Professionista;
                     ricorrenza.ID_Professione = model.ID_Professione;
-                    ricorrenza.Periodicita = model.Periodicita;
-                    ricorrenza.TipoValore = model.TipoValore;
                     ricorrenza.Categoria = model.Categoria;
+                    ricorrenza.TipoValore = model.TipoValore;
                     ricorrenza.Valore = (decimal)model.Valore;
+                    ricorrenza.Periodicita = model.Periodicita;
                     ricorrenza.DataInizio = model.DataInizio;
                     ricorrenza.DataFine = model.DataFine;
                     ricorrenza.ID_UtenteUltimaModifica = idUtenteCorrente;
@@ -3558,15 +5813,15 @@ namespace SinergiaMvc.Controllers
                         ID_Professione = model.ID_Professione,
                         ID_Professionista = model.ID_Professionista,
                         Categoria = model.Categoria,
-                        Periodicita = model.Periodicita,
                         TipoValore = model.TipoValore,
                         Valore = (decimal)model.Valore,
+                        Periodicita = model.Periodicita,
                         DataInizio = model.DataInizio,
                         DataFine = model.DataFine,
                         Attivo = true,
                         ID_UtenteCreatore = idUtenteCorrente,
-                        DataCreazione = now,
                         ID_UtenteUltimaModifica = idUtenteCorrente,
+                        DataCreazione = now,
                         DataUltimaModifica = now
                     };
                     db.RicorrenzeCosti.Add(ricorrenza);
@@ -3574,7 +5829,9 @@ namespace SinergiaMvc.Controllers
 
                 db.SaveChanges();
 
-                // 📦 Versionamento
+                // ====================================================
+                // 🗂️ Versionamento automatico
+                // ====================================================
                 int numeroVersione = db.RicorrenzeCosti_a
                     .Count(a => a.IDVersioneRicorrenza == ricorrenza.ID_Ricorrenza) + 1;
 
@@ -3586,9 +5843,9 @@ namespace SinergiaMvc.Controllers
                     ID_Professione = ricorrenza.ID_Professione,
                     ID_Professionista = ricorrenza.ID_Professionista,
                     Categoria = ricorrenza.Categoria,
-                    Periodicita = ricorrenza.Periodicita,
                     TipoValore = ricorrenza.TipoValore,
                     Valore = ricorrenza.Valore,
+                    Periodicita = ricorrenza.Periodicita,
                     DataInizio = ricorrenza.DataInizio,
                     DataFine = ricorrenza.DataFine,
                     Attivo = ricorrenza.Attivo,
@@ -3611,6 +5868,7 @@ namespace SinergiaMvc.Controllers
                 return Json(new { success = false, message = "❌ Errore durante il salvataggio: " + ex.Message });
             }
         }
+
 
         [HttpPost]
         public ActionResult AssegnaRicorrenzaCostoGenerale(int ID_TipoCostoGenerale, List<int> ID_UtentiSelezionati)
@@ -6528,236 +8786,259 @@ namespace SinergiaMvc.Controllers
             return View("~/Views/Plafond/GestionePlafond.cshtml");
         }
 
+        [HttpGet]
         public ActionResult GestionePlafondList(bool mostraPagamenti = false)
         {
-            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
-            System.Diagnostics.Debug.WriteLine("🟢 ID Utente collegato: " + idUtenteCorrente);
-
-            var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-            if (utenteCorrente == null)
+            try
             {
-                System.Diagnostics.Debug.WriteLine("🔴 Utente non trovato");
-                return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
-            }
+                int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+                System.Diagnostics.Trace.WriteLine("══════════════════════════════════════════════════════");
+                System.Diagnostics.Trace.WriteLine($"🟢 [GestionePlafondList] Avvio metodo - Utente collegato: {idUtenteCorrente}");
 
-            System.Diagnostics.Debug.WriteLine($"👤 Utente corrente: {utenteCorrente.Nome} {utenteCorrente.Cognome} | Tipo: {utenteCorrente.TipoUtente}");
-
-            bool puoAggiungere = false;
-            bool puoModificare = false;
-            bool puoEliminare = false;
-
-            if (utenteCorrente.TipoUtente == "Admin")
-            {
-                puoAggiungere = puoModificare = puoEliminare = true;
-            }
-            else
-            {
-                var permessi = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
-                puoAggiungere = permessi.Any(p => p.Aggiungi == true);
-                puoModificare = permessi.Any(p => p.Modifica == true);
-                puoEliminare = permessi.Any(p => p.Elimina == true);
-
-                System.Diagnostics.Debug.WriteLine($"🛡 Permessi - Aggiungi: {puoAggiungere}, Modifica: {puoModificare}, Elimina: {puoEliminare}");
-            }
-
-            var finanziamenti = db.FinanziamentiProfessionisti.AsQueryable();
-            var versamenti = db.PlafondUtente.AsQueryable();
-
-            if (utenteCorrente.TipoUtente == "Professionista")
-            {
-                finanziamenti = finanziamenti.Where(f => f.ID_Professionista == idUtenteCorrente);
-                System.Diagnostics.Debug.WriteLine("🔎 Filtro finanziamenti per ID_Professionista = " + idUtenteCorrente);
-
-                var idCliente = db.OperatoriSinergia
-                    .Where(o => o.ID_UtenteCollegato == idUtenteCorrente && o.TipoCliente == "Professionista")
-                    .Select(o => (int?)o.ID_Cliente)
-                    .FirstOrDefault();
-
-                System.Diagnostics.Debug.WriteLine("📌 ID Cliente da OperatoriSinergia: " + (idCliente.HasValue ? idCliente.Value.ToString() : "null"));
-
-                if (idCliente.HasValue && idCliente.Value > 0)
+                var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
+                if (utenteCorrente == null)
                 {
-                    versamenti = versamenti.Where(v => v.ID_Utente == idCliente.Value);
-                    System.Diagnostics.Debug.WriteLine("📥 Versamenti filtrati per ID_Utente = ID_Cliente = " + idCliente.Value);
+                    System.Diagnostics.Trace.WriteLine("❌ Utente non trovato o non autenticato");
+                    return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
                 }
+
+                // ====================================================
+                // 🔐 Permessi
+                // ====================================================
+                bool puoAggiungere = false, puoModificare = false, puoEliminare = false;
+                if (utenteCorrente.TipoUtente == "Admin")
+                    puoAggiungere = puoModificare = puoEliminare = true;
                 else
                 {
-                    versamenti = versamenti.Where(v => v.ID_Utente == idUtenteCorrente);
-                    System.Diagnostics.Debug.WriteLine("📥 Versamenti filtrati per ID_Utente = " + idUtenteCorrente);
+                    var permessi = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
+                    puoAggiungere = permessi.Any(p => p.Aggiungi == true);
+                    puoModificare = permessi.Any(p => p.Modifica == true);
+                    puoEliminare = permessi.Any(p => p.Elimina == true);
                 }
-            }
-            else if (utenteCorrente.TipoUtente == "Collaboratore")
-            {
-                var professionistiAssegnati = db.RelazioneUtenti
-                    .Where(r => r.ID_UtenteAssociato == idUtenteCorrente && r.Stato == "Attivo")
-                    .Select(r => r.ID_Utente)
+
+                System.Diagnostics.Trace.WriteLine($"🔐 Permessi - Aggiungi:{puoAggiungere}, Modifica:{puoModificare}, Elimina:{puoEliminare}");
+
+                // ====================================================
+                // 👑 Filtro per tipo utente
+                // ====================================================
+                int? idFiltro = null;
+
+                if (utenteCorrente.TipoUtente == "Professionista")
+                {
+                    idFiltro = idUtenteCorrente;
+                    System.Diagnostics.Trace.WriteLine($"👤 Professionista collegato -> ID {idFiltro}");
+                }
+                else if (utenteCorrente.TipoUtente == "Collaboratore")
+                {
+                    var profAssegnati = db.RelazioneUtenti
+                        .Where(r => r.ID_UtenteAssociato == idUtenteCorrente && r.Stato == "Attivo")
+                        .Select(r => r.ID_Utente)
+                        .ToList();
+
+                    if (profAssegnati.Any())
+                    {
+                        idFiltro = profAssegnati.First();
+                        System.Diagnostics.Trace.WriteLine($"👥 Collaboratore -> Professionista associato ID {idFiltro}");
+                    }
+                }
+                else if (utenteCorrente.TipoUtente == "Admin")
+                {
+                    int? idImpers = Session["ID_UtenteImpers"] as int?;
+                    if (idImpers.HasValue && idImpers.Value > 0)
+                    {
+                        idFiltro = idImpers.Value;
+                        System.Diagnostics.Trace.WriteLine($"🧭 Admin impersonifica professionista ID={idFiltro}");
+                    }
+                }
+
+                // ====================================================
+                // 📦 Materializza tabelle
+                // ====================================================
+                var utenti = db.Utenti.ToList();
+                var operatori = db.OperatoriSinergia.ToList();
+                var finanziamenti = db.FinanziamentiProfessionisti.ToList();
+                var versamenti = db.PlafondUtente.ToList();
+                var costi = db.CostiPersonaliUtente.ToList();
+                var pagamenti = db.GenerazioneCosti
+                    .Where(g => g.Approvato == true && g.Stato == "Pagato" && g.ID_Utente.HasValue)
                     .ToList();
 
-                System.Diagnostics.Debug.WriteLine("👥 Professionisti assegnati: " + string.Join(", ", professionistiAssegnati));
+                // ====================================================
+                // 🔗 Filtro combinato: Professionista + scheda Sinergia associata
+                // ====================================================
+                if (idFiltro.HasValue)
+                {
+                    int filtro = idFiltro.Value;
 
-                finanziamenti = finanziamenti.Where(f => professionistiAssegnati.Contains(f.ID_Professionista));
-                versamenti = versamenti.Where(v => professionistiAssegnati.Contains(v.ID_Utente));
-            }
+                    // 🔹 Cerca la scheda Sinergia collegata a questo professionista
+                    var operatoreCollegato = db.OperatoriSinergia
+                        .FirstOrDefault(o => o.ID_UtenteCollegato == filtro);
 
-            var listaFin = (from f in finanziamenti
-                            join u in db.Utenti on f.ID_Professionista equals u.ID_Utente
-                            select new FinanziamentiProfessionistiViewModel
-                            {
-                                ID_Finanziamento = f.ID_Finanziamento,
-                                ID_Plafond = null,
-                                ID_Professionista = f.ID_Professionista,
-                                NomeProfessionista = u.Cognome + " " + u.Nome,
-                                Importo = f.Importo,
-                                DataVersamento = (DateTime)f.DataVersamento,
-                                TipoPlafond = "Finanziamento",
-                                DataInizio = f.DataVersamento,
-                                DataFine = null,
-                                PuoModificare = puoModificare,
-                                PuoEliminare = puoEliminare
-                            });
+                    int? idSchedaSinergia = operatoreCollegato?.ID_Cliente; // es. 8 per Aldo Aldini
 
-            var listaInc = (from v in versamenti
-                            join o in db.OperatoriSinergia on v.ID_Utente equals o.ID_Cliente
-                            select new FinanziamentiProfessionistiViewModel
-                            {
-                                ID_Finanziamento = 0,
-                                ID_Plafond = v.ID_PlannedPlafond,
-                                ID_Professionista = (int)o.ID_UtenteCollegato,
-                                NomeProfessionista = o.Cognome + " " + o.Nome,
-                                Importo = v.Importo,
-                                DataVersamento = (DateTime)v.DataVersamento,
-                                TipoPlafond = v.TipoPlafond ?? "Incasso",
-                                DataInizio = v.DataInizio,
-                                DataFine = v.DataFine,
-                                PuoModificare = false,
-                                PuoEliminare = false
-                            });
+                    System.Diagnostics.Trace.WriteLine($"🔗 Filtro attivo -> Professionista {filtro}, Scheda Sinergia collegata: {(idSchedaSinergia.HasValue ? idSchedaSinergia.ToString() : "—")}");
 
-            var listaCosti = (from c in db.CostiPersonaliUtente
-                              join u in db.Utenti on c.ID_Utente equals u.ID_Utente
-                              select new FinanziamentiProfessionistiViewModel
-                              {
-                                  ID_Finanziamento = 0,
-                                  ID_Plafond = 0,
-                                  ID_CostoPersonale = c.ID_CostoPersonale,  // <-- aggiungi questa riga
-                                  ID_Professionista = c.ID_Utente,
-                                  NomeProfessionista = u.Cognome + " " + u.Nome,
-                                  Importo = (decimal)-c.Importo, // visualizzato come negativo
-                                  DataVersamento = c.DataInserimento,
-                                  TipoPlafond = "Costo Personale",
-                                  DataInizio = null,
-                                  DataFine = null,
-                                  PuoModificare = false,
-                                  PuoEliminare = false
-                              });
+                    finanziamenti = finanziamenti
+                        .Where(f => f.ID_Professionista == filtro || (idSchedaSinergia.HasValue && f.ID_Professionista == idSchedaSinergia.Value))
+                        .ToList();
 
-            var listaPagamentiDaPlafond = new List<FinanziamentiProfessionistiViewModel>();
+                    versamenti = versamenti
+                        .Where(v => v.ID_Utente == filtro || (idSchedaSinergia.HasValue && v.ID_Utente == idSchedaSinergia.Value))
+                        .ToList();
 
-            if (mostraPagamenti)
-            {
-                listaPagamentiDaPlafond = (
-                    from g in db.GenerazioneCosti
-                    where g.Approvato == true && g.Stato == "Pagato" && g.ID_Utente.HasValue
-                    let utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == g.ID_Utente.Value)
-                    let operatore = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Cliente == g.ID_Utente.Value && o.TipoCliente == "Professionista")
-                    where utente != null || operatore != null
+                    costi = costi
+                        .Where(c => c.ID_Utente == filtro || (idSchedaSinergia.HasValue && c.ID_Utente == idSchedaSinergia.Value))
+                        .ToList();
+
+                    pagamenti = pagamenti
+                        .Where(g => g.ID_Utente == filtro || (idSchedaSinergia.HasValue && g.ID_Utente == idSchedaSinergia.Value))
+                        .ToList();
+
+                    System.Diagnostics.Trace.WriteLine($"📌 Filtro applicato per Professionista={filtro}, SchedaSinergia={idSchedaSinergia}");
+                }
+
+
+                // ====================================================
+                // 💰 Finanziamenti manuali
+                // ====================================================
+                var listaFin = (
+                    from f in finanziamenti
+                    let u = utenti.FirstOrDefault(x => x.ID_Utente == f.ID_Professionista)
+                    let o = operatori.FirstOrDefault(x => x.ID_Cliente == f.ID_Professionista)
                     select new FinanziamentiProfessionistiViewModel
                     {
-                        ID_Finanziamento = 0,
-                        ID_Plafond = null,
-                        ID_CostoPersonale = null,
-                        ID_Professionista = g.ID_Utente.Value,
-                        NomeProfessionista = utente != null
-                            ? utente.Cognome + " " + utente.Nome
-                            : (operatore.Cognome + " " + operatore.Nome),
-                        Importo = (decimal)-g.Importo,
-                        DataVersamento = g.DataRegistrazione,
-                        TipoPlafond = "Pagamento Costo: " + (g.Descrizione ?? "–") + " [" + g.Categoria + "]",
-                        DataInizio = null,
-                        DataFine = null,
-                        PuoModificare = false,
-                        PuoEliminare = false
+                        ID_Finanziamento = f.ID_Finanziamento,
+                        NomeProfessionista = (u != null ? $"{u.Cognome} {u.Nome}" :
+                                              o != null ? $"{o.Cognome} {o.Nome}" : "—"),
+                        TipoPlafond = "Finanziamento",
+                        Importo = f.Importo,
+                        DataVersamento = f.DataVersamento ?? DateTime.MinValue,
+                        PuoEliminare = puoEliminare,
+                        PuoModificare = puoModificare
                     }).ToList();
-            }
+                System.Diagnostics.Trace.WriteLine($"💰 Finanziamenti trovati: {listaFin.Count}");
 
-            int countFin = listaFin.Count();
-            int countInc = listaInc.Count();
-            int countCosti = listaCosti.Count();
-            int countPagamenti = listaPagamentiDaPlafond.Count();
-
-
-
-            System.Diagnostics.Debug.WriteLine("📊 Finanziamenti trovati: " + countFin);
-            System.Diagnostics.Debug.WriteLine("📊 Incassi trovati: " + countInc);
-            System.Diagnostics.Debug.WriteLine("📊 Costi personali trovati: " + countCosti);
-            System.Diagnostics.Debug.WriteLine("📊 Costi pagati da plafond trovati: " + countPagamenti);
-
-            var lista = listaFin.ToList()
-                .Concat(listaInc.ToList())
-                .Concat(listaCosti.ToList())
-                .Concat(listaPagamentiDaPlafond.ToList()) // 👈 AGGIUNTA
-                .OrderByDescending(x => x.DataVersamento)
-                .ToList();
-
-
-            System.Diagnostics.Debug.WriteLine("📋 Totale voci da visualizzare: " + lista.Count);
-
-            ViewBag.PuoAggiungere = puoAggiungere;
-            ViewBag.Permessi = new PermessiViewModel
-            {
-                ID_Utente = utenteCorrente.ID_Utente,
-                NomeUtente = utenteCorrente.Nome + " " + utenteCorrente.Cognome,
-                Permessi = new List<PermessoSingoloViewModel>
-        {
-            new PermessoSingoloViewModel
-            {
-                Aggiungi = puoAggiungere,
-                Modifica = puoModificare,
-                Elimina = puoEliminare
-            }
-        }
-            };
-
-            if (utenteCorrente.TipoUtente == "Admin" || utenteCorrente.TipoUtente == "Collaboratore")
-            {
-                ViewBag.Professionisti = db.Utenti
-                    .Where(u => u.TipoUtente == "Professionista")
-                    .OrderBy(u => u.Cognome)
-                    .Select(u => new SelectListItem
+                // ====================================================
+                // 💶 Incassi / Versamenti
+                // ====================================================
+                var listaInc = (
+                    from v in versamenti
+                    let u = utenti.FirstOrDefault(x => x.ID_Utente == v.ID_Utente)
+                    let o = operatori.FirstOrDefault(x => x.ID_Cliente == v.ID_Utente)
+                    select new FinanziamentiProfessionistiViewModel
                     {
-                        Value = u.ID_Utente.ToString(),
-                        Text = u.Cognome + " " + u.Nome
+                        ID_Plafond = v.ID_PlannedPlafond,
+                        NomeProfessionista = (u != null ? $"{u.Cognome} {u.Nome}" :
+                                              o != null ? $"{o.Cognome} {o.Nome}" : "—"),
+                        TipoPlafond = v.TipoPlafond ?? "Incasso",
+                        Importo = v.Importo,
+                        DataVersamento = v.DataVersamento ?? DateTime.MinValue,
+                        PuoEliminare = puoEliminare,
+                        PuoModificare = puoModificare
                     }).ToList();
-            }
-            else
+                System.Diagnostics.Trace.WriteLine($"💶 Incassi trovati: {listaInc.Count}");
+
+                // ====================================================
+                // 💸 Costi Personali
+                // ====================================================
+                var listaCosti = (
+                    from c in costi
+                    let u = utenti.FirstOrDefault(x => x.ID_Utente == c.ID_Utente)
+                    let o = operatori.FirstOrDefault(x => x.ID_Cliente == c.ID_Utente)
+                    select new FinanziamentiProfessionistiViewModel
+                    {
+                        ID_CostoPersonale = c.ID_CostoPersonale,
+                        NomeProfessionista = (u != null ? $"{u.Cognome} {u.Nome}" :
+                                              o != null ? $"{o.Cognome} {o.Nome}" : "—"),
+                        TipoPlafond = "Costo Personale",
+                        Importo = -(c.Importo ?? 0m),
+                        DataVersamento = c.DataInserimento,
+                        PuoEliminare = puoEliminare,
+                        PuoModificare = puoModificare
+                    }).ToList();
+                System.Diagnostics.Trace.WriteLine($"💸 Costi trovati: {listaCosti.Count}");
+
+                // ====================================================
+                // 🧾 Pagamenti dei costi (opzionale)
+                // ====================================================
+                var listaPagamenti = new List<FinanziamentiProfessionistiViewModel>();
+                if (mostraPagamenti)
+                {
+                    listaPagamenti = (
+                        from g in pagamenti
+                        let u = utenti.FirstOrDefault(x => x.ID_Utente == g.ID_Utente)
+                        let o = operatori.FirstOrDefault(x => x.ID_Cliente == g.ID_Utente)
+                        select new FinanziamentiProfessionistiViewModel
+                        {
+                            ID_Plafond = g.ID_GenerazioneCosto,
+                            NomeProfessionista = (u != null ? $"{u.Cognome} {u.Nome}" :
+                                                  o != null ? $"{o.Cognome} {o.Nome}" : "—"),
+                            TipoPlafond = "Pagamento Costo",
+                            Importo = -(g.Importo ?? 0m),
+                            DataVersamento = g.DataRegistrazione,
+                            PuoEliminare = puoEliminare,
+                            PuoModificare = puoModificare
+                        }).ToList();
+                    System.Diagnostics.Trace.WriteLine($"🧾 Pagamenti trovati: {listaPagamenti.Count}");
+                }
+
+                // ====================================================
+                // 📊 Unione finale
+                // ====================================================
+                var lista = listaFin
+                    .Concat(listaInc)
+                    .Concat(listaCosti)
+                    .Concat(listaPagamenti)
+                    .OrderByDescending(x => x.DataVersamento)
+                    .ToList();
+
+                System.Diagnostics.Trace.WriteLine($"📋 Totale righe finali: {lista.Count}");
+
+                // ====================================================
+                // 🧮 Totale effettivo del plafond
+                // ====================================================
+                decimal totalePlafondEffettivo = lista.Sum(x => x.Importo);
+                ViewBag.TotalePlafond = totalePlafondEffettivo;
+                ViewBag.MostraPagamenti = mostraPagamenti;
+                System.Diagnostics.Trace.WriteLine($"💶 Totale finale calcolato: {totalePlafondEffettivo:N2} €");
+
+                // ====================================================
+                // 📋 Permessi e partial
+                // ====================================================
+                ViewBag.PuoAggiungere = puoAggiungere;
+                ViewBag.Permessi = new PermessiViewModel
+                {
+                    ID_Utente = utenteCorrente.ID_Utente,
+                    NomeUtente = $"{utenteCorrente.Nome} {utenteCorrente.Cognome}",
+                    Permessi = new List<PermessoSingoloViewModel>
             {
-                ViewBag.Professionisti = new List<SelectListItem>();
+                new PermessoSingoloViewModel
+                {
+                    Aggiungi = puoAggiungere,
+                    Modifica = puoModificare,
+                    Elimina = puoEliminare
+                }
             }
+                };
 
-            ViewBag.MostraPagamenti = mostraPagamenti; // ← se lo stai già facendo, va bene così
+                System.Diagnostics.Trace.WriteLine("══════════════════════════════════════════════════════");
+                return PartialView("~/Views/Plafond/_GestionePlafondList.cshtml", lista);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("❌ ERRORE [GestionePlafondList]");
+                System.Diagnostics.Trace.WriteLine($"Tipo: {ex.GetType().Name}");
+                System.Diagnostics.Trace.WriteLine($"Messaggio: {ex.Message}");
+                System.Diagnostics.Trace.WriteLine($"Stack: {ex.StackTrace}");
+                System.Diagnostics.Trace.WriteLine("══════════════════════════════════════════════════════");
 
-            // ✅ Calcolo del totale effettivo del plafond
-            decimal totalePlafondEffettivo =
-                     listaFin.Select(x => x.Importo).DefaultIfEmpty(0m).Sum()
-                     + listaInc.Select(x => x.Importo).DefaultIfEmpty(0m).Sum()
-                     + listaCosti.Select(x => x.Importo).DefaultIfEmpty(0m).Sum();
-
-
-            // I pagamenti devono essere sempre scalati anche se non mostrati
-            var pagamentiPlafondEffettivi = (
-                from g in db.GenerazioneCosti
-                where g.Approvato == true && g.Stato == "Pagato" && g.ID_Utente.HasValue
-                select -(g.Importo ?? 0m)
-            ).ToList();
-
-            totalePlafondEffettivo += pagamentiPlafondEffettivi.Sum();
-
-            ViewBag.TotalePlafond = totalePlafondEffettivo;
-
-
-            return PartialView("~/Views/Plafond/_GestionePlafondList.cshtml", lista);
+                return Json(new
+                {
+                    success = false,
+                    message = "❌ Errore durante il caricamento del plafond: " + ex.Message
+                }, JsonRequestBehavior.AllowGet);
+            }
         }
-
 
 
         [HttpPost]
@@ -7226,7 +9507,7 @@ namespace SinergiaMvc.Controllers
                 if (rel == null)
                     return Json(new { success = false, message = "Nessun professionista assegnato." });
 
-                idProfessionista = rel.ID_Utente;
+                idProfessionista = (int)rel.ID_Utente;
             }
 
             var plafond = db.PlafondUtente
@@ -7529,88 +9810,70 @@ namespace SinergiaMvc.Controllers
             return View("~/Views/TemplateIncarichi/GestioneTemplateIncarichi.cshtml");
         }
 
-        public ActionResult GestioneTemplateIncarichiList(int? idProfessione = null)
-        {
-            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
-            var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-
-            if (utenteCorrente == null)
-                return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
-
-            // 🔎 Query base
-            IQueryable<TemplateIncarichi> query = db.TemplateIncarichi
-                .Where(t => t.Stato != "Eliminato");
-
-            if (idProfessione.HasValue)
-                query = query.Where(t => t.ID_Professione == idProfessione.Value);
-
-            // 🔐 Gestione Permessi
-            bool puoAggiungere = false;
-            bool puoModificare = false;
-            bool puoEliminare = false;
-
-            if (utenteCorrente.TipoUtente == "Admin")
+        public ActionResult GestioneTemplateIncarichiList()
             {
-                puoAggiungere = puoModificare = puoEliminare = true;
-            }
-            else if (utenteCorrente.TipoUtente == "Professionista" || utenteCorrente.TipoUtente == "Collaboratore")
-            {
-                var permessiDb = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
-                puoAggiungere = permessiDb.Any(p => p.Aggiungi == true);
-                puoModificare = permessiDb.Any(p => p.Modifica == true);
-                puoEliminare = permessiDb.Any(p => p.Elimina == true);
-            }
+                int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+                var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
 
-            // 🔄 Proiezione nel ViewModel
-            var lista = query
-                .OrderBy(t => t.NomeTemplate)
-                .ToList()
-                .Select(t => new TemplateIncaricoViewModel
+                if (utenteCorrente == null)
+                    return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
+
+                // 🔎 Query base: tutti i template non eliminati
+                IQueryable<TemplateIncarichi> query = db.TemplateIncarichi
+                    .Where(t => t.Stato != "Eliminato");
+
+                // 🔐 Gestione Permessi
+                bool puoAggiungere = false;
+                bool puoModificare = false;
+                bool puoEliminare = false;
+
+                if (utenteCorrente.TipoUtente == "Admin")
                 {
-                    IDTemplateIncarichi = t.IDTemplateIncarichi,
-                    NomeTemplate = t.NomeTemplate,
-                    ContenutoHtml = t.ContenutoHtml,
-                    ID_Professione = t.ID_Professione,
-                    Stato = t.Stato,
-                    PuoModificare = puoModificare,
-                    PuoEliminare = puoEliminare,
-                    NomeProfessione = db.Professioni
-                        .Where(p => p.ProfessioniID == t.ID_Professione)
-                        .Select(p => p.Descrizione)
-                        .FirstOrDefault()
-                })
-                .ToList();
-
-            ViewBag.PuoAggiungere = puoAggiungere;
-            ViewBag.Permessi = new PermessiViewModel
-            {
-                ID_Utente = utenteCorrente.ID_Utente,
-                NomeUtente = utenteCorrente.Nome + " " + utenteCorrente.Cognome,
-                Permessi = new List<PermessoSingoloViewModel>
-        {
-            new PermessoSingoloViewModel
-            {
-                Aggiungi = puoAggiungere,
-                Modifica = puoModificare,
-                Elimina = puoEliminare
-            }
-        }
-            };
-
-            // ViewBag select professioni
-            ViewBag.Professioni = db.Professioni
-                .OrderBy(p => p.Descrizione)
-                .Select(p => new SelectListItem
+                    puoAggiungere = puoModificare = puoEliminare = true;
+                }
+                else if (utenteCorrente.TipoUtente == "Professionista" || utenteCorrente.TipoUtente == "Collaboratore")
                 {
-                    Value = p.ProfessioniID.ToString(),
-                    Text = (p.Codice ?? "") + " - " + p.Descrizione
-                })
-                .ToList();
+                    var permessiDb = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
+                    puoAggiungere = permessiDb.Any(p => p.Aggiungi == true);
+                    puoModificare = permessiDb.Any(p => p.Modifica == true);
+                    puoEliminare = permessiDb.Any(p => p.Elimina == true);
+                }
 
+                // 🔄 Proiezione nel ViewModel
+                var lista = query
+                    .OrderBy(t => t.NomeTemplate)
+                    .ToList()
+                    .Select(t => new TemplateIncaricoViewModel
+                    {
+                        IDTemplateIncarichi = t.IDTemplateIncarichi,
+                        NomeTemplate = t.NomeTemplate,
+                        ContenutoHtml = t.ContenutoHtml,
+                        Stato = t.Stato,
+                        TipoCompenso = t.TipoCompenso, // 👈 ora mostriamo il tipo di compenso
+                        PuoModificare = puoModificare,
+                        PuoEliminare = puoEliminare
+                    })
+                    .ToList();
 
+                ViewBag.PuoAggiungere = puoAggiungere;
+                ViewBag.Permessi = new PermessiViewModel
+                {
+                    ID_Utente = utenteCorrente.ID_Utente,
+                    NomeUtente = utenteCorrente.Nome + " " + utenteCorrente.Cognome,
+                    Permessi = new List<PermessoSingoloViewModel>
+                    {
+                        new PermessoSingoloViewModel
+                        {
+                            Aggiungi = puoAggiungere,
+                            Modifica = puoModificare,
+                            Elimina = puoEliminare
+                        }
+                    }
+                };
 
-            return PartialView("~/Views/TemplateIncarichi/_GestioneTemplateIncarichiList.cshtml", lista);
-        }
+                return PartialView("~/Views/TemplateIncarichi/_GestioneTemplateIncarichiList.cshtml", lista);
+            }
+
 
 
         [HttpGet]
@@ -7626,6 +9889,14 @@ namespace SinergiaMvc.Controllers
                 .ToList();
 
             ViewBag.Professioni = professioni;
+
+            ViewBag.TipiCompenso = new List<SelectListItem>
+            {
+                new SelectListItem { Value = "Fisso", Text = "Fisso" },
+                new SelectListItem { Value = "A ore", Text = "A ore" },
+                new SelectListItem { Value = "Giudiziale", Text = "Giudiziale" }
+            };
+
 
             return View("~/Views/TemplateIncarichi/CreaTemplateIncarico.cshtml"); // Assicurati che la view abbia questo nome
         }
@@ -7655,7 +9926,8 @@ namespace SinergiaMvc.Controllers
                     NomeTemplate = model.NomeTemplate?.Trim(),
                     ContenutoHtml = model.ContenutoHtml,
                     Stato = model.Stato?.Trim() ?? "Attivo",
-                    ID_Professione = model.ID_Professione
+                    ID_Professione = model.ID_Professione,
+                    TipoCompenso = model.TipoCompenso
                 };
 
                 db.TemplateIncarichi.Add(nuovo);
@@ -7669,6 +9941,7 @@ namespace SinergiaMvc.Controllers
                     ContenutoHtml = nuovo.ContenutoHtml,
                     Stato = nuovo.Stato,
                     ID_Professione = nuovo.ID_Professione,
+                    TipoCompenso = nuovo.TipoCompenso,
                     NumeroVersione = 1,
                     DataArchiviazione = DateTime.Now,
                     ID_UtenteArchiviazione = idUtenteCorrente,
@@ -7706,10 +9979,12 @@ namespace SinergiaMvc.Controllers
                 {
                     IDTemplateIncarichi = template.IDTemplateIncarichi,
                     NomeTemplate = template.NomeTemplate,
+                    TipoCompenso = template.TipoCompenso,
                     ContenutoHtml = template.ContenutoHtml
                 }
             }, JsonRequestBehavior.AllowGet);
         }
+
 
 
         [HttpPost]
@@ -7738,6 +10013,7 @@ namespace SinergiaMvc.Controllers
                 ContenutoHtml = template.ContenutoHtml,
                 Stato = template.Stato,
                 ID_Professione = template.ID_Professione,
+                TipoCompenso = template.TipoCompenso,
                 NumeroVersione = ultimaVersione + 1,
                 DataArchiviazione = DateTime.Now,
                 ID_UtenteArchiviazione = idUtente,
@@ -7786,6 +10062,7 @@ namespace SinergiaMvc.Controllers
                     ContenutoHtml = template.ContenutoHtml,
                     Stato = "Eliminato",
                     ID_Professione = template.ID_Professione,
+                    TipoCompenso= template.TipoCompenso,
                     NumeroVersione = ultimaVersione + 1,
                     DataArchiviazione = DateTime.Now,
                     ID_UtenteArchiviazione = idUtenteCorrente,
@@ -7832,127 +10109,638 @@ namespace SinergiaMvc.Controllers
             };
         }
 
-[HttpPost]
-    public ActionResult UploadTemplateDocx(HttpPostedFileBase file, int? idProfessione)
-    {
-        if (file == null || file.ContentLength == 0)
-            return Json(new { success = false, message = "❌ Nessun file caricato." });
-
-        if (!file.FileName.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
-            return Json(new { success = false, message = "❌ Caricare solo file in formato DOCX." });
-
-        int idUtente = UserManager.GetIDUtenteCollegato();
-        if (idUtente <= 0)
-            return Json(new { success = false, message = "❌ Utente non autenticato." });
-
-        try
+        [HttpPost]
+        public ActionResult UploadTemplateDocx(HttpPostedFileBase file, string tipoCompenso)
         {
-            string htmlContent;
+            if (file == null || file.ContentLength == 0)
+                return Json(new { success = false, message = "❌ Nessun file caricato." });
 
-            using (var ms = new MemoryStream())
+            if (!file.FileName.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
+                return Json(new { success = false, message = "❌ Caricare solo file in formato DOCX." });
+
+            if (string.IsNullOrWhiteSpace(tipoCompenso))
+                return Json(new { success = false, message = "❌ Devi selezionare un tipo di compenso." });
+
+            int idUtente = UserManager.GetIDUtenteCollegato();
+            if (idUtente <= 0)
+                return Json(new { success = false, message = "❌ Utente non autenticato." });
+
+            try
             {
-                file.InputStream.CopyTo(ms);
-                ms.Position = 0;
+                string htmlContent;
 
-                using (WordprocessingDocument doc = WordprocessingDocument.Open(ms, true))
+                using (var ms = new MemoryStream())
                 {
-                    var settings = new HtmlConverterSettings()
+                    file.InputStream.CopyTo(ms);
+                    ms.Position = 0;
+
+                    using (WordprocessingDocument doc = WordprocessingDocument.Open(ms, true))
                     {
-                        PageTitle = "Template incarico importato"
-                    };
+                        var settings = new HtmlConverterSettings()
+                        {
+                            PageTitle = "Template incarico importato",
+                            FabricateCssClasses = true,
+                            CssClassPrefix = "docx"
+                        };
 
-                    XElement html = HtmlConverter.ConvertToHtml(doc, settings);
-                    var body = html.Descendants().FirstOrDefault(x => x.Name.LocalName == "body");
+                        // === Corpo documento principale ===
+                        XElement html = HtmlConverter.ConvertToHtml(doc, settings);
 
-                    htmlContent = body != null
-                        ? string.Join("", body.Elements().Select(e => e.ToString(SaveOptions.DisableFormatting)))
-                        : "";
+                        var styles = html.Descendants()
+                                         .FirstOrDefault(x => x.Name.LocalName == "head")
+                                         ?.ToString(SaveOptions.DisableFormatting) ?? "";
+
+                        var body = html.Descendants()
+                                       .FirstOrDefault(x => x.Name.LocalName == "body");
+
+                        var bodyContent = body != null
+                            ? string.Join("", body.Elements().Select(e => e.ToString(SaveOptions.DisableFormatting)))
+                            : "";
+                        // === HEADER e FOOTER ===
+                        string headerHtml = "";
+                        string footerHtml = "";
+
+                        var mainPart = doc.MainDocumentPart;
+                        if (mainPart != null)
+                        {
+                            // 🔹 HEADER
+                            foreach (var headerPart in mainPart.HeaderParts)
+                            {
+                                try
+                                {
+                                    var headerParagraphs = headerPart.Header.Descendants<DocumentFormat.OpenXml.Wordprocessing.Paragraph>();
+                                    if (headerParagraphs != null && headerParagraphs.Any())
+                                    {
+                                        headerHtml += "<div class='docx-header' style='text-align:center; margin-bottom:20px;'>";
+                                        foreach (var p in headerParagraphs)
+                                        {
+                                            var runs = p.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>();
+                                            string text = string.Join("", runs.Select(r => r.Text));
+                                            if (!string.IsNullOrWhiteSpace(text))
+                                                headerHtml += $"<p style='margin:0; line-height:1.2;'>{System.Net.WebUtility.HtmlEncode(text)}</p>";
+                                        }
+                                        headerHtml += "</div>";
+                                    }
+                                }
+                                catch { /* ignora se non esiste */ }
+                            }
+
+                            // 🔹 FOOTER (solo il primo trovato)
+                            var footerPart = mainPart.FooterParts.FirstOrDefault();
+                            if (footerPart != null)
+                            {
+                                try
+                                {
+                                    var footerParagraphs = footerPart.Footer.Descendants<DocumentFormat.OpenXml.Wordprocessing.Paragraph>();
+                                    if (footerParagraphs != null && footerParagraphs.Any())
+                                    {
+                                        footerHtml += "<div class='docx-footer' style='text-align:center; margin-top:25px; font-size:11pt; line-height:1.3;'>";
+                                        foreach (var p in footerParagraphs)
+                                        {
+                                            var runs = p.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>();
+                                            string text = string.Join("", runs.Select(r => r.Text));
+                                            if (!string.IsNullOrWhiteSpace(text))
+                                                footerHtml += $"<p style='margin:0;'>{System.Net.WebUtility.HtmlEncode(text)}</p>";
+                                        }
+                                        footerHtml += "</div>";
+                                    }
+                                }
+                                catch { /* ignora se non esiste footer */ }
+                            }
+                        }
+
+                        // === Componi tutto l’HTML ===
+                        htmlContent = styles + headerHtml + bodyContent + footerHtml;
+
+                        // === Normalizzazione elenchi numerati (post-conversione) ===
+                        htmlContent = Regex.Replace(
+                            htmlContent,
+                            @"(<p[^>]*>\s*)(\d{1,2}\.)\s*(.*?)<\/p>",
+                            "<ol style='margin-left:25px; padding-left:10px;'><li>$3</li></ol>",
+                            RegexOptions.IgnoreCase | RegexOptions.Singleline
+                        );
+
+                        // Rimuovi eventuali <ol> consecutivi duplicati
+                        htmlContent = Regex.Replace(
+                            htmlContent,
+                            @"<\/ol>\s*<ol[^>]*>",
+                            "",
+                            RegexOptions.IgnoreCase
+                        );
+                    }
                 }
-            }
 
-            // ✅ Pulisci con HtmlAgilityPack
-            var docHtml = new HtmlDocument();
-            docHtml.LoadHtml(htmlContent);
+                if (string.IsNullOrWhiteSpace(htmlContent))
+                    return Json(new { success = false, message = "❌ Conversione fallita: HTML vuoto." });
 
-            // lista tag ammessi
-            var allowedTags = new HashSet<string>
+                // ============================================
+                // 🔁 Placeholder comuni
+                // ============================================
+                var placeholders = new List<KeyValuePair<string, string>>
         {
-            "p","h1","h2","h3","h4","h5","h6",
-            "b","strong","i","em","u",
-            "ul","ol","li",
-            "table","tr","td","th"
+            // === CLIENTE ===
+            new KeyValuePair<string, string>(@"\bN\s*O\s*M\s*E\s+C\s*O\s*G\s*N\s*O\s*M\s*E\b", "[NOME COGNOME]"),
+            new KeyValuePair<string, string>(@"\bC\.?\s*F\.?\s*CLIENTE\b", "[CF CLIENTE]"),
+            new KeyValuePair<string, string>(@"\bRAGIONE\s*SOCIALE\b", "[RAGIONE SOCIALE]"),
+         // Sostituisce solo se "via" è preceduta da "residente in" o "alla"
+            new KeyValuePair<string, string>(@"(?<=\bresidente\s+in\s+|alla\s+via\s+)\bvia\b", "[INDIRIZZO CLIENTE]"),
+            new KeyValuePair<string, string>(@"\bProvincia\b|\(Provincia\)", "[PROVINCIA CLIENTE]"),
+
+            
+                // === DATI ANAGRAFICI CLIENTE ===
+             // === CITTA: sostituzione contestuale e sicura ===
+
+                // === CITTA (robusto per conversione Word in HTML) ===
+
+                // 🔸 Città di nascita → "nato a CITTA"
+                new KeyValuePair<string, string>(
+                    @"(?<=\bnato\s+a\s+)(?:<[^>]+>)*C\s*I\s*T\s*T\s*A\b",
+                    "[CITTA_NASCITA]"
+                ),
+
+                // 🔸 Città di residenza → "residente in CITTA"
+                new KeyValuePair<string, string>(
+                    @"(?<=\bresidente\s+in\s+)(?:<[^>]+>)*C\s*I\s*T\s*T\s*A\b",
+                    "[CITTA CLIENTE]"
+                ),
+
+                // 🔸 Città sede legale → "con sede legale in CITTA"
+                new KeyValuePair<string, string>(
+                    @"(?<=\bcon\s+sede\s+legale\s+in\s+)(?:<[^>]+>)*C\s*I\s*T\s*T\s*A\b",
+                    "[CITTA CLIENTE]"
+                ),
+
+                new KeyValuePair<string, string>(@"\bDATA\s*(DI\s*)?NASCITA\b", "[DATA_NASCITA]"),
+
+                // === INDIRIZZO CLIENTE ===
+                new KeyValuePair<string, string>(
+                    @"(INDIRIZZO|VIA|V\.)(?:\s|&nbsp;|<[^>]*>)*CLIENTE",
+                    "[INDIRIZZO CLIENTE]"
+                ),
+
+                new KeyValuePair<string, string>(
+                    @"P(?:\s|<[^>]+>)*A(?:\s|<[^>]+>)*R(?:\s|<[^>]+>)*T(?:\s|<[^>]+>)*I(?:\s|<[^>]+>)*T(?:\s|<[^>]+>)*A(?:\s|<[^>]+>)*" +
+                    @"(?:I(?:\s|<[^>]+>)*V(?:\s|<[^>]+>)*A)?(?:\s|<[^>]+>)*C(?:\s|<[^>]+>)*L(?:\s|<[^>]+>)*I(?:\s|<[^>]+>)*E(?:\s|<[^>]+>)*N(?:\s|<[^>]+>)*T(?:\s|<[^>]+>)*E",
+                    "[PARTITA IVA CLIENTE]"
+                ),
+
+
+            // === PROFESSIONISTA RESPONSABILE ===
+            new KeyValuePair<string, string>(@"\bProfessionista\s*Responsabile\b", "[PROFESSIONISTA RESPONSABILE]"),
+            new KeyValuePair<string, string>(@"\bCodice\s*Fiscale\s*Responsabile\b", "[CF PROFESSIONISTA]"),
+            new KeyValuePair<string, string>(@"\bPartita\s*IVA\s*Responsabile\b", "[P.IVA PROFESSIONISTA]"),
+            new KeyValuePair<string, string>(@"\bIndirizzo\s*(Responsabile|Responsanile)\b", "[INDIRIZZO PROFESSIONISTA]"),
+
+            // === LOGO ===
+            new KeyValuePair<string, string>(@"\bLogo\s*Responsabile\b", "[LOGO_RESPONSABILE]"),
+
+            // === GENERICI ===
+            new KeyValuePair<string, string>(@"\[DATA\s*GENERAZIONE\]", "[DATA_GENERAZIONE]"),
+            new KeyValuePair<string, string>(@"\bDATA_GENERAZIONE\b", "[DATA_GENERAZIONE]"),
+            new KeyValuePair<string, string>(@"\[PROGRESSIVO\]", "[PROGRESSIVO]")
         };
 
-            // Rimuove tutti i nodi che non sono ammessi
-            foreach (var node in docHtml.DocumentNode.Descendants().ToList())
-            {
-                if (!allowedTags.Contains(node.Name.ToLower()))
+                // ============================================
+                // 🔁 Placeholder specifici per tipo compenso
+                // ============================================
+                if (tipoCompenso.Equals("A ore", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Mantieni solo il testo (senza il tag)
-                    node.ParentNode.ReplaceChild(HtmlNode.CreateNode(node.InnerText), node);
+                    // ============================================
+                    // 🔹 Placeholder specifici per il compenso "A ore"
+                    // ============================================
+                    var segnapostiAore = new List<KeyValuePair<string, string>>
+                        {
+//                      // === CITTA del cliente (riconosce anche 'Citt.' o 'Città' prima) ===
+//// === CITTA del cliente (versione definitiva, gestisce tutti i casi reali da Word) ===
+//new KeyValuePair<string, string>(
+//    @"(?:Citt(?:[àa’']|\.)?(?:\s|&nbsp;|<[^>]+>|[\r\n])*)?(?:<[^>]+>)*C\s*I\s*T\s*T\s*A\b",
+//    "[CITTA CLIENTE]"
+//),
+
+
+                         //// === Via / Indirizzo del cliente ===
+                         //       new KeyValuePair<string, string>(
+                         //           @"INDIRIZZO(?:\s|&nbsp;|<[^>]*>)*CLIENTE",
+                         //           "[INDIRIZZO CLIENTE]"
+                         //       ),
+
+                            // === Provincia del cliente ===
+                            new KeyValuePair<string, string>(
+                                @"\bPROVINCIA\s+CLIENTE\b|\[\[?PROVINCIA[_\s]*CLIENTE\]?\]?",
+                                "[PROVINCIA CLIENTE]"
+                            ),
+
+                            // === Codice Fiscale Cliente (mantiene "C.F.") ===
+                            new KeyValuePair<string, string>(
+                                @"(?<=C\.?\s*F\.?\s*)CLIENTE|\bCODICE\s*FISCALE\s*CLIENTE\b",
+                                "[CF CLIENTE]"
+                            ),
+
+                            // === Partita IVA Cliente (mantiene "P.IVA" o sostituisce "PARTITA IVA") ===
+                            new KeyValuePair<string, string>(
+                                @"(?<=P\.?\s*IVA\s*)CLIENTE|\bPARTITA\s*IVA\s*CLIENTE\b",
+                                "[PARTITA IVA CLIENTE]"
+                            ),
+
+                            // === Oggetto dell’incarico ===
+                            new KeyValuePair<string, string>(
+                                @"\bOGGETTO\s*(DELL[’']|DELL’|DI)\s*INCARICO\b|\[\[?OGGETTO[_\s]*INCARICO\]?\]?",
+                                "[OGGETTO_INCARICO]"
+                            ),
+
+                            // === Descrizione ruolo (Campo A) ===
+                            new KeyValuePair<string, string>(
+                                @"\bCAMPO\s*A\b|\[\[?DESCRIZIONE[_\s]*RUOLO\]?\]?",
+                                "[DESCRIZIONE_RUOLO]"
+                            ),
+
+                            // === Importo orario (Campo B) ===
+                            new KeyValuePair<string, string>(
+                                @"\bCAMPO\s*B\b|\bIMPORTO\s*ORARIO\b|\[\[?IMPORTO[_\s]*ORARIO\]?\]?",
+                                "[IMPORTO_ORARIO]"
+                            ),
+
+                            // === Numero progressivo (Campo C) ===
+                            new KeyValuePair<string, string>(
+                                @"\bCAMPO\s*C\b|\[\[?NUMERO[_\s]*PROGRESSIVO\]?\]?",
+                                "[NUMERO_PROGRESSIVO]"
+                            ),
+
+                            // === Data generazione ===
+                            new KeyValuePair<string, string>(
+                                @"DATA[_\s]*GENERAZIONE",
+                                "[DATA_GENERAZIONE]"
+                            )
+                        };
+
+                    // 🔁 Aggiungi solo i nuovi placeholder se non già presenti nei generali
+                    foreach (var kv in segnapostiAore)
+                    {
+                        if (!placeholders.Any(p => p.Value == kv.Value))
+                            placeholders.Add(kv);
+                    }
+
+                    // === Allineamento automatico dell'importo orario a destra ===
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"<td[^>]*>\s*\[IMPORTO_ORARIO\]\s*</td>",
+                        "<td style='text-align:right;'>[IMPORTO_ORARIO]</td>",
+                        RegexOptions.IgnoreCase
+                    );
+                    //// 🧩 Fix finale per casi come "INDIRIZZO <span>CLIENTE</span>"
+                    //htmlContent = Regex.Replace(
+                    //    htmlContent,
+                    //    @"INDIRIZZO(?:\s|&nbsp;|<[^>]*>)*CLIENTE",
+                    //    "[INDIRIZZO CLIENTE]",
+                    //    RegexOptions.IgnoreCase
+                    //);
+
+
+                    // === Normalizzazione eventuali doppie parentesi ([[...]] → [...]) ===
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"\[\[([A-Z_ ]+)\]\]",
+                        "[$1]",
+                        RegexOptions.IgnoreCase
+                    );
                 }
+
+                else if (tipoCompenso.Equals("Fisso", StringComparison.OrdinalIgnoreCase))
+                {
+                    placeholders.Add(new KeyValuePair<string, string>(@"\bCampo\s*A\b", "[DESCRIZIONE_ATTIVITA]"));
+                    placeholders.Add(new KeyValuePair<string, string>(@"\bCampo\s*B\b", "[IMPORTO]"));
+                    placeholders.Add(new KeyValuePair<string, string>(@"\bCampo\s*C\b", "[CATEGORIA]"));
+                    placeholders.Add(new KeyValuePair<string, string>(@"\bCampo\s*D\b", "[PROGRESSIVO]"));
+                    placeholders.Add(new KeyValuePair<string, string>(@"\[(CPA)\]", "[CPA]"));
+                    placeholders.Add(new KeyValuePair<string, string>(@"\[(IMPONIBILE)\]", "[IMPONIBILE]"));
+                    placeholders.Add(new KeyValuePair<string, string>(@"\[(IVA)\]", "[IVA]"));
+                    placeholders.Add(new KeyValuePair<string, string>(@"\[(TOTALE)\](?!_AVERE)", "[TOTALE]"));
+                    placeholders.Add(new KeyValuePair<string, string>(@"\[(TOTALE_AVERE)\]", "[TOTALE_AVERE]"));
+
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"<td[^>]*>\s*\[IMPORTO\]\s*</td>",
+                        "<td style='text-align:right;'>[IMPORTO]</td>",
+                        RegexOptions.IgnoreCase
+                    );
+
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"<td[^>]*>\s*\[(CPA|IMPONIBILE|IVA|TOTALE|TOTALE_AVERE)\]\s*</td>",
+                        "<td style='text-align:right;'>[$1]</td>",
+                        RegexOptions.IgnoreCase
+                    );
+                }
+                else if (tipoCompenso.Equals("Giudiziale", StringComparison.OrdinalIgnoreCase))
+                {
+                    // ======================================================
+                    // 🔹 SEGNAPOSTI per GIUDIZIALE
+                    // ======================================================
+                    var segnapostiGiudiziale = new List<KeyValuePair<string, string>>
+                        {
+                         // Campo libero “Estremi giudizio oggetto dell’incarico” o solo “Estremi giudizio”
+                            new KeyValuePair<string, string>(
+                                @"E\s*(?:<[^>]+>)*\s*s\s*(?:<[^>]+>)*\s*t\s*(?:<[^>]+>)*\s*r\s*(?:<[^>]+>)*\s*e\s*(?:<[^>]+>)*\s*m\s*(?:<[^>]+>)*\s*i\s*(?:<[^>]+>)*\s*[\s>]*g\s*(?:<[^>]+>)*\s*i\s*(?:<[^>]+>)*\s*u\s*(?:<[^>]+>)*\s*d\s*(?:<[^>]+>)*\s*i\s*(?:<[^>]+>)*\s*z\s*(?:<[^>]+>)*\s*i\s*(?:<[^>]+>)*\s*o",
+                                "[ESTREMI_GIUDIZIO]"
+                            ),
+
+
+                            // Campo A = Descrizione attività o fase del giudizio
+                            new KeyValuePair<string, string>(
+                                @"Campo\s*A|\[DESCRIZIONE[_\s]*ATTIVITA\]",
+                                "[DESCRIZIONE_ATTIVITA]"
+                            ),
+
+                            // Campo B = Importo
+                            new KeyValuePair<string, string>(
+                                @"Campo\s*B|\[IMPORTO\]",
+                                "[IMPORTO]"
+                            ),
+
+                            // Campo C = Numero progressivo (automatico)
+                            new KeyValuePair<string, string>(
+                                @"Campo\s*C|\[NUMERO[_\s]*PROGRESSIVO\]",
+                                "[NUMERO_PROGRESSIVO]"
+                            )
+                        };
+                   
+
+
+
+
+                    // 🔁 Aggiungi solo i nuovi segnaposti se non già presenti
+                    foreach (var kv in segnapostiGiudiziale)
+                    {
+                        if (!placeholders.Any(p => p.Value == kv.Value))
+                            placeholders.Add(kv);
+                    }
+
+                    // ======================================================
+                    // 💄 Allineamento Importo (Campo B) a destra
+                    // ======================================================
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"<td[^>]*>\s*\[IMPORTO\]\s*</td>",
+                        "<td style='text-align:right;'>[IMPORTO]</td>",
+                        RegexOptions.IgnoreCase
+                    );
+
+                    // ======================================================
+                    // 🧩 Normalizzazione eventuali parentesi doppie [[...]] → [...]
+                    // ======================================================
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"\[\[([A-Z_ ]+)\]\]",
+                        "[$1]",
+                        RegexOptions.IgnoreCase
+                    );
+                }
+                else if (tipoCompenso.Equals("Avviso Parcella", StringComparison.OrdinalIgnoreCase))
+                {
+                    // ======================================================
+                    // 📑 SEGNAPOSTI SPECIFICI PER TEMPLATE "AVVISO PARCELLA"
+                    // ======================================================
+                    var segnapostiAvviso = new List<KeyValuePair<string, string>>
+    {
+        // === 📄 DATI GENERALI ===
+        new KeyValuePair<string, string>(@"DATA\s*CREAZIONE\s*AVVISO", "[DATA_CREAZIONE_AVVISO]"),
+        new KeyValuePair<string, string>(@"PROGRESSIVO\s*PRATICA", "[PROGRESSIVO_PRATICA]"),
+        new KeyValuePair<string, string>(@"TITOLO\s+AVVISO\s+PARCELLA", "[TITOLO_AVVISO_PARCELLA]"),
+
+        // === 👤 PROFESSIONISTA / RESPONSABILE PRATICA ===
+        new KeyValuePair<string, string>(
+            @"(?<!Email(?:<[^>]+>|\s)*[:]*\s*)Responsabile(?:<[^>]+>|\s)*Pratica(?![^<]*@)",
+            "[NOME_PROFESSIONISTA_RESPONSABILE]"
+        ),
+        new KeyValuePair<string, string>(
+            @"Email(?:<[^>]+>|\s)*[:]*\s*(?:email|e\-mail)(?:<[^>]+>|\s)*responsabile(?:<[^>]+>|\s)*pratica",
+            "Email : [EMAIL_RESPONSABILE_PRATICA]"
+        ),
+
+        // === 🧾 CLIENTE ===
+        new KeyValuePair<string, string>(
+            @"NOME(?:<[^>]+>|\s)*COGNOME(?:<[^>]+>|\s)*CLIENTE",
+            "[NOME_COGNOME_CLIENTE]"
+        ),
+        new KeyValuePair<string, string>(
+            @"RAGIONE(?:<[^>]+>|\s)*SOCIALE(?:<[^>]+>|\s)*CLIENTE",
+            "[RAGIONE_SOCIALE_CLIENTE]"
+        ),
+        new KeyValuePair<string, string>(
+            @"Residenza(?:<[^>]+>|\s)*\/?(?:<[^>]+>|\s)*sede(?:<[^>]+>|\s)*legale(?:<[^>]+>|\s)*cliente",
+            "[INDIRIZZO_CLIENTE]"
+        ),
+        new KeyValuePair<string, string>(
+            @"CF(?:<[^>]+>|\s)*CLIENTE",
+            "[CF_CLIENTE]"
+        ),
+        new KeyValuePair<string, string>(
+            @"Email(?:<[^>]+>|\s)*[:]*\s*(?:email|e\-mail)(?:<[^>]+>|\s)*cliente",
+            "Email : [EMAIL_CLIENTE]"
+        ),
+
+        // === 👥 PROFESSIONISTA / OWNER CLIENTE ===
+        new KeyValuePair<string, string>(
+            @"NOME(?:<[^>]+>|\s)*COGNOME(?:<[^>]+>|\s)*Professionista",
+            "[NOME_COGNOME_PROFESSIONISTA]"
+        ),
+        new KeyValuePair<string, string>(
+            @"Owner(?:<[^>]+>|\s)*Cliente",
+            "[OWNER_CLIENTE]"
+        ),
+        new KeyValuePair<string, string>(
+            @"Email(?:<[^>]+>|\s)*[:]*\s*(?:email|e\-mail)(?:<[^>]+>|\s)*professionista",
+            "Email : [EMAIL_PROFESSIONISTA]"
+        ),
+
+        // === 💶 IMPORTI ===
+        new KeyValuePair<string, string>(@"(?<=</td>\s*<td[^>]*>)\s*Sorte\s*(?=</td>)", "[IMPORTO_SORTE]"),
+        new KeyValuePair<string, string>(@"(?<=</td>\s*<td[^>]*>)\s*Cassa\s+avv\.ti\s*4%\s*(?=</td>)", "[IMPORTO_CASSA_4]"),
+        new KeyValuePair<string, string>(@"(?<=</td>\s*<td[^>]*>)\s*Spese\s+Generali\s*15%\s*(?=</td>)", "[IMPORTO_SPESE_GENERALI]"),
+        new KeyValuePair<string, string>(@"(?<=</td>\s*<td[^>]*>)\s*Totale\s+imponibile\s+IVA\s*(?=</td>)", "[TOTALE_IMPONIBILE]"),
+        new KeyValuePair<string, string>(@"(?<=</td>\s*<td[^>]*>)\s*IVA\s*22%\s*(?=</td>)", "[IMPORTO_IVA]"),
+        new KeyValuePair<string, string>(@"(?<=</td>\s*<td[^>]*>)\s*Totale\s*(?=</td>)", "[TOTALE_COMPLESSIVO]"),
+
+        // === ✍️ FIRME ===
+        new KeyValuePair<string, string>(@"\[FIRMA_FRATINI\]", "[FIRMA_FRATINI]"),
+        new KeyValuePair<string, string>(@"\[FIRMA_DAMICO\]", "[FIRMA_DAMICO]")
+    };
+
+                    // ======================================================
+                    // 🔁 Applica sostituzioni testuali
+                    // ======================================================
+                    foreach (var kv in segnapostiAvviso)
+                    {
+                        htmlContent = Regex.Replace(htmlContent, kv.Key, kv.Value, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                    }
+
+                    // ======================================================
+                    // 💄 Allineamento numerico importi
+                    // ======================================================
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"(<tr[^>]*>\s*<td[^>]*>.*?</td>\s*<td[^>]*>)\s*\[(IMPORTO_SORTE|IMPORTO_CASSA_4|IMPORTO_SPESE_GENERALI|IMPORTO_IVA|TOTALE_IMPONIBILE|TOTALE_COMPLESSIVO)\]\s*(</td>)",
+                        "$1<span style='display:block; text-align:right; padding-right:8px; font-size:10pt;'>[$2]</span>$3",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline
+                    );
+
+                    // ======================================================
+                    // 🧩 Normalizzazione doppie parentesi ([[...]] → [...])
+                    // ======================================================
+                    htmlContent = Regex.Replace(htmlContent, @"\[\[([A-Z_ ]+)\]\]", "[$1]", RegexOptions.IgnoreCase);
+
+                    // ======================================================
+                    // ✉️ Ridimensiona email cliente
+                    // ======================================================
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"(<td[^>]*>\s*Email\s*:\s*email\s*cliente.*?</td>)",
+                        "<td style='font-size:9pt; vertical-align:top;'>$1</td>",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline
+                    );
+
+                    // ======================================================
+                    // 🎨 Margini e font generali (stile Word)
+                    // ======================================================
+                    htmlContent = "<div style='margin:1cm; font-family:Calibri, sans-serif; font-size:11pt; line-height:1.4;'>" +
+                                  htmlContent + "</div>";
+
+                    // ======================================================
+                    // 🧩 Disposizione orizzontale firme (Word/Rotativa stabile)
+                    // ======================================================
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        @"(\[FIRMA_FRATINI\].*?\[FIRMA_DAMICO\])",
+                        @"<table style='width:100%; border:none; border-collapse:collapse; margin-top:40px; font-family:Calibri, sans-serif; font-size:11pt;'>
+                                <tr>
+                                    <td style='width:50%; text-align:left; vertical-align:top; white-space:nowrap; letter-spacing:0;'>
+                                        Avv.&nbsp;Riccardo&nbsp;Fratini&nbsp;–&nbsp;Presidente&nbsp;CdA<br/>
+                                        [FIRMA_FRATINI]
+                                    </td>
+                                    <td style='width:50%; text-align:right; vertical-align:top; white-space:nowrap; letter-spacing:0;'>
+                                        Avv.&nbsp;Dario&nbsp;D’Amico&nbsp;–&nbsp;Vice-Presidente&nbsp;CdA<br/>
+                                        [FIRMA_DAMICO]
+                                    </td>
+                                </tr>
+                            </table>",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline
+                    );
+
+                    // ======================================================
+                    // 🧾 DEBUG: salva HTML generato per verifica (facoltativo)
+                    // ======================================================
+                    try
+                    {
+                        string debugPath = Server.MapPath("~/Content/debug_upload_template.html");
+                        System.IO.File.WriteAllText(debugPath, htmlContent, System.Text.Encoding.UTF8);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine("⚠️ Errore scrittura debug HTML: " + ex.Message);
+                    }
+                }
+
+                // ============================================
+                // 🔁 Applica le sostituzioni
+                // ============================================
+                foreach (var kv in placeholders)
+                {
+                    htmlContent = Regex.Replace(
+                        htmlContent,
+                        kv.Key,
+                        kv.Value,
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline
+                    );
+                }
+
+                // ============================================
+                // 🔁 Gestione LOGO
+                // ============================================
+                string logoPath = Url.Content("~/Content/img/Icons/Logo Nuovo.png");
+                string logoTag = $@"
+                    <div style='display:flex; align-items:center; margin-bottom:30px;'>
+                        <img src='{logoPath}' alt='Logo Sinergia'
+                             style='max-height:180px; width:auto; margin-right:20px; display:block; object-fit:contain;' />
+                    </div>";
+
+                htmlContent = htmlContent.Replace("[LOGO_RESPONSABILE]", logoTag);
+                // 🔥 Fix per immagini vuote residue
+                htmlContent = Regex.Replace(
+                    htmlContent,
+                    @"<img[^>]*(src\s*=\s*['""]\s*['""][^>]*>|src\s*=\s*['""]data:image/[^'""]*;base64,\s*['""])?[^>]*>",
+                    "",
+                    RegexOptions.IgnoreCase | RegexOptions.Singleline
+                );
+                if (!htmlContent.Contains(logoTag))
+                    htmlContent = logoTag + htmlContent;
+
+                // ============================================
+                // 🔁 Pulizia HTML
+                // ============================================
+                htmlContent = Regex.Replace(htmlContent, @"\|+|={2,}", "");
+                htmlContent = Regex.Replace(htmlContent, @"<td[^>]*>(\s|&nbsp;)*</td>", "<td></td>", RegexOptions.IgnoreCase);
+                htmlContent = Regex.Replace(htmlContent, @"<tr>(\s*<td[^>]*>\s*</td>)+\s*</tr>", "", RegexOptions.IgnoreCase);
+                htmlContent = Regex.Replace(htmlContent, @"<p[^>]*>(\s|&nbsp;)*<\/p>", "", RegexOptions.IgnoreCase);
+                htmlContent = Regex.Replace(htmlContent, @"<span[^>]*>(\s|&nbsp;)*<\/span>", "", RegexOptions.IgnoreCase);
+
+                // ============================================
+                // 🔁 Salvataggio nel DB
+                // ============================================
+                string nomeTemplate = Path.GetFileNameWithoutExtension(file.FileName);
+                if (string.IsNullOrWhiteSpace(nomeTemplate))
+                    nomeTemplate = "Template_" + DateTime.Now.ToString("yyyyMMdd_HHmm");
+
+                var nuovoTemplate = new TemplateIncarichi
+                {
+                    NomeTemplate = nomeTemplate,
+                    ContenutoHtml = htmlContent,
+                    Stato = "Attivo",
+                    ID_Professione = 0,
+                    TipoCompenso = tipoCompenso
+                };
+
+                db.TemplateIncarichi.Add(nuovoTemplate);
+                db.SaveChanges();
+
+                db.TemplateIncarichi_a.Add(new TemplateIncarichi_a
+                {
+                    ID_Archivio = nuovoTemplate.IDTemplateIncarichi,
+                    NomeTemplate = nuovoTemplate.NomeTemplate,
+                    ContenutoHtml = nuovoTemplate.ContenutoHtml,
+                    Stato = nuovoTemplate.Stato,
+                    ID_Professione = 0,
+                    NumeroVersione = 1,
+                    DataArchiviazione = DateTime.Now,
+                    ID_UtenteArchiviazione = idUtente,
+                    ModificheTestuali = $"📄 Importato da file DOCX ({file.FileName}) con TipoCompenso={tipoCompenso} da utente {idUtente} il {DateTime.Now:g}"
+                });
+                db.SaveChanges();
+
+                return Json(new
+                {
+                    success = true,
+                    message = $"✅ Template '{nuovoTemplate.NomeTemplate}' ({tipoCompenso}) importato correttamente!"
+                });
             }
-
-            htmlContent = docHtml.DocumentNode.InnerHtml;
-
-            if (string.IsNullOrWhiteSpace(htmlContent))
-                return Json(new { success = false, message = "❌ Conversione fallita: HTML vuoto." });
-
-            string nomeTemplate = Path.GetFileNameWithoutExtension(file.FileName);
-            if (string.IsNullOrWhiteSpace(nomeTemplate))
-                nomeTemplate = "Template_" + DateTime.Now.ToString("yyyyMMdd_HHmm");
-
-            int? idProf = idProfessione > 0 ? idProfessione : null;
-
-            var nuovoTemplate = new TemplateIncarichi
+            catch (Exception ex)
             {
-                NomeTemplate = nomeTemplate,
-                ContenutoHtml = htmlContent,
-                Stato = "Attivo",
-                ID_Professione = idProf ?? 0
-            };
-
-            db.TemplateIncarichi.Add(nuovoTemplate);
-            db.SaveChanges();
-
-            db.TemplateIncarichi_a.Add(new TemplateIncarichi_a
-            {
-                ID_Archivio = nuovoTemplate.IDTemplateIncarichi,
-                NomeTemplate = nuovoTemplate.NomeTemplate,
-                ContenutoHtml = nuovoTemplate.ContenutoHtml,
-                Stato = nuovoTemplate.Stato,
-                ID_Professione = idProf ?? 0,
-                NumeroVersione = 1,
-                DataArchiviazione = DateTime.Now,
-                ID_UtenteArchiviazione = idUtente,
-                ModificheTestuali = $"📄 Importato da file DOCX ({file.FileName}) da utente {idUtente} il {DateTime.Now:g}"
-            });
-            db.SaveChanges();
-
-            return Json(new
-            {
-                success = true,
-                message = $"✅ Template '{nuovoTemplate.NomeTemplate}' importato correttamente!"
-            });
+                string err = ex.Message;
+                if (ex.InnerException != null) err += " → " + ex.InnerException.Message;
+                return Json(new { success = false, message = "❌ Errore durante l'importazione: " + err });
+            }
         }
-        catch (Exception ex)
-        {
-            string err = ex.Message;
-            if (ex.InnerException != null) err += " → " + ex.InnerException.Message;
-            return Json(new { success = false, message = "❌ Errore durante l'importazione: " + err });
-        }
-    }
 
 
 
-    #endregion
+        #endregion
 
         #region AVVISI PARCELLA
-    public ActionResult GestioneParcelle()
+        public ActionResult GestioneParcelle()
         {
             return View("~/Views/AvvisiParcella/GestioneAvvisiParcella.cshtml");
         }
 
+        [HttpGet]
         public ActionResult GestioneAvvisiParcellaList(int? idPratica = null)
         {
             int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
@@ -7967,7 +10755,7 @@ namespace SinergiaMvc.Controllers
             if (idPratica.HasValue)
                 query = query.Where(a => a.ID_Pratiche == idPratica.Value);
 
-            // 🔐 Gestione Permessi
+            // 🔐 Gestione permessi
             bool puoAggiungere = false;
             bool puoModificare = false;
             bool puoEliminare = false;
@@ -7988,34 +10776,109 @@ namespace SinergiaMvc.Controllers
             var lista = query
                 .OrderByDescending(a => a.DataAvviso)
                 .ToList()
-                .Select(a => new AvvisoParcellaViewModel
+                .Select(a =>
                 {
-                    ID_AvvisoParcelle = a.ID_AvvisoParcelle,
-                    ID_Pratiche = a.ID_Pratiche ?? 0,
-                    DataAvviso = a.DataAvviso,
-                    Importo = a.Importo ?? 0,
-                    Note = a.Note,
-                    Stato = a.Stato,
-                    MetodoPagamento = a.MetodoPagamento,
-                    PuoEliminare = puoEliminare,
-                    PuoModificare = puoModificare,
-                    NomePratica = db.Pratiche
-                        .Where(p => p.ID_Pratiche == a.ID_Pratiche)
-                        .Select(p => p.Titolo)
-                        .FirstOrDefault() ?? "(N/D)",
+                    // 🔹 Recupero compenso collegato (se presente)
+                    var compenso = (a.ID_CompensoOrigine.HasValue)
+                        ? db.CompensiPraticaDettaglio.FirstOrDefault(c => c.ID_RigaCompenso == a.ID_CompensoOrigine.Value)
+                        : null;
 
-                    // ✅ Nuovi campi
-                    ContributoIntegrativoPercentuale = a.ContributoIntegrativoPercentuale,
-                    ContributoIntegrativoImporto = a.ContributoIntegrativoImporto,
-                    AliquotaIVA = a.AliquotaIVA,
-                    ImportoIVA = a.ImportoIVA,
-                    TotaleAvvisoParcella =
-                        (a.Importo ?? 0) +
-                        (a.ContributoIntegrativoImporto ?? 0) +
-                        (a.ImportoIVA ?? 0)
+                    // 🔹 Importi base
+                    decimal importoBase = a.Importo ?? 0;
+                    decimal contributo = a.ContributoIntegrativoImporto ?? 0;
+                    decimal iva = a.ImportoIVA ?? 0;
+                    decimal rimborso = a.ImportoRimborsoSpese ?? 0;
+                    decimal acconto = a.ImportoAcconto ?? 0;
+
+                    // ✅ Usa il valore salvato in DB (mai ricalcolare sottraendo acconto)
+                    decimal totaleAvviso = a.TotaleAvvisiParcella ?? (importoBase + contributo + iva + rimborso);
+
+                    // ✅ Controlla se esiste già un documento PDF collegato (Avviso Parcella)
+                    bool haDocumento = db.DocumentiPratiche.Any(d =>
+                         d.ID_RiferimentoAvvisoParcella == a.ID_AvvisoParcelle &&
+                         d.CategoriaDocumento == "Avviso Parcella");
+
+
+                    return new AvvisoParcellaViewModel
+                    {
+                        ID_AvvisoParcelle = a.ID_AvvisoParcelle,
+                        TitoloAvviso = a.TitoloAvviso,
+                        ID_Pratiche = a.ID_Pratiche ?? 0,
+                        DataAvviso = a.DataAvviso,
+                        Importo = importoBase,
+                        Note = a.Note,
+                        Stato = a.Stato,
+                        MetodoPagamento = a.MetodoPagamento,
+                        PuoEliminare = puoEliminare,
+                        PuoModificare = puoModificare,
+                        HaDocumentoCaricato = haDocumento, // 👈 nuovo campo
+
+                        // 👤 Info pratica
+                        NomePratica = db.Pratiche
+                            .Where(p => p.ID_Pratiche == a.ID_Pratiche)
+                            .Select(p => p.Titolo)
+                            .FirstOrDefault() ?? "(N/D)",
+
+                        // ✅ Campi DB
+                        ID_ResponsabilePratica = a.ID_ResponsabilePratica,
+                        ID_OwnerCliente = a.ID_OwnerCliente,
+
+                        // ✅ Recupero nomi ausiliari
+                        NomeResponsabilePratica = a.ID_ResponsabilePratica.HasValue
+                            ? db.Utenti
+                                .Where(u => u.ID_Utente == a.ID_ResponsabilePratica.Value)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                            : "(N/D)",
+
+                        NomeOwnerCliente = a.ID_OwnerCliente.HasValue
+                            ? db.Utenti
+                                .Where(u => u.ID_Utente == a.ID_OwnerCliente.Value)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                            : "(N/D)",
+
+                        // 💰 Campi economici
+                        ContributoIntegrativoPercentuale = a.ContributoIntegrativoPercentuale,
+                        ContributoIntegrativoImporto = contributo,
+                        AliquotaIVA = a.AliquotaIVA,
+                        ImportoIVA = iva,
+                        RimborsoSpesePercentuale = a.RimborsoSpesePercentuale,
+                        ImportoRimborsoSpese = rimborso,
+                        ImportoAcconto = acconto,
+
+                        // 📌 Tipologia e Fase
+                        TipologiaAvviso = a.TipologiaAvviso,
+                        FaseGiudiziale = a.FaseGiudiziale,
+
+                        // 🔗 Compenso collegato (solo se presente)
+                        ID_CompensoOrigine = a.ID_CompensoOrigine,
+                        DescrizioneCompenso = compenso?.Descrizione,
+                        TariffaOraria = (compenso?.TipoCompenso?.ToLower() == "a ore") ? compenso?.Importo : null,
+                        OreEffettive = (compenso?.TipoCompenso?.ToLower() == "a ore") ? compenso?.ValoreStimato : null,
+
+                        // 💵 Totale finale (dal DB, coerente con Crea/Modifica)
+                        TotaleAvvisoParcella = totaleAvviso,
+
+                        // 🗓️ Date di invio e competenza economica
+                        DataInvio = a.DataInvio,
+                        DataCompetenzaEconomica = a.DataCompetenzaEconomica,
+
+                        // 🔗 Stato incasso collegato (se esiste un incasso)
+                        StatoIncasso = db.Incassi
+                            .Where(i => i.ID_AvvisoParcella == a.ID_AvvisoParcelle)
+                            .Select(i => i.StatoIncasso)
+                            .FirstOrDefault() ?? "—",
+
+                        // 📋 Descrizione leggibile (UI)
+                        DescrizioneAvviso = a.TipologiaAvviso == "Giudiziale"
+                            ? $"{a.TipologiaAvviso} – {a.FaseGiudiziale}"
+                            : a.TipologiaAvviso
+                    };
                 })
                 .ToList();
 
+            // 🔐 Permessi
             ViewBag.PuoAggiungere = puoAggiungere;
             ViewBag.Permessi = new PermessiViewModel
             {
@@ -8032,6 +10895,7 @@ namespace SinergiaMvc.Controllers
         }
             };
 
+            // 👨‍💼 Professionista della pratica
             if (idPratica.HasValue)
             {
                 var idProfessionista = db.Pratiche
@@ -8051,14 +10915,26 @@ namespace SinergiaMvc.Controllers
         [HttpPost]
         public ActionResult CreaAvvisoParcella(AvvisoParcellaViewModel model)
         {
+            System.Diagnostics.Debug.WriteLine("========== [CreaAvvisoParcella] DEBUG AVVIO ==========");
+            System.Diagnostics.Debug.WriteLine($"🕓 Timestamp: {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+            System.Diagnostics.Debug.WriteLine($"🟡 Raw form Importo: {Request.Form["Importo"]}");
+            System.Diagnostics.Debug.WriteLine($"🟡 Model.Importo: {model.Importo}");
+            System.Diagnostics.Debug.WriteLine($"🟡 Model.ImportoAcconto: {model.ImportoAcconto}");
+            System.Diagnostics.Debug.WriteLine($"🟡 Stato selezionato: {model.Stato}");
+            System.Diagnostics.Debug.WriteLine($"🟡 ModelState valido: {ModelState.IsValid}");
+
+            if (ModelState.ContainsKey("ID_AvvisoParcelle"))
+                ModelState["ID_AvvisoParcelle"].Errors.Clear();
+
+            System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("it-IT");
+            System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("it-IT");
+
             int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
             var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
             if (utente == null)
                 return Json(new { success = false, message = "Utente non autenticato." });
 
-            bool autorizzato = utente.TipoUtente == "Admin" ||
-                               db.Permessi.Any(p => p.ID_Utente == idUtenteCorrente && p.Aggiungi == true);
-
+            bool autorizzato = utente.TipoUtente == "Admin" || db.Permessi.Any(p => p.ID_Utente == idUtenteCorrente && p.Aggiungi == true);
             if (!autorizzato)
                 return Json(new { success = false, message = "Non hai i permessi per creare un avviso parcella." });
 
@@ -8070,151 +10946,314 @@ namespace SinergiaMvc.Controllers
                 if (pratica == null)
                     return Json(new { success = false, message = "Pratica non trovata." });
 
-                int? idProfessionista = pratica.ID_UtenteResponsabile;
+                int? idResponsabilePratica = pratica.ID_UtenteResponsabile;
+                int? idOwnerCliente = db.Clienti.Where(c => c.ID_Cliente == pratica.ID_Cliente).Select(c => c.ID_Operatore).FirstOrDefault();
 
-                // 🔍 Percentuale contributo dalla professione
-                decimal? percentuale = db.Professioni
-                    .Where(p => p.ID_ProfessionistaRiferimento == idProfessionista)
-                    .Select(p => p.PercentualeContributoIntegrativo)
-                    .FirstOrDefault();
+                decimal importoBase = model.Importo ?? 0;
+                decimal importoAcconto = model.ImportoAcconto ?? 0;
 
-                decimal importoBase = model.Importo.GetValueOrDefault();
-                decimal? contributo = percentuale.HasValue
-                    ? (decimal?)Math.Round(importoBase * percentuale.Value / 100, 2)
-                    : null;
+                if (importoBase <= 0 && importoAcconto > 0)
+                    importoBase = importoAcconto;
 
-                // 🔍 Calcola IVA
-                decimal? aliquotaIVA = model.AliquotaIVA;
-                decimal? importoIVA = aliquotaIVA.HasValue
-                    ? (decimal?)Math.Round(importoBase * aliquotaIVA.Value / 100, 2)
-                    : null;
+                if (importoBase <= 0)
+                    return Json(new { success = false, message = "L'importo non è valido (vuoto o nullo)." });
 
-                decimal? totaleAvviso = importoBase + (contributo ?? 0) + (importoIVA ?? 0);
+                var operatoreResp = db.OperatoriSinergia.FirstOrDefault(o => o.ID_UtenteCollegato == idResponsabilePratica && o.TipoCliente == "Professionista");
 
-                // ✅ Crea l’avviso
+                decimal percentualeCI = 0;
+                if (model.ContributoIntegrativoPercentuale.HasValue)
+                    percentualeCI = model.ContributoIntegrativoPercentuale.Value;
+                else if (operatoreResp?.ID_Professione != null)
+                    percentualeCI = db.Professioni.Where(p => p.ProfessioniID == operatoreResp.ID_Professione)
+                        .Select(p => p.PercentualeContributoIntegrativo).FirstOrDefault() ?? 0;
+
+                decimal contributo = Math.Round(importoBase * percentualeCI / 100, 2);
+                decimal aliquotaIVA = model.AliquotaIVA ?? 0;
+                decimal rimborsoPerc = model.RimborsoSpesePercentuale ?? 0;
+                decimal importoRimborso = Math.Round(importoBase * rimborsoPerc / 100, 2);
+                decimal importoIVA = Math.Round((importoBase + contributo + importoRimborso) * aliquotaIVA / 100, 2);
+                decimal totaleAvviso = importoBase + contributo + importoRimborso + importoIVA;
+
+                DateTime dataAvviso = model.DataAvviso ?? now;
+                DateTime dataCompetenza = dataAvviso;
+                DateTime? dataInvio = null;
+                if (model.Stato != null && model.Stato.Equals("Inviato", StringComparison.OrdinalIgnoreCase))
+                    dataInvio = now;
+
                 var nuovo = new AvvisiParcella
                 {
                     ID_Pratiche = model.ID_Pratiche,
-                    DataAvviso = model.DataAvviso,
-                    Importo = model.Importo,
+                    DataAvviso = dataAvviso,
+                    TitoloAvviso = model.TitoloAvviso,
+                    Importo = importoBase,
+                    ImportoAcconto = importoAcconto,
                     Note = model.Note?.Trim(),
                     Stato = model.Stato?.Trim(),
                     MetodoPagamento = model.MetodoPagamento?.Trim(),
-                    ID_UtenteCreatore = idUtenteCorrente,
-                    ContributoIntegrativoPercentuale = percentuale,
+                    ContributoIntegrativoPercentuale = percentualeCI,
                     ContributoIntegrativoImporto = contributo,
                     AliquotaIVA = aliquotaIVA,
                     ImportoIVA = importoIVA,
-                    TotaleAvvisiParcella = totaleAvviso
+                    TotaleAvvisiParcella = totaleAvviso,
+                    RimborsoSpesePercentuale = rimborsoPerc,
+                    ImportoRimborsoSpese = importoRimborso,
+                    ID_ResponsabilePratica = idResponsabilePratica,
+                    ID_OwnerCliente = idOwnerCliente,
+                    TipologiaAvviso = model.TipologiaAvviso?.Trim(),
+                    FaseGiudiziale = model.FaseGiudiziale?.Trim(),
+                    ID_CompensoOrigine = model.ID_CompensoOrigine,
+                    ID_UtenteCreatore = idUtenteCorrente,
+                    ID_UtenteModifica = idUtenteCorrente,
+                    DataModifica = now,
+                    DataInvio = dataInvio,
+                    DataCompetenzaEconomica = dataCompetenza
                 };
 
                 db.AvvisiParcella.Add(nuovo);
                 db.SaveChanges();
 
-                // 🗂️ Archivio
+                if (model.ID_CompensoOrigine.HasValue)
+                {
+                    var compenso = db.CompensiPraticaDettaglio.FirstOrDefault(c => c.ID_RigaCompenso == model.ID_CompensoOrigine.Value);
+                    if (compenso != null)
+                    {
+                        compenso.ImportoInviatoAllaFatturazione = (compenso.ImportoInviatoAllaFatturazione ?? 0) + importoBase;
+                        compenso.ID_AvvisoParcella = nuovo.ID_AvvisoParcelle;
+                        db.Entry(compenso).State = System.Data.Entity.EntityState.Modified;
+                        db.SaveChanges();
+                        GeneraEconomicoDaCompenso(compenso, nuovo.ID_AvvisoParcelle);
+                    }
+                }
+                else if (!string.IsNullOrEmpty(model.TipologiaAvviso))
+                {
+                    var compensi = db.CompensiPraticaDettaglio
+                        .Where(c => c.ID_Pratiche == model.ID_Pratiche && c.TipoCompenso == model.TipologiaAvviso)
+                        .ToList();
+
+                    foreach (var comp in compensi)
+                    {
+                        comp.ID_AvvisoParcella = nuovo.ID_AvvisoParcelle;
+                        GeneraEconomicoDaCompenso(comp, nuovo.ID_AvvisoParcelle);
+                    }
+
+                    db.SaveChanges();
+                }
+
                 db.AvvisiParcella_a.Add(new AvvisiParcella_a
                 {
                     ID_Archivio = nuovo.ID_AvvisoParcelle,
                     ID_Pratiche = nuovo.ID_Pratiche,
+                    TitoloAvviso = nuovo.TitoloAvviso,
                     DataAvviso = nuovo.DataAvviso,
                     Importo = nuovo.Importo,
                     Note = nuovo.Note,
                     Stato = nuovo.Stato,
                     MetodoPagamento = nuovo.MetodoPagamento,
-                    ID_UtenteCreatore = nuovo.ID_UtenteCreatore,
                     ContributoIntegrativoPercentuale = nuovo.ContributoIntegrativoPercentuale,
                     ContributoIntegrativoImporto = nuovo.ContributoIntegrativoImporto,
-                    TotaleAvvisiParcella = nuovo.TotaleAvvisiParcella,
                     AliquotaIVA = nuovo.AliquotaIVA,
                     ImportoIVA = nuovo.ImportoIVA,
+                    TotaleAvvisiParcella = nuovo.TotaleAvvisiParcella,
+                    TipologiaAvviso = nuovo.TipologiaAvviso,
+                    FaseGiudiziale = nuovo.FaseGiudiziale,
+                    RimborsoSpesePercentuale = nuovo.RimborsoSpesePercentuale,
+                    ImportoRimborsoSpese = nuovo.ImportoRimborsoSpese,
+                    ImportoAcconto = nuovo.ImportoAcconto,
+                    ID_CompensoOrigine = nuovo.ID_CompensoOrigine,
+                    ID_ResponsabilePratica = nuovo.ID_ResponsabilePratica,
+                    ID_OwnerCliente = nuovo.ID_OwnerCliente,
+                    DataInvio = dataInvio,
+                    DataCompetenzaEconomica = dataCompetenza,
+                    DataModifica = now,
                     NumeroVersione = 1,
                     ModificheTestuali = $"✅ Avviso creato da utente ID {idUtenteCorrente} in data {now:g}"
                 });
 
-                // ✅ Registrazione nel Bilancio (stato ECONOMICO)
-                if (idProfessionista.HasValue && totaleAvviso.HasValue)
+                db.SaveChanges();
+
+                return Json(new { success = true, message = "✅ Avviso parcella creato correttamente.", id = nuovo.ID_AvvisoParcelle });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("❌ Errore durante il salvataggio: " + ex);
+                return Json(new { success = false, message = "Errore durante il salvataggio: " + ex.Message });
+            }
+        }
+
+        private void GeneraEconomicoDaCompenso(CompensiPraticaDettaglio comp, int idAvviso)
+        {
+            if (comp == null) return;
+
+            int idPratica = comp.ID_Pratiche;
+            var pratica = db.Pratiche.Find(idPratica);
+            if (pratica == null) return;
+
+            DateTime dataCompetenza = DateTime.Now;
+            int? idResponsabile = pratica.ID_UtenteResponsabile;
+
+            decimal importoBase = comp.Importo ?? 0;
+            if (importoBase <= 0) return;
+
+            System.Diagnostics.Trace.WriteLine($"📊 [Economico Avviso] Calcolo quote da compenso ID {comp.ID_RigaCompenso}");
+
+            decimal percOwnerFee = db.RicorrenzeCosti
+                .Where(r => r.Categoria == "Owner Fee" && r.Attivo &&
+                      r.TipoValore == "Percentuale")
+                .OrderByDescending(r => r.DataInizio)
+                .Select(r => (decimal?)r.Valore)
+                .FirstOrDefault() ?? 0m;
+
+            decimal percTrattenuta = db.RicorrenzeCosti
+                .Where(r => r.Categoria == "Trattenuta Sinergia" && r.Attivo &&
+                      r.TipoValore == "Percentuale")
+                .OrderByDescending(r => r.DataInizio)
+                .Select(r => (decimal?)r.Valore)
+                .FirstOrDefault() ?? 0m;
+
+            var clusterList = db.Cluster
+                .Where(c => c.ID_Pratiche == idPratica &&
+                            c.TipoCluster == "Collaboratore")
+                .ToList();
+
+            decimal sommaCluster = clusterList.Sum(c => c.PercentualePrevisione);
+            decimal percResponsabile = Math.Max(0, 100 - percOwnerFee - percTrattenuta - sommaCluster);
+
+            void AggiungiEconomico(string tipo, int? idProf, decimal perc, decimal importo, string desc)
+            {
+                if (idProf == null || importo <= 0) return;
+
+                var now = DateTime.Now;
+                int utente = UserManager.GetIDUtenteCollegato();
+
+                // Salvo nel bilancio professionista
+                db.BilancioProfessionista.Add(new BilancioProfessionista
                 {
-                    string descrizione = "";
-                    decimal importoRicavo = 0;
-
-                    switch (pratica.Tipologia)
-                    {
-                        case "Fisso":
-                            descrizione = "Compenso fisso per pratica #" + pratica.ID_Pratiche;
-                            importoRicavo = totaleAvviso.Value; // normalmente = pratica.Budget + contributo + IVA
-                            break;
-
-                        case "A ore":
-                            if (pratica.TariffaOraria.HasValue && pratica.OreEffettive.HasValue)
-                            {
-                                importoRicavo = Math.Round(pratica.TariffaOraria.Value * pratica.OreEffettive.Value, 2);
-                                descrizione = $"Compenso orario ({pratica.OreEffettive} ore × {pratica.TariffaOraria} €/h)";
-                            }
-                            else
-                            {
-                                descrizione = "Compenso orario - dati incompleti";
-                                importoRicavo = totaleAvviso.Value; // fallback: usa l'importo dell’avviso
-                            }
-                            break;
-
-                        case "Giudiziale":
-                            descrizione = "Compenso giudiziale per pratica #" + pratica.ID_Pratiche;
-                            importoRicavo = totaleAvviso.Value; // può essere acconto, saldo, ecc.
-                            break;
-
-                        default:
-                            descrizione = "Ricavo pratica #" + pratica.ID_Pratiche;
-                            importoRicavo = totaleAvviso.Value;
-                            break;
-                    }
-
-                    db.BilancioProfessionista.Add(new BilancioProfessionista
-                    {
-                        ID_Professionista = idProfessionista.Value,
-                        ID_Pratiche = pratica.ID_Pratiche,
-                        Descrizione = descrizione,
-                        DataRegistrazione = DateTime.Now,
-                        DataInserimento = DateTime.Now,
-                        Categoria = "Ricavo Parcella",
-                        TipoVoce = "Ricavo",
-                        Importo = importoRicavo,
-                        Stato = "Economico",
-                        Origine = "AvvisoParcella",
-                        ID_UtenteInserimento = idUtenteCorrente
-                    });
-                }
+                    ID_Professionista = idProf.Value,
+                    ID_Pratiche = idPratica,
+                    DataRegistrazione = dataCompetenza,
+                    TipoVoce = tipo,
+                    Categoria = "Economico Avviso",
+                    Descrizione = desc,
+                    Importo = Math.Round(importo, 2),
+                    Stato = "Economico",
+                    Origine = "Avviso Parcella",
+                    DataInserimento = now,
+                    ID_UtenteInserimento = utente,
+                    DataCompetenzaEconomica = dataCompetenza
+                });
 
                 db.SaveChanges();
 
-                return Json(new { success = true, message = "✅ Avviso parcella creato correttamente." });
+                // Registro il movimento in Economico
+                var eco = new Economico
+                {
+                    ID_Pratiche = idPratica,
+                    ID_Professionista = idProf.Value,
+                    Percentuale = perc,
+                    TipoOperazione = tipo,
+                    Descrizione = desc,
+                    ImportoEconomico = Math.Round(importo, 2),
+                    DataRegistrazione = dataCompetenza,
+                    ID_AvvisoParcella = idAvviso,
+                    Stato = "Economico",
+                    Categoria = "Avviso Parcella",
+                    DataCompetenzaEconomica = dataCompetenza,
+                    ID_UtenteCreatore = utente,
+                    DataArchiviazione = now
+                };
+
+                db.Economico.Add(eco);
+                db.SaveChanges();
+
+                // Archiviazione della versione 1
+                db.Economico_a.Add(new Economico_a
+                {
+                    ID_EconomicoOriginale = eco.ID_Economico,
+                    ID_Pratiche = eco.ID_Pratiche,
+                    ID_Professionista = eco.ID_Professionista,
+                    Percentuale = eco.Percentuale,
+                    TipoOperazione = eco.TipoOperazione,
+                    Descrizione = eco.Descrizione,
+                    ImportoEconomico = eco.ImportoEconomico,
+                    DataRegistrazione = eco.DataRegistrazione,
+                    ID_AvvisoParcella = eco.ID_AvvisoParcella,
+                    Stato = eco.Stato,
+                    Categoria = eco.Categoria,
+                    DataCompetenzaEconomica = eco.DataCompetenzaEconomica,
+                    NumeroVersione = 1,
+                    DataArchiviazione = now,
+                    ID_UtenteArchiviazione = utente,
+                    ModificheTestuali = "Creazione automatica Economico da Avviso Parcella"
+                });
+
+                db.SaveChanges();
+                System.Diagnostics.Trace.WriteLine($"✅ Movimento economico salvato per pratica {idPratica}: {desc}");
             }
-            catch (DbEntityValidationException ex)
+
+
+            decimal quotaResp = importoBase * percResponsabile / 100m;
+            AggiungiEconomico("Entrata", idResponsabile, percResponsabile,
+                quotaResp, $"Ricavo Avviso Responsabile: {comp.Descrizione}");
+
+            if (pratica.ID_Owner != null && percOwnerFee > 0)
             {
-                var errorMessages = ex.EntityValidationErrors
-                    .SelectMany(e => e.ValidationErrors)
-                    .Select(e => $"{e.PropertyName}: {e.ErrorMessage}");
-
-                var fullMessage = string.Join("; ", errorMessages);
-
-                return Json(new { success = false, message = "Errore validazione: " + fullMessage });
+                decimal quotaOwner = importoBase * percOwnerFee / 100m;
+                AggiungiEconomico("Entrata", pratica.ID_Owner, percOwnerFee,
+                    quotaOwner, $"Owner Fee Avviso: {comp.Descrizione}");
             }
 
+            if (percTrattenuta > 0)
+            {
+                decimal quotaTratt = importoBase * percTrattenuta / 100m;
+                AggiungiEconomico("Uscita", idResponsabile, percTrattenuta,
+                    quotaTratt, $"Trattenuta Sinergia Avviso: {comp.Descrizione}");
+            }
+
+            foreach (var c in clusterList)
+            {
+                decimal quota = importoBase * c.PercentualePrevisione / 100m;
+                AggiungiEconomico("Entrata", c.ID_Utente, c.PercentualePrevisione,
+                    quota, $"Quota Collaboratore Cluster: {comp.Descrizione}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(comp.Collaboratori))
+            {
+                try
+                {
+                    var lista = Newtonsoft.Json.Linq.JArray.Parse(comp.Collaboratori);
+                    foreach (var coll in lista)
+                    {
+                        if (!decimal.TryParse(coll["Percentuale"]?.ToString(), out decimal perc)) continue;
+                        if (!int.TryParse(coll["ID_Utente"]?.ToString(), out int idCollab)) continue;
+
+                        decimal quota = Math.Round(importoBase * (perc / 100m), 2);
+                        if (quota <= 0) continue;
+
+                        AggiungiEconomico("Entrata", idCollab, perc,
+                            quota, $"Quota Collaboratore Compenso: {comp.Descrizione}");
+                    }
+                }
+                catch { }
+            }
         }
-
-
 
         [HttpPost]
         public ActionResult ModificaAvvisoParcella(AvvisoParcellaViewModel model)
         {
+            System.Diagnostics.Debug.WriteLine("========== [ModificaAvvisoParcella] DEBUG AVVIO ==========");
+            System.Diagnostics.Debug.WriteLine($"🕓 Timestamp: {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+            System.Diagnostics.Debug.WriteLine($"🟡 Model.Importo: {model.Importo}");
+            System.Diagnostics.Debug.WriteLine($"🟡 Model.ImportoAcconto: {model.ImportoAcconto}");
+            System.Diagnostics.Debug.WriteLine($"🟡 Model.ID_CompensoOrigine: {model.ID_CompensoOrigine}");
+            System.Diagnostics.Debug.WriteLine($"🟡 ModelState valido: {ModelState.IsValid}");
+
+            System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("it-IT");
+            System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("it-IT");
+
             int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
             var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
             if (utente == null)
                 return Json(new { success = false, message = "Utente non autenticato." });
-
-            bool autorizzato = utente.TipoUtente == "Admin" ||
-                               db.Permessi.Any(p => p.ID_Utente == idUtenteCorrente && p.Modifica == true);
-            if (!autorizzato)
-                return Json(new { success = false, message = "Non hai i permessi per modificare l’avviso parcella." });
 
             try
             {
@@ -8222,28 +11261,41 @@ namespace SinergiaMvc.Controllers
                 if (avviso == null)
                     return Json(new { success = false, message = "Avviso parcella non trovato." });
 
-                // 🔁 Ricalcolo contributo integrativo
                 var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == model.ID_Pratiche);
-                int? idProfessionista = pratica?.ID_UtenteResponsabile;
+                if (pratica == null)
+                    return Json(new { success = false, message = "Pratica non trovata." });
 
-                decimal? percentuale = db.Professioni
-                    .Where(p => p.ID_ProfessionistaRiferimento == idProfessionista)
-                    .Select(p => p.PercentualeContributoIntegrativo)
-                    .FirstOrDefault();
+                DateTime now = DateTime.Now;
 
-                decimal importo = model.Importo ?? 0;
-                decimal? contributo = percentuale.HasValue
-                    ? (decimal?)Math.Round(importo * percentuale.Value / 100, 2)
-                    : null;
+                int? idResponsabilePratica = pratica.ID_UtenteResponsabile;
+                int? idOwnerCliente = db.Clienti.Where(c => c.ID_Cliente == pratica.ID_Cliente)
+                    .Select(c => c.ID_Operatore).FirstOrDefault();
 
-                // 🔢 Calcolo IVA
-                decimal? aliquotaIVA = model.AliquotaIVA;
-                decimal? importoIVA = aliquotaIVA.HasValue
-                    ? (decimal?)Math.Round(importo * aliquotaIVA.Value / 100, 2)
-                    : null;
-                decimal? totaleAvviso = importo + (contributo ?? 0) + (importoIVA ?? 0);
+                decimal importoBase = model.Importo ?? 0;
+                decimal importoAcconto = model.ImportoAcconto ?? 0;
+                if (importoBase <= 0 && importoAcconto > 0)
+                    importoBase = importoAcconto;
+                if (importoBase <= 0)
+                    return Json(new { success = false, message = "Importo non valido (vuoto o nullo)." });
 
-                // 🔢 Versionamento
+                decimal aliquotaIVA = model.AliquotaIVA ?? 0;
+                decimal rimborsoPerc = model.RimborsoSpesePercentuale ?? 0;
+
+                var operatoreResp = db.OperatoriSinergia
+                    .FirstOrDefault(o => o.ID_UtenteCollegato == idResponsabilePratica && o.TipoCliente == "Professionista");
+
+                decimal percentualeCI = 0;
+                if (model.ContributoIntegrativoPercentuale.HasValue)
+                    percentualeCI = model.ContributoIntegrativoPercentuale.Value;
+                else if (operatoreResp?.ID_Professione != null)
+                    percentualeCI = db.Professioni.Where(p => p.ProfessioniID == operatoreResp.ID_Professione)
+                        .Select(p => p.PercentualeContributoIntegrativo).FirstOrDefault() ?? 0;
+
+                decimal contributo = Math.Round(importoBase * percentualeCI / 100, 2);
+                decimal importoRimborso = Math.Round(importoBase * rimborsoPerc / 100, 2);
+                decimal importoIVA = Math.Round((importoBase + contributo + importoRimborso) * aliquotaIVA / 100, 2);
+                decimal totaleLordo = importoBase + contributo + importoRimborso + importoIVA;
+
                 int ultimaVersione = db.AvvisiParcella_a
                     .Where(a => a.ID_Archivio == avviso.ID_AvvisoParcelle)
                     .OrderByDescending(a => a.NumeroVersione)
@@ -8257,122 +11309,109 @@ namespace SinergiaMvc.Controllers
                         modifiche.Add($"- {campo}: '{oldVal}' → '{newVal}'");
                 }
 
-                // 🔍 Confronto
-                CheckModifica("ID_Pratiche", avviso.ID_Pratiche, model.ID_Pratiche);
-                CheckModifica("DataAvviso", avviso.DataAvviso, model.DataAvviso);
-                CheckModifica("Importo", avviso.Importo, model.Importo);
-                CheckModifica("Note", avviso.Note, model.Note);
-                CheckModifica("Stato", avviso.Stato, model.Stato);
-                CheckModifica("MetodoPagamento", avviso.MetodoPagamento, model.MetodoPagamento);
-                CheckModifica("ContributoIntegrativoPercentuale", avviso.ContributoIntegrativoPercentuale, percentuale);
-                CheckModifica("ContributoIntegrativoImporto", avviso.ContributoIntegrativoImporto, contributo);
+                CheckModifica("Importo", avviso.Importo, importoBase);
+                CheckModifica("ImportoAcconto", avviso.ImportoAcconto, importoAcconto);
                 CheckModifica("AliquotaIVA", avviso.AliquotaIVA, aliquotaIVA);
-                CheckModifica("ImportoIVA", avviso.ImportoIVA, importoIVA);
-                CheckModifica("TotaleAvvisoParcella", avviso.TotaleAvvisiParcella, totaleAvviso);
+                CheckModifica("ContributoIntegrativo", avviso.ContributoIntegrativoPercentuale, percentualeCI);
+                CheckModifica("Rimborso", avviso.RimborsoSpesePercentuale, rimborsoPerc);
 
+                DateTime dataAvviso = model.DataAvviso ?? now;
+                DateTime dataCompetenza = dataAvviso;
 
-                // ✏️ Aggiorna i campi
+                if (model.Stato == "Inviato" && !avviso.DataInvio.HasValue)
+                    avviso.DataInvio = now;
+
+                avviso.DataCompetenzaEconomica = dataCompetenza;
                 avviso.ID_Pratiche = model.ID_Pratiche;
-                avviso.DataAvviso = model.DataAvviso;
-                avviso.Importo = model.Importo;
+                avviso.DataAvviso = dataAvviso;
+                avviso.TitoloAvviso = model.TitoloAvviso;
+                avviso.Importo = importoBase;
+                avviso.ImportoAcconto = importoAcconto;
                 avviso.Note = model.Note?.Trim();
                 avviso.Stato = model.Stato?.Trim();
-                avviso.MetodoPagamento = model.MetodoPagamento?.Trim();
-                avviso.TotaleAvvisiParcella = totaleAvviso;
-                avviso.ContributoIntegrativoPercentuale = percentuale;
-                avviso.ContributoIntegrativoImporto = contributo;
                 avviso.AliquotaIVA = aliquotaIVA;
                 avviso.ImportoIVA = importoIVA;
+                avviso.ContributoIntegrativoPercentuale = percentualeCI;
+                avviso.ContributoIntegrativoImporto = contributo;
+                avviso.RimborsoSpesePercentuale = rimborsoPerc;
+                avviso.ImportoRimborsoSpese = importoRimborso;
+                avviso.TotaleAvvisiParcella = totaleLordo;
+                avviso.ID_ResponsabilePratica = idResponsabilePratica;
+                avviso.ID_OwnerCliente = idOwnerCliente;
+                avviso.ID_CompensoOrigine = model.ID_CompensoOrigine;
+                avviso.DataModifica = now;
+                avviso.ID_UtenteModifica = idUtenteCorrente;
 
-                // 🗂️ Salva versione archivio
-                db.AvvisiParcella_a.Add(new AvvisiParcella_a
+                var compensiCollegatiVecchi = db.CompensiPraticaDettaglio
+                    .Where(c => c.ID_AvvisoParcella == avviso.ID_AvvisoParcelle).ToList();
+
+                foreach (var compOld in compensiCollegatiVecchi)
+                    compOld.ID_AvvisoParcella = null;
+
+                db.SaveChanges();
+
+                if (model.ID_CompensoOrigine.HasValue)
                 {
-                    ID_Archivio = avviso.ID_AvvisoParcelle,
-                    ID_Pratiche = avviso.ID_Pratiche,
-                    DataAvviso = avviso.DataAvviso,
-                    Importo = avviso.Importo,
-                    Note = avviso.Note,
-                    Stato = avviso.Stato,
-                    MetodoPagamento = avviso.MetodoPagamento,
-                    TotaleAvvisiParcella = avviso.TotaleAvvisiParcella,
-                    ID_UtenteCreatore = avviso.ID_UtenteCreatore,
-                    ContributoIntegrativoPercentuale = avviso.ContributoIntegrativoPercentuale,
-                    ContributoIntegrativoImporto = avviso.ContributoIntegrativoImporto,
-                    AliquotaIVA = avviso.AliquotaIVA,
-                    ImportoIVA = avviso.ImportoIVA,
-                    NumeroVersione = ultimaVersione + 1,
-                    ModificheTestuali = modifiche.Any()
-                        ? $"✏️ Modifica effettuata da ID_Utente = {idUtenteCorrente} il {DateTime.Now:g}:\n{string.Join("\n", modifiche)}"
-                        : "Modifica salvata senza cambiamenti rilevanti"
-                });
-                // 💰 REGISTRAZIONE NEL BILANCIO (con logica per tipologia pratica)
-                if (idProfessionista.HasValue && totaleAvviso.HasValue)
-                {
-                    string descrizione = "";
-                    decimal importoRicavo = 0;
-
-                    switch (pratica.Tipologia)
+                    var comp = db.CompensiPraticaDettaglio
+                        .FirstOrDefault(c => c.ID_RigaCompenso == model.ID_CompensoOrigine.Value);
+                    if (comp != null)
                     {
-                        case "Fisso":
-                            descrizione = "Compenso fisso per pratica #" + pratica.ID_Pratiche;
-                            importoRicavo = totaleAvviso.Value;
-                            break;
-
-                        case "A ore":
-                            if (pratica.TariffaOraria.HasValue && pratica.OreEffettive.HasValue)
-                            {
-                                importoRicavo = Math.Round(pratica.TariffaOraria.Value * pratica.OreEffettive.Value, 2);
-                                descrizione = $"Compenso orario ({pratica.OreEffettive} ore × {pratica.TariffaOraria} €/h)";
-                            }
-                            else
-                            {
-                                importoRicavo = totaleAvviso.Value; // fallback
-                                descrizione = "Compenso orario - dati incompleti";
-                            }
-                            break;
-
-                        case "Giudiziale":
-                            descrizione = "Compenso giudiziale per pratica #" + pratica.ID_Pratiche;
-                            importoRicavo = totaleAvviso.Value;
-                            break;
-
-                        default:
-                            descrizione = "Ricavo pratica #" + pratica.ID_Pratiche;
-                            importoRicavo = totaleAvviso.Value;
-                            break;
-                    }
-
-                    var voceEsistente = db.BilancioProfessionista.FirstOrDefault(b =>
-                        b.ID_Pratiche == pratica.ID_Pratiche &&
-                        b.Origine == "AvvisoParcella" &&
-                        b.Categoria == "Ricavo Parcella");
-
-                    if (voceEsistente != null)
-                    {
-                        voceEsistente.Importo = importoRicavo;
-                        voceEsistente.DataRegistrazione = DateTime.Now;
-                        voceEsistente.Descrizione = descrizione;
-                        voceEsistente.Stato = "Economico";
-                    }
-                    else
-                    {
-                        db.BilancioProfessionista.Add(new BilancioProfessionista
-                        {
-                            ID_Professionista = idProfessionista.Value,
-                            ID_Pratiche = pratica.ID_Pratiche,
-                            DataRegistrazione = DateTime.Now,
-                            Categoria = "Ricavo Parcella",
-                            TipoVoce = "Ricavo",
-                            Descrizione = descrizione,
-                            Importo = importoRicavo,
-                            Stato = "Economico",
-                            Origine = "AvvisoParcella",
-                            ID_UtenteInserimento = idUtenteCorrente,
-                            DataInserimento = DateTime.Now
-                        });
+                        comp.ImportoInviatoAllaFatturazione = importoBase;
+                        comp.ID_AvvisoParcella = avviso.ID_AvvisoParcelle;
                     }
                 }
+                else if (!string.IsNullOrEmpty(model.TipologiaAvviso))
+                {
+                    var nuoviCompensi = db.CompensiPraticaDettaglio
+                        .Where(c => c.ID_Pratiche == model.ID_Pratiche &&
+                                    c.TipoCompenso == model.TipologiaAvviso).ToList();
 
+                    foreach (var comp in nuoviCompensi)
+                        comp.ID_AvvisoParcella = avviso.ID_AvvisoParcelle;
+                }
+
+                db.SaveChanges();
+
+                // ============================================================
+                // ✅  RICALCOLO ECONOMICO
+                // ============================================================
+                var vecBilancio = db.BilancioProfessionista
+                    .Where(b => b.ID_Pratiche == pratica.ID_Pratiche &&
+                                b.Origine == "Avviso Parcella")
+                    .ToList();
+                db.BilancioProfessionista.RemoveRange(vecBilancio);
+
+                var vecEco = db.Economico
+                    .Where(e => e.ID_AvvisoParcella == avviso.ID_AvvisoParcelle)
+                    .ToList();
+                db.Economico.RemoveRange(vecEco);
+
+                var idsEconomico = vecEco.Select(x => x.ID_Economico).ToList();
+
+                var vecEcoArch = db.Economico_a
+                    .Where(a => idsEconomico.Contains(a.ID_EconomicoOriginale ?? 0))
+                    .ToList();
+
+                db.Economico_a.RemoveRange(vecEcoArch);
+
+                db.SaveChanges();
+
+                if (model.ID_CompensoOrigine.HasValue)
+                {
+                    var comp = db.CompensiPraticaDettaglio
+                        .FirstOrDefault(c => c.ID_RigaCompenso == model.ID_CompensoOrigine.Value);
+                    if (comp != null)
+                        GeneraEconomicoDaCompenso(comp, avviso.ID_AvvisoParcelle);
+                }
+                else if (!string.IsNullOrEmpty(model.TipologiaAvviso))
+                {
+                    var nuoviCompensi = db.CompensiPraticaDettaglio
+                        .Where(c => c.ID_Pratiche == pratica.ID_Pratiche &&
+                                    c.TipoCompenso == model.TipologiaAvviso).ToList();
+
+                    foreach (var comp in nuoviCompensi)
+                        GeneraEconomicoDaCompenso(comp, avviso.ID_AvvisoParcelle);
+                }
 
                 db.SaveChanges();
 
@@ -8380,125 +11419,387 @@ namespace SinergiaMvc.Controllers
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine("❌ Errore ModificaAvvisoParcella: " + ex);
                 return Json(new { success = false, message = "Errore durante la modifica: " + ex.Message });
             }
         }
 
 
+        // ===========================================================
+        // 📄 GET AVVISO PARCELLA (dettaglio completo + documento PDF)
+        // ===========================================================
         [HttpGet]
         public ActionResult GetAvvisoParcella(int id)
         {
+            System.Diagnostics.Debug.WriteLine("========== [GetAvvisoParcella] DEBUG AVVIO ==========");
+            System.Diagnostics.Debug.WriteLine($"🕓 {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+            System.Diagnostics.Debug.WriteLine($"📩 ID Avviso ricevuto: {id}");
+
             try
             {
-                // ✅ Prima recupera l'avviso e la pratica associata con join manuale
+                // ======================================================
+                // 🔍 Recupero dati principali avviso + relazioni
+                // ======================================================
                 var result = (from avviso in db.AvvisiParcella
                               where avviso.ID_AvvisoParcelle == id
-                              join pratiche in db.Pratiche on avviso.ID_Pratiche equals pratiche.ID_Pratiche
-                              join u in db.Utenti on avviso.ID_UtenteCreatore equals u.ID_Utente into utenti
-                              from utente in utenti.DefaultIfEmpty()
+                              join pr in db.Pratiche on avviso.ID_Pratiche equals pr.ID_Pratiche
+                              join uResp in db.Utenti on pr.ID_UtenteResponsabile equals uResp.ID_Utente into joinResp
+                              from uResp in joinResp.DefaultIfEmpty()
+                              join c in db.Clienti on pr.ID_Cliente equals c.ID_Cliente into joinCliente
+                              from c in joinCliente.DefaultIfEmpty()
+                              join oOwner in db.OperatoriSinergia on c.ID_Operatore equals oOwner.ID_Cliente into joinOwner
+                              from oOwner in joinOwner.DefaultIfEmpty()
+                              join uCreatore in db.Utenti on avviso.ID_UtenteCreatore equals uCreatore.ID_Utente into joinCreatore
+                              from uCreatore in joinCreatore.DefaultIfEmpty()
                               select new
                               {
                                   Avviso = avviso,
-                                  Pratica = pratiche,
-                                  NomeCreatore = utente.Nome + " " + utente.Cognome
+                                  Pratica = pr,
+                                  NomeResponsabile = uResp != null ? (uResp.Nome + " " + uResp.Cognome) : "⚠️ Responsabile mancante",
+                                  ID_OwnerCliente = c != null ? c.ID_Operatore : (int?)null,
+                                  NomeOwner = oOwner != null ? (oOwner.Nome + " " + oOwner.Cognome) : "⚠️ Owner mancante",
+                                  NomeCreatore = uCreatore != null ? (uCreatore.Nome + " " + uCreatore.Cognome) : "N.D."
                               }).FirstOrDefault();
 
                 if (result == null)
-                    return Json(new { success = false, message = "Avviso parcella non trovato." }, JsonRequestBehavior.AllowGet);
+                    return Json(new { success = false, message = "❌ Avviso parcella non trovato." }, JsonRequestBehavior.AllowGet);
 
                 var a = result.Avviso;
                 var p = result.Pratica;
 
-                // 🧾 Descrizione compenso
-                string descrizioneCompenso = "";
-                if (p.Tipologia == "Fisso")
-                {
-                    descrizioneCompenso = $"Compenso fisso: {a.Importo:C}";
-                }
-                else if (p.Tipologia == "A ore")
-                {
-                    if (p.TariffaOraria.HasValue && p.OreEffettive.HasValue)
-                    {
-                        decimal totale = p.TariffaOraria.Value * p.OreEffettive.Value;
-                        descrizioneCompenso = $"Compenso orario: {p.OreEffettive}h × {p.TariffaOraria}€/h = {totale:C}";
-                    }
-                    else
-                    {
-                        descrizioneCompenso = "Compenso orario (dati incompleti)";
-                    }
-                }
-                else if (p.Tipologia == "Giudiziale")
-                {
-                    descrizioneCompenso = "Compenso giudiziale (importo inserito manualmente)";
-                }
+                // ======================================================
+                // 💰 Calcoli economici base
+                // ======================================================
+                decimal importoBase = a.Importo ?? 0;
+                decimal importoAcconto = a.ImportoAcconto ?? 0;
+                decimal totaleAvviso = a.TotaleAvvisiParcella ?? importoBase;
+                decimal importoResiduo = totaleAvviso - importoAcconto;
 
-                // 🎯 Costruisci il ViewModel
+                var incassi = db.Incassi.Where(i => i.ID_AvvisoParcella == a.ID_AvvisoParcelle).ToList();
+                decimal totaleIncassato = incassi.Sum(i => i.Importo);
+                bool pagato = totaleIncassato >= totaleAvviso;
+                decimal importoResiduoEffettivo = totaleAvviso - totaleIncassato;
+
+                // ======================================================
+                // ⚙️ Contributo integrativo e rimborso
+                // ======================================================
+                decimal percentualeCI = a.ContributoIntegrativoPercentuale ?? 0;
+                decimal rimborsoPerc = a.RimborsoSpesePercentuale ?? 0;
+
+                // ======================================================
+                // 🔎 Compensi collegati (Fisso / A ore / Giudiziale)
+                // ======================================================
+                var righe = db.CompensiPraticaDettaglio
+                    .Where(cd => cd.ID_Pratiche == p.ID_Pratiche)
+                    .OrderBy(cd => cd.Ordine)
+                    .ToList();
+
+                var idCompensiUsati = db.AvvisiParcella
+                    .Where(av => av.ID_Pratiche == p.ID_Pratiche &&
+                                 av.ID_CompensoOrigine != null &&
+                                 av.ID_AvvisoParcelle != id)
+                    .Select(av => av.ID_CompensoOrigine.Value)
+                    .Distinct()
+                    .ToList();
+
+                var fissi = righe
+                    .Where(cd => cd.TipoCompenso != null &&
+                                 cd.TipoCompenso.Trim().ToLower() == "fisso" &&
+                                 !idCompensiUsati.Contains(cd.ID_RigaCompenso))
+                    .Select(cd => new
+                    {
+                        Voce = cd.Descrizione ?? "(Senza descrizione)",
+                        ImportoBase = cd.Importo ?? 0,
+                        ID_CompensoOrigine = cd.ID_RigaCompenso,
+                        ImportoInviatoAllaFatturazione = cd.ImportoInviatoAllaFatturazione ?? 0
+                    })
+                    .ToList();
+
+                var aOre = righe
+                    .Where(cd => cd.TipoCompenso != null &&
+                                 cd.TipoCompenso.Trim().ToLower() == "a ore" &&
+                                 !idCompensiUsati.Contains(cd.ID_RigaCompenso))
+                    .Select(cd => new
+                    {
+                        Voce = cd.Descrizione ?? "(Senza descrizione)",
+                        Importo = cd.Importo ?? 0,
+                        ID_CompensoOrigine = cd.ID_RigaCompenso,
+                        ImportoInviatoAllaFatturazione = cd.ImportoInviatoAllaFatturazione ?? 0
+                    })
+                    .ToList();
+
+                var giudiziali = righe
+                    .Where(cd => cd.TipoCompenso != null &&
+                                 cd.TipoCompenso.Trim().ToLower() == "giudiziale" &&
+                                 !idCompensiUsati.Contains(cd.ID_RigaCompenso))
+                    .Select(cd => new
+                    {
+                        FaseGiudiziale = cd.Descrizione ?? cd.FaseGiudiziale ?? "(Senza descrizione)",
+                        Importo = cd.Importo ?? 0,
+                        ID_CompensoOrigine = cd.ID_RigaCompenso,
+                        ImportoInviatoAllaFatturazione = cd.ImportoInviatoAllaFatturazione ?? 0
+                    })
+                    .ToList();
+
+                // ======================================================
+                // 📎 Documento PDF firmato collegato all’avviso
+                // ======================================================
+                var documento = db.DocumentiPratiche
+                    .Where(d => d.ID_RiferimentoAvvisoParcella == a.ID_AvvisoParcelle &&
+                                d.CategoriaDocumento == "Avviso Parcella")
+                    .OrderByDescending(d => d.DataCaricamento)
+                    .FirstOrDefault();
+
+                bool haDocumento = documento != null;
+                string nomeFileDocumento = documento?.NomeFile;
+
+                // ======================================================
+                // 🧾 Costruzione del ViewModel
+                // ======================================================
                 var model = new AvvisoParcellaViewModel
                 {
                     ID_AvvisoParcelle = a.ID_AvvisoParcelle,
                     ID_Pratiche = (int)a.ID_Pratiche,
                     DataAvviso = a.DataAvviso,
-                    Importo = a.Importo,
+                    TitoloAvviso = a.TitoloAvviso,
+                    Importo = importoBase,
+                    ImportoAcconto = importoAcconto,
                     Note = a.Note,
-                    Stato = a.Stato,
+                    Stato = pagato ? "Pagato" : a.Stato,
                     MetodoPagamento = a.MetodoPagamento,
                     ID_UtenteCreatore = a.ID_UtenteCreatore,
-                    ContributoIntegrativoPercentuale = a.ContributoIntegrativoPercentuale,
+                    ContributoIntegrativoPercentuale = percentualeCI,
                     ContributoIntegrativoImporto = a.ContributoIntegrativoImporto,
-                    TotaleAvvisoParcella = a.TotaleAvvisiParcella,
                     AliquotaIVA = a.AliquotaIVA,
                     ImportoIVA = a.ImportoIVA,
-
+                    TotaleAvvisoParcella = totaleAvviso,
+                    TipologiaAvviso = a.TipologiaAvviso,
+                    FaseGiudiziale = a.FaseGiudiziale,
+                    RimborsoSpesePercentuale = rimborsoPerc,
+                    ImportoRimborsoSpese = a.ImportoRimborsoSpese,
+                    ID_CompensoOrigine = a.ID_CompensoOrigine,
                     NomePratica = p.Titolo,
                     NomeUtenteCreatore = result.NomeCreatore,
-
-                    // ➕ Ausiliari
-                    TipologiaPratica = p.Tipologia,
-                    TariffaOraria = p.TariffaOraria,
-                    OreEffettive = p.OreEffettive,
-                    DescrizioneCompenso = descrizioneCompenso
+                    NomeResponsabilePratica = result.NomeResponsabile,
+                    NomeOwnerCliente = result.NomeOwner,
+                    ID_ResponsabilePratica = p.ID_UtenteResponsabile,
+                    ID_OwnerCliente = result.ID_OwnerCliente,
+                    DataInvio = a.DataInvio,
+                    DataCompetenzaEconomica = a.DataCompetenzaEconomica,
+                    StatoIncasso = pagato ? "Pagato" :
+                                   (totaleIncassato > 0 ? "Parziale" : "Da incassare")
                 };
 
-                System.Diagnostics.Debug.WriteLine($"✅ Avviso #{id} - Tipologia: {p.Tipologia}, Descrizione: {descrizioneCompenso}");
-
-                return Json(new { success = true, avviso = model }, JsonRequestBehavior.AllowGet);
+                // ======================================================
+                // ✅ Ritorno completo JSON (incluso file firmato)
+                // ======================================================
+                return Json(new
+                {
+                    success = true,
+                    avviso = model,
+                    fissi,
+                    aOre,
+                    fasiGiudiziali = giudiziali,
+                    importoAcconto,
+                    contributoIntegrativoPercentuale = percentualeCI,
+                    rimborsoSpesePercentuale = rimborsoPerc,
+                    totaleIncassato,
+                    residuoEffettivo = importoResiduoEffettivo,
+                    // 📎 File firmato
+                    haDocumentoCaricato = haDocumento,
+                    nomeFileDocumento = nomeFileDocumento
+                }, JsonRequestBehavior.AllowGet);
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine("❌ Errore GetAvvisoParcella: " + ex);
+                return Json(new { success = false, message = "Errore durante il caricamento: " + ex.Message },
+                    JsonRequestBehavior.AllowGet);
+            }
+        }
+
+
+        [HttpGet]
+        public JsonResult GetListaPratiche()
+        {
+            System.Diagnostics.Debug.WriteLine("========== [GetListaPratiche] DEBUG AVVIO ==========");
+            System.Diagnostics.Debug.WriteLine($"🕓 {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+
+            try
+            {
+                var praticheBase = (from p in db.Pratiche
+                                    join c in db.Clienti on p.ID_Cliente equals c.ID_Cliente into joinCliente
+                                    from c in joinCliente.DefaultIfEmpty()
+                                    join uResp in db.Utenti on p.ID_UtenteResponsabile equals uResp.ID_Utente into joinResp
+                                    from uResp in joinResp.DefaultIfEmpty()
+                                    join oOwner in db.OperatoriSinergia on c.ID_Operatore equals oOwner.ID_Cliente into joinOwner
+                                    from oOwner in joinOwner.DefaultIfEmpty()
+                                    where p.Stato != "Eliminato"
+                                    orderby p.Titolo
+                                    select new
+                                    {
+                                        p.ID_Pratiche,
+                                        p.Titolo,
+                                        p.ID_UtenteResponsabile,
+                                        NomeResponsabile = uResp != null ? (uResp.Nome + " " + uResp.Cognome) : "⚠️ Responsabile mancante",
+                                        ID_OwnerCliente = c != null ? c.ID_Operatore : (int?)null,
+                                        NomeOwner = oOwner != null ? (oOwner.Nome + " " + oOwner.Cognome) : "⚠️ Owner mancante",
+                                        Tipologia = p.Tipologia,
+
+                                        // Percentuale CI dalla professione del responsabile
+                                        PercentualeContributoIntegrativo =
+                                            (from op in db.OperatoriSinergia
+                                             join prof in db.Professioni on op.ID_Professione equals prof.ProfessioniID
+                                             where op.ID_UtenteCollegato == p.ID_UtenteResponsabile && op.TipoCliente == "Professionista"
+                                             select prof.PercentualeContributoIntegrativo).FirstOrDefault()
+                                    }).ToList();
+
+                var praticheRisultato = praticheBase.Select(p =>
+                {
+                    int idPratica = p.ID_Pratiche;
+
+                    // ============================================================
+                    // 🔗 Avvisi collegati (per esclusione compensi)
+                    // ============================================================
+                    var avvisiCollegati = db.AvvisiParcella
+                        .Where(a => a.ID_Pratiche == idPratica)
+                        .Select(a => new
+                        {
+                            a.ID_CompensoOrigine,
+                            a.FaseGiudiziale,
+                            a.Importo,
+                            a.ImportoAcconto,
+                            a.TotaleAvvisiParcella,
+                            a.Stato,
+                            a.DataInvio,
+                            a.DataCompetenzaEconomica
+                        })
+                        .ToList();
+
+                    var idCompensiUsati = avvisiCollegati
+                        .Where(a => a.ID_CompensoOrigine != null)
+                        .Select(a => a.ID_CompensoOrigine.Value)
+                        .Distinct()
+                        .ToList();
+
+                    var fasiGiaUsate = avvisiCollegati
+                        .Where(a => !string.IsNullOrEmpty(a.FaseGiudiziale))
+                        .Select(a => a.FaseGiudiziale.Trim().ToLower())
+                        .Distinct()
+                        .ToList();
+
+                    // ============================================================
+                    // 💰 Recupero compensi collegati alla pratica
+                    // ============================================================
+                    var compensiDisponibili = db.CompensiPraticaDettaglio
+                        .Where(cd => cd.ID_Pratiche == idPratica)
+                        .ToList();
+
+                    // ============================================================
+                    // 🔎 Calcolo importi residui effettivi (dopo incassi)
+                    // ============================================================
+                    var compensiDettaglio = compensiDisponibili
+                        .Where(cd =>
+                        {
+                            bool giaUsato = idCompensiUsati.Contains(cd.ID_RigaCompenso)
+                                         || (cd.Descrizione != null && fasiGiaUsate.Contains(cd.Descrizione.Trim().ToLower()));
+
+                            // Se già usato, controlla se ha residuo
+                            if (giaUsato)
+                            {
+                                decimal importoBase = cd.Importo ?? 0;
+                                decimal importoInviato = cd.ImportoInviatoAllaFatturazione ?? 0;
+
+                                return (importoBase > importoInviato); // includi solo se ancora parzialmente aperto
+                            }
+
+                            return true; // nuovo, sempre incluso
+                        })
+                        .Select(cd =>
+                        {
+                            // 🔍 Calcola eventuali incassi registrati su avvisi collegati
+                            var incassiCollegati = (from i in db.Incassi
+                                                    join av in db.AvvisiParcella on i.ID_AvvisoParcella equals av.ID_AvvisoParcelle
+                                                    where av.ID_Pratiche == idPratica
+                                                          && av.ID_CompensoOrigine == cd.ID_RigaCompenso
+                                                    select i.Importo).ToList();
+
+                            decimal importoIncassato = incassiCollegati.Sum();
+                            decimal importoBase = cd.Importo ?? 0;
+                            decimal importoInviato = cd.ImportoInviatoAllaFatturazione ?? 0;
+                            decimal residuoEffettivo = (importoBase - importoInviato - importoIncassato);
+
+                            if (residuoEffettivo < 0) residuoEffettivo = 0;
+
+                            return new
+                            {
+                                cd.Categoria,
+                                cd.TipoCompenso,
+                                cd.Descrizione,
+                                cd.FaseGiudiziale,
+                                Importo = importoBase,
+                                ImportoInviatoAllaFatturazione = importoInviato,
+                                ImportoResiduoEffettivo = residuoEffettivo,
+                                cd.Ordine,
+                                cd.ID_RigaCompenso,
+                                cd.ValoreStimato
+                            };
+                        })
+                        .ToList();
+
+                    // ============================================================
+                    // ⚖️ Raggruppamento per fase giudiziale
+                    // ============================================================
+                    var fasiGiudiziali = compensiDettaglio
+                        .Where(cd => cd.TipoCompenso != null && cd.TipoCompenso.Trim().ToLower() == "giudiziale")
+                        .OrderBy(cd => cd.Ordine)
+                        .Select(cd => new
+                        {
+                            FaseGiudiziale = cd.Descrizione ?? cd.FaseGiudiziale,
+                            Importo = cd.ImportoResiduoEffettivo,
+                            ID_CompensoOrigine = cd.ID_RigaCompenso
+                        })
+                        .ToList();
+
+                    // ============================================================
+                    // 📅 Ultima data utile (competenza o invio)
+                    // ============================================================
+                    DateTime? dataUltimoAvviso = avvisiCollegati
+                        .Where(a => a.DataCompetenzaEconomica != null)
+                        .OrderByDescending(a => a.DataCompetenzaEconomica)
+                        .Select(a => a.DataCompetenzaEconomica)
+                        .FirstOrDefault();
+
+                    int totaleAvvisi = avvisiCollegati.Count();
+
+                    // ============================================================
+                    // 📦 Output finale pratica
+                    // ============================================================
+                    return new
+                    {
+                        p.ID_Pratiche,
+                        p.Titolo,
+                        p.ID_UtenteResponsabile,
+                        p.NomeResponsabile,
+                        p.ID_OwnerCliente,
+                        p.NomeOwner,
+                        p.Tipologia,
+                        PercentualeContributoIntegrativo = p.PercentualeContributoIntegrativo ?? 0,
+                        CompensiDettaglio = compensiDettaglio,
+                        FasiGiudiziali = fasiGiudiziali,
+                        TotaleAvvisiCreati = totaleAvvisi,
+                        DataUltimoAvviso = dataUltimoAvviso
+                    };
+                }).ToList();
+
+                return Json(new { success = true, pratiche = praticheRisultato }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("❌ Errore GetListaPratiche: " + ex);
                 return Json(new { success = false, message = "Errore durante il caricamento: " + ex.Message }, JsonRequestBehavior.AllowGet);
             }
         }
-
-        public JsonResult GetListaPratiche()
-        {
-            var pratiche = (from p in db.Pratiche
-                            join o in db.OperatoriSinergia on p.ID_UtenteResponsabile equals o.ID_Cliente into joinOperatore
-                            from o in joinOperatore.DefaultIfEmpty()
-                            where p.Stato != "Eliminato"
-                            orderby p.Titolo
-                            select new
-                            {
-                                p.ID_Pratiche,
-                                p.Titolo,
-                                p.ID_UtenteResponsabile,
-                                NomeProfessionista = o != null ? (o.Nome + " " + o.Cognome) : "⚠️ MANCANTE",
-                                Tipologia = p.Tipologia,
-                                PercentualeContributoIntegrativo = db.Professioni
-                                    .Where(pr => pr.ID_ProfessionistaRiferimento == o.ID_Cliente)
-                                    .Select(pr => pr.PercentualeContributoIntegrativo)
-                                    .FirstOrDefault()
-                            }).ToList();
-
-            // 🔍 Debug: stampo tutte le pratiche con tipologia
-            foreach (var p in pratiche)
-            {
-                System.Diagnostics.Debug.WriteLine($"✅ Pratica ID: {p.ID_Pratiche}, Titolo: {p.Titolo}, Tipologia: {p.Tipologia}");
-            }
-
-            return Json(new { success = true, pratiche }, JsonRequestBehavior.AllowGet);
-        }
-
-
 
         public JsonResult GetIDProfessionistaByPratica(int idPratica)
         {
@@ -8507,32 +11808,59 @@ namespace SinergiaMvc.Controllers
             if (pratica == null)
                 return Json(new { success = false, message = "Pratica non trovata." }, JsonRequestBehavior.AllowGet);
 
-            var idUtente = pratica.ID_UtenteResponsabile;
+            // 👤 Responsabile pratica
+            int? idResponsabile = pratica.ID_UtenteResponsabile;
 
-            var operatore = db.OperatoriSinergia
-                .FirstOrDefault(o => o.ID_UtenteCollegato == idUtente && o.TipoCliente == "Professionista");
+            var responsabile = db.OperatoriSinergia
+                .FirstOrDefault(o => o.ID_UtenteCollegato == idResponsabile && o.TipoCliente == "Professionista");
 
-            if (operatore == null)
-                return Json(new { success = false, message = "Professionista non trovato." }, JsonRequestBehavior.AllowGet);
+            // 👑 Owner cliente
+            int? idOwnerCliente = null;
+            OperatoriSinergia owner = null;
 
-            return Json(new { success = true, idProfessionista = operatore.ID_Cliente }, JsonRequestBehavior.AllowGet);
+            if (pratica.ID_Cliente > 0)
+            {
+                idOwnerCliente = db.Clienti
+                    .Where(c => c.ID_Cliente == pratica.ID_Cliente)
+                    .Select(c => c.ID_Operatore)
+                    .FirstOrDefault();
+
+                if (idOwnerCliente.HasValue)
+                {
+                    owner = db.OperatoriSinergia
+                        .FirstOrDefault(o => o.ID_Cliente == idOwnerCliente.Value && o.TipoCliente == "Professionista");
+                }
+            }
+
+            if (responsabile == null && owner == null)
+                return Json(new { success = false, message = "Nessun professionista associato alla pratica." }, JsonRequestBehavior.AllowGet);
+
+            return Json(new
+            {
+                success = true,
+                idResponsabile = responsabile?.ID_Cliente,
+                nomeResponsabile = responsabile != null ? responsabile.Nome + " " + responsabile.Cognome : null,
+                idOwner = owner?.ID_Cliente,
+                nomeOwner = owner != null ? owner.Nome + " " + owner.Cognome : null
+            }, JsonRequestBehavior.AllowGet);
         }
-
 
         [HttpPost]
         public ActionResult EliminaAvvisoParcella(int id)
         {
+            System.Diagnostics.Debug.WriteLine("========== [EliminaAvvisoParcella] DEBUG AVVIO ==========");
+            System.Diagnostics.Debug.WriteLine($"🕓 {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+            System.Diagnostics.Debug.WriteLine($"📩 ID Avviso ricevuto: {id}");
+
             try
             {
                 int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
                 var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-
                 if (utenteCorrente == null)
                     return Json(new { success = false, message = "Utente non autenticato." });
 
                 bool haPermesso = utenteCorrente.TipoUtente == "Admin" ||
                                   db.Permessi.Any(p => p.ID_Utente == idUtenteCorrente && p.Elimina == true);
-
                 if (!haPermesso)
                     return Json(new { success = false, message = "Non hai i permessi per eliminare l’avviso parcella." });
 
@@ -8540,22 +11868,46 @@ namespace SinergiaMvc.Controllers
                 if (avviso == null)
                     return Json(new { success = false, message = "Avviso parcella non trovato." });
 
-                int? idPratica = avviso.ID_Pratiche;
+                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == avviso.ID_Pratiche);
+                int? idPratica = pratica?.ID_Pratiche;
+                int? idResponsabile = pratica?.ID_UtenteResponsabile;
+                int? idOwnerCliente = db.Clienti
+                    .Where(c => c.ID_Cliente == pratica.ID_Cliente)
+                    .Select(c => c.ID_Operatore)
+                    .FirstOrDefault();
 
-                // 🔁 Numero versione precedente
+                // ============================================================
+                // 🔒 Blocco se l'avviso ha già incassi collegati
+                // ============================================================
+                var incassiCollegati = db.Incassi.Where(i => i.ID_AvvisoParcella == id).ToList();
+                if (incassiCollegati.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine($"⚠️ Avviso {id} ha {incassiCollegati.Count} incassi collegati.");
+                    return Json(new { success = false, message = "Impossibile eliminare: l’avviso è già stato incassato o parzialmente pagato." });
+                }
+
+                // ============================================================
+                // 🔢 Numero versione precedente
+                // ============================================================
                 int ultimaVersione = db.AvvisiParcella_a
                     .Where(a => a.ID_Archivio == avviso.ID_AvvisoParcelle)
                     .OrderByDescending(a => a.NumeroVersione)
                     .Select(a => (int?)a.NumeroVersione)
                     .FirstOrDefault() ?? 0;
 
-                // 💾 Archivia
+                // ============================================================
+                // 🧾 Archivia versione "Eliminata" con le nuove colonne
+                // ============================================================
                 db.AvvisiParcella_a.Add(new AvvisiParcella_a
                 {
                     ID_Archivio = avviso.ID_AvvisoParcelle,
                     ID_Pratiche = avviso.ID_Pratiche,
                     DataAvviso = avviso.DataAvviso,
+                    DataInvio = avviso.DataInvio,
+                    TitoloAvviso= avviso.TitoloAvviso,
+                    DataCompetenzaEconomica = avviso.DataCompetenzaEconomica,
                     Importo = avviso.Importo,
+                    ImportoAcconto = avviso.ImportoAcconto,
                     Note = avviso.Note,
                     Stato = "Eliminato",
                     MetodoPagamento = avviso.MetodoPagamento,
@@ -8565,190 +11917,679 @@ namespace SinergiaMvc.Controllers
                     AliquotaIVA = avviso.AliquotaIVA,
                     ImportoIVA = avviso.ImportoIVA,
                     TotaleAvvisiParcella = avviso.TotaleAvvisiParcella,
+                    TipologiaAvviso = avviso.TipologiaAvviso,
+                    FaseGiudiziale = avviso.FaseGiudiziale,
+                    RimborsoSpesePercentuale = avviso.RimborsoSpesePercentuale,
+                    ImportoRimborsoSpese = avviso.ImportoRimborsoSpese,
+                    ID_CompensoOrigine = avviso.ID_CompensoOrigine,
+                    ID_ResponsabilePratica = idResponsabile,
+                    ID_OwnerCliente = idOwnerCliente,
                     DataArchiviazione = DateTime.Now,
                     NumeroVersione = ultimaVersione + 1,
-                    ModificheTestuali = $"🗑️ Eliminazione avviso parcella effettuata da ID_Utente = {idUtenteCorrente} il {DateTime.Now:dd/MM/yyyy HH:mm}"
+                    ModificheTestuali = $"🗑️ Eliminazione avviso parcella ID={avviso.ID_AvvisoParcelle} " +
+                                        $"eseguita da utente ID={idUtenteCorrente} il {DateTime.Now:dd/MM/yyyy HH:mm}"
                 });
 
-                // 🧹 Cancella eventuali voci da Bilancio (origine = AvvisoParcella)
-                var bilancioDaEliminare = db.BilancioProfessionista
-                    .Where(b => b.ID_Pratiche == idPratica && b.Origine == "AvvisoParcella")
-                    .ToList();
-
-                foreach (var voce in bilancioDaEliminare)
+                // ============================================================
+                // 🔄 Ripristina compenso collegato
+                // ============================================================
+                if (avviso.ID_CompensoOrigine.HasValue)
                 {
-                    db.BilancioProfessionista.Remove(voce);
+                    var compenso = db.CompensiPraticaDettaglio.FirstOrDefault(c => c.ID_RigaCompenso == avviso.ID_CompensoOrigine.Value);
+                    if (compenso != null)
+                    {
+                        decimal importoDaStornare = avviso.ImportoAcconto ?? avviso.Importo ?? 0;
+                        compenso.ImportoInviatoAllaFatturazione = Math.Max(0, (compenso.ImportoInviatoAllaFatturazione ?? 0) - importoDaStornare);
+                        System.Diagnostics.Debug.WriteLine($"↩️ Ripristinato compenso {compenso.ID_RigaCompenso}: -{importoDaStornare:N2} €");
+                    }
                 }
 
-                // ❌ Rimuovi avviso
+                // ============================================================
+                // 🧹 Rimozione MOVIMENTI ECONOMICI (Bilancio + Economico + Archivio)
+                // ============================================================
+
+                // 1️⃣ Bilancio professionista
+                var bilancioDelAvviso = db.BilancioProfessionista
+                    .Where(b => b.ID_Pratiche == idPratica &&
+                                b.Origine == "Avviso Parcella")
+                    .ToList();
+
+                foreach (var voce in bilancioDelAvviso)
+                {
+                    db.BilancioProfessionista.Remove(voce);
+                    System.Diagnostics.Debug.WriteLine($"🧾 Rimossa voce bilancio ID={voce.ID_Bilancio}");
+                }
+
+                // 2️⃣ Movimenti Economico consolidati
+                var economiciDelAvviso = db.Economico
+                    .Where(e => e.ID_AvvisoParcella == id)
+                    .ToList();
+
+                var economiciIDs = economiciDelAvviso.Select(e => e.ID_Economico).ToList();
+
+                foreach (var eco in economiciDelAvviso)
+                {
+                    db.Economico.Remove(eco);
+                    System.Diagnostics.Debug.WriteLine($"📉 Rimossa voce Economico ID={eco.ID_Economico}");
+                }
+
+                // 3️⃣ Eliminazione archivio economico
+                var economicoArchDelAvviso = db.Economico_a
+                    .Where(ea => economiciIDs.Contains(ea.ID_EconomicoOriginale ?? 0))
+                    .ToList();
+
+                foreach (var ecoA in economicoArchDelAvviso)
+                {
+                    db.Economico_a.Remove(ecoA);
+                    System.Diagnostics.Debug.WriteLine($"📜 Rimossa archivio Economico ID={ecoA.ID_EconomicoOriginale}");
+                }
+
+                db.SaveChanges();
+
+
+                // ============================================================
+                // ❌ Rimuovi l'avviso principale
+                // ============================================================
                 db.AvvisiParcella.Remove(avviso);
                 db.SaveChanges();
 
+                System.Diagnostics.Debug.WriteLine($"✅ Avviso parcella ID={id} eliminato completamente.");
                 return Json(new { success = true, message = "✅ Avviso parcella eliminato correttamente." });
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine("❌ Errore EliminaAvvisoParcella: " + ex);
                 return Json(new { success = false, message = "Errore durante l'eliminazione: " + ex.Message });
             }
         }
 
-
-
-        // questo mi serve in avvisi parcella per mettere i dati nel caso il pagamento avviene con il bonifico 
-        [HttpGet]
-        public JsonResult GetDatiBancari(int idCliente)
-        {
-            var dati = db.DatiBancari
-                .Where(d =>
-                    d.ID_Cliente == idCliente &&
-                    d.Stato == "Attivo" &&
-                    d.IBAN != null && d.IBAN != "" &&
-                    d.NomeBanca != null
-                )
-                .OrderByDescending(d => d.DataInserimento)
-                .FirstOrDefault();
-
-            if (dati == null)
-                return Json(null, JsonRequestBehavior.AllowGet);
-
-            return Json(new
-            {
-                NomeBanca = dati.NomeBanca,
-                IBAN = dati.IBAN,
-                IntestatarioConto = dati.Intestatario,
-                BIC = dati.BIC_SWIFT,
-                Note = dati.Note
-            }, JsonRequestBehavior.AllowGet);
-        }
-
         [HttpPost]
-        public JsonResult SalvaDatiBancari(DatiBancari model)
+        public ActionResult EliminaDocumentoAvvisoParcella(int idAvviso)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(model.IBAN) || string.IsNullOrWhiteSpace(model.NomeBanca))
-                {
-                    return Json(new { success = false, message = "IBAN e Nome Banca sono obbligatori." });
-                }
-                int idUtente = UserManager.GetIDUtenteCollegato();
-                model.Stato = "Attivo";
-                model.DataInserimento = DateTime.Now;
-                model.ID_UtenteCreatore = idUtente;
+                System.Diagnostics.Trace.WriteLine($"🗑️ [EliminaDocumentoAvvisoParcella] Avvio per ID_Avviso = {idAvviso}");
 
-                db.DatiBancari.Add(model);
+                // ✅ Cerca documento collegato all'avviso
+                var documento = db.DocumentiPratiche
+                    .FirstOrDefault(d => d.ID_RiferimentoAvvisoParcella == idAvviso &&
+                                         d.CategoriaDocumento == "Avviso Parcella");
+
+                if (documento == null)
+                {
+                    System.Diagnostics.Trace.WriteLine("⚠️ Nessun documento trovato per questo avviso.");
+                    return Json(new { success = false, message = "❌ Nessun documento associato a questo avviso." });
+                }
+
+                // ⚠️ Se il documento è già firmato, non lo eliminiamo
+                if (documento.Stato == "Firmato")
+                {
+                    System.Diagnostics.Trace.WriteLine("⛔ Documento firmato — eliminazione bloccata.");
+                    return Json(new
+                    {
+                        success = false,
+                        message = "⚠️ Questo documento è già firmato e non può essere eliminato."
+                    });
+                }
+
+                // 🗑️ Rimuove riga dal database
+                db.DocumentiPratiche.Remove(documento);
                 db.SaveChanges();
 
-                return Json(new { success = true, message = "✅ Dati bancari salvati con successo." });
+                System.Diagnostics.Trace.WriteLine($"✅ Documento eliminato correttamente: {documento.NomeFile}");
+                return Json(new { success = true, message = "✅ Documento Avviso Parcella eliminato correttamente." });
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Errore: " + ex.Message });
+                System.Diagnostics.Trace.WriteLine($"❌ Errore eliminazione Avviso Parcella: {ex}");
+                return Json(new { success = false, message = "❌ Errore durante l'eliminazione: " + ex.Message });
             }
         }
-        // fine dati bancari per avvisi parcella 
 
 
-        public ActionResult StampaAvvisoParcella(int idAvviso)
+
+        /* Gestione Template Avviso Parcella*/
+
+        // ===========================================================
+        // 📄 GENERA AVVISO PARCELLA DA TEMPLATE (HTML con segnaposti)
+        // ===========================================================
+        [HttpGet]
+        public ActionResult GeneraAvvisoParcella(int idAvviso)
         {
-            var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == idAvviso);
-            Debug.WriteLine($"Avviso trovato: {avviso?.ID_AvvisoParcelle}, PraticaID: {avviso?.ID_Pratiche}");
-            if (avviso == null)
-                return HttpNotFound("Avviso non trovato.");
-
-            var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == avviso.ID_Pratiche);
-            Debug.WriteLine($"Pratica trovata: {pratica?.ID_Pratiche}, ClienteID: {pratica?.ID_Cliente}");
-            if (pratica == null)
-                return HttpNotFound("Pratica non trovata.");
-
-            var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == pratica.ID_Cliente);
-            Debug.WriteLine(cliente != null
-                ? $"Cliente trovato: {cliente.ID_Cliente}, RagioneSociale: {cliente.RagioneSociale}, PIVA: {cliente.PIVA}"
-                : "Cliente non trovato o Clienti.ID_Cliente mismatch");
-
-            Citta cittaCliente = null;
-            if (cliente?.ID_Citta != null)
+            try
             {
-                cittaCliente = db.Citta.FirstOrDefault(c => c.ID_BPCitta == cliente.ID_Citta);
-                Debug.WriteLine(cittaCliente != null
-                    ? $"Città cliente: {cittaCliente.NameLocalita}, CAP: {cittaCliente.CAP}"
-                    : "Città cliente non trovata");
+                System.Diagnostics.Trace.WriteLine("══════════════════════════════════════════════════════");
+                System.Diagnostics.Trace.WriteLine($"🟦 [GeneraAvvisoParcella] Avvio generazione per ID_Avviso: {idAvviso}");
+
+                // ======================================================
+                // 🔍 AVVISO + PRATICA
+                // ======================================================
+                var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == idAvviso);
+                if (avviso == null)
+                    return Json(new { success = false, message = "❌ Avviso parcella non trovato." }, JsonRequestBehavior.AllowGet);
+
+                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == avviso.ID_Pratiche);
+                if (pratica == null)
+                    return Json(new { success = false, message = "❌ Pratica collegata non trovata." }, JsonRequestBehavior.AllowGet);
+
+                // ======================================================
+                // 🧾 CLIENTE
+                // ======================================================
+                var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == pratica.ID_Cliente);
+
+                // ======================================================
+                // 👨‍⚖️ PROFESSIONISTA RESPONSABILE
+                // ======================================================
+                var professionista = db.Utenti.FirstOrDefault(u => u.ID_Utente == pratica.ID_UtenteResponsabile)
+                                    ?? db.Utenti.FirstOrDefault(u => u.ID_Utente == pratica.ID_Owner);
+
+                // ======================================================
+                // 🧑‍💼 OWNER SINERGIA
+                // ======================================================
+                OperatoriSinergia owner = null;
+                if (pratica.ID_Owner.HasValue)
+                {
+                    int idOwner = pratica.ID_Owner.Value;
+                    owner = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Cliente == idOwner);
+                }
+
+                // ======================================================
+                // 📄 TEMPLATE ATTIVO
+                // ======================================================
+                var template = db.TemplateIncarichi
+                    .FirstOrDefault(t => t.Stato == "Attivo" && t.TipoCompenso == "Avviso Parcella");
+
+                if (template == null)
+                    return Json(new { success = false, message = "❌ Nessun template attivo per Avviso Parcella." }, JsonRequestBehavior.AllowGet);
+
+                string html = template.ContenutoHtml ?? "";
+
+                // ======================================================
+                // 💰 CALCOLI IMPORTI
+                // ======================================================
+                decimal sorte = avviso.Importo ?? 0;
+                decimal cassa = avviso.ContributoIntegrativoImporto ?? 0;
+                decimal speseGenerali = avviso.ImportoRimborsoSpese ?? 0;
+                decimal imponibile = sorte + cassa + speseGenerali;
+                decimal iva = avviso.ImportoIVA ?? 0;
+                decimal totale = imponibile + iva;
+
+                // ======================================================
+                // 🖋️ CONVERSIONE FIRME IN BASE64
+                // ======================================================
+                var pathFratini = Server.MapPath("~/Content/img/Firme/Firma-Riccardo-Fratini.png");
+                var pathDAmico = Server.MapPath("~/Content/img/Firme/Firma-Dario-D_Amico.png");
+
+                string base64Fratini = "";
+                string base64DAmico = "";
+
+                if (System.IO.File.Exists(pathFratini))
+                {
+                    var bytes = System.IO.File.ReadAllBytes(pathFratini);
+                    base64Fratini = "data:image/png;base64," + Convert.ToBase64String(bytes);
+                }
+
+                if (System.IO.File.Exists(pathDAmico))
+                {
+                    var bytes = System.IO.File.ReadAllBytes(pathDAmico);
+                    base64DAmico = "data:image/png;base64," + Convert.ToBase64String(bytes);
+                }
+
+                // ======================================================
+                // 🔁 COSTRUZIONE SEGNAPOSTI
+                // ======================================================
+                var placeholders = new Dictionary<string, string>
+                {
+                    // === GENERICI ===
+                    ["[DATA_CREAZIONE_AVVISO]"] = avviso.DataAvviso?.ToString("dd/MM/yyyy") ?? DateTime.Now.ToString("dd/MM/yyyy"),
+                    ["[PROGRESSIVO_PRATICA]"] = pratica.ID_Pratiche.ToString(),
+                    ["[TITOLO_AVVISO_PARCELLA]"] = avviso.TitoloAvviso ?? pratica?.Titolo ?? "__________",
+
+                    // === FORNITORE / RESPONSABILE ===
+                    ["[NOME_PROFESSIONISTA_RESPONSABILE]"] = $"{professionista?.Nome} {professionista?.Cognome}".Trim(),
+                    ["[EMAIL_RESPONSABILE_PRATICA]"] = professionista?.MAIL1 ?? professionista?.MAIL2 ?? "__________",
+
+                    // === CLIENTE ===
+                    ["[NOME_COGNOME_CLIENTE]"] = $"{cliente?.Nome} {cliente?.Cognome}".Trim(),
+                    ["[RAGIONE_SOCIALE_CLIENTE]"] = cliente?.RagioneSociale ?? "__________",
+                    ["[INDIRIZZO_CLIENTE]"] = cliente?.Indirizzo ?? "__________",
+                    ["[EMAIL_CLIENTE]"] = cliente?.Email ?? "__________",
+                    ["[CF CLIENTE]"] = cliente?.CodiceFiscale ?? "__________",
+                    ["[PIVA_CLIENTE]"] = cliente?.PIVA ?? "__________",
+
+                    // === REFERENTE CLIENTE / OWNER ===
+                    ["[NOME_COGNOME_PROFESSIONISTA]"] = $"{professionista?.Nome} {professionista?.Cognome}".Trim(),
+                    ["[OWNER_CLIENTE]"] = $"{owner?.Nome} {owner?.Cognome}".Trim(),
+                    ["[EMAIL_OWNER_CLIENTE]"] = owner?.MAIL1 ?? owner?.MAIL2 ?? "__________",
+
+                    // === IMPORTI ===
+                    ["[IMPORTO_SORTE]"] = sorte.ToString("N2") + " €",
+                    ["[IMPORTO_CASSA_4]"] = cassa.ToString("N2") + " €",
+                    ["[IMPORTO_SPESEGENERALI]"] = speseGenerali.ToString("N2") + " €",
+                    ["[[TOTALE COMPLESSIVO]_IMPONIBILE]"] = imponibile.ToString("N2") + " €",
+                    ["[IMPORTO_IVA]"] = iva.ToString("N2") + " €",
+                    ["[TOTALE_COMPLESSIVO]"] = totale.ToString("N2") + " €",
+
+                    // === LOGO ===
+                    ["[LOGO_RESPONSABILE]"] = $@"
+                <div style='width:100%; text-align:left; margin:0; padding:0; line-height:0;'>
+                    <img src='{Url.Content("~/Content/img/Icons/Logo Nuovo.png")}'
+                         alt='Logo Sinergia'
+                         style='display:block; height:120px; width:auto; margin:0; padding:0; border:none;' />
+                </div>",
+
+                    // === FIRME BASE64 ===
+                    ["[FIRMA_FRATINI]"] = $@"
+                <div style='text-align:left; margin-top:10px;'>
+                    <img src='{base64Fratini}'
+                         alt='Firma Riccardo Fratini'
+                         style='width:90px; height:auto; display:block; margin-top:5px;' />
+                </div>",
+
+                    ["[FIRMA_DAMICO]"] = $@"
+                <div style='text-align:right; margin-top:10px;'>
+                    <img src='{base64DAmico}'
+                         alt='Firma Dario D’Amico'
+                         style='width:90px; height:auto; display:block; margin-top:5px;' />
+                </div>"
+                };
+
+                // ======================================================
+                // 🔄 SOSTITUZIONE SEGNAPOSTI
+                // ======================================================
+                foreach (var kv in placeholders)
+                    html = html.Replace(kv.Key, kv.Value ?? "__________");
+
+                // ======================================================
+                // 🧩 Allineamento orizzontale delle due firme
+                // ======================================================
+                html = Regex.Replace(
+                    html,
+                    @"(\[FIRMA_FRATINI\].*?\[FIRMA_DAMICO\])",
+                    @"<div style='width:100%; margin-top:20px;'>
+                 <div style='display:inline-block; width:48%; text-align:left;'>[FIRMA_FRATINI]</div>
+                 <div style='display:inline-block; width:48%; text-align:right;'>[FIRMA_DAMICO]</div>
+              </div>",
+                    RegexOptions.IgnoreCase | RegexOptions.Singleline
+                );
+
+                System.Diagnostics.Trace.WriteLine("✅ Sostituzione completata, restituzione HTML...");
+                return Json(new { success = true, html }, JsonRequestBehavior.AllowGet);
             }
-            else Debug.WriteLine("Cliente.ID_Citta è null");
-
-            // 🔧 Qui correggi visibilità
-            OperatoriSinergia operatore = null;
-            if (cliente != null)
+            catch (Exception ex)
             {
-                operatore = db.OperatoriSinergia.FirstOrDefault(o =>
-                    o.ID_Cliente == cliente.ID_Operatore && o.TipoCliente == cliente.TipoOperatore);
-
-                Debug.WriteLine(operatore != null
-                    ? $"Operatore trovato: {operatore.ID_Cliente}, PIVA: {operatore.PIVA}, Indirizzo: {operatore.Indirizzo}"
-                    : "Operatore non trovato per questo cliente");
+                System.Diagnostics.Trace.WriteLine($"❌ Errore: {ex.Message}");
+                return Json(new { success = false, message = "❌ Errore durante la generazione dell'avviso: " + ex.Message }, JsonRequestBehavior.AllowGet);
             }
-            else
-            {
-                Debug.WriteLine("Cliente nullo: impossibile cercare l’operatore.");
-            }
-
-            Utenti utente = null;
-            if (operatore?.ID_UtenteCollegato != null)
-            {
-                utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == operatore.ID_UtenteCollegato);
-                Debug.WriteLine(utente != null
-                    ? $"Utente professionista: {utente.Nome} {utente.Cognome}"
-                    : "Utente collegato all'operatore non trovato");
-            }
-            else Debug.WriteLine("Operatore.ID_UtenteCollegato è null");
-
-            Citta cittaProf = null;
-            if (operatore?.ID_Citta != null)
-            {
-                cittaProf = db.Citta.FirstOrDefault(c => c.ID_BPCitta == operatore.ID_Citta);
-                Debug.WriteLine(cittaProf != null
-                    ? $"Città professionista: {cittaProf.NameLocalita}, CAP: {cittaProf.CAP}"
-                    : "Città professionista non trovata");
-            }
-            else Debug.WriteLine("Operatore.ID_Citta è null");
-
-            var model = new AvvisoParcellaPdfViewModel
-            {
-                DataAvviso = avviso.DataAvviso ?? DateTime.Today,
-                Stato = avviso.Stato,
-                MetodoPagamento = avviso.MetodoPagamento,
-                Importo = avviso.Importo ?? 0,
-                ContributoIntegrativoPercentuale = avviso.ContributoIntegrativoPercentuale ?? 0,
-                ContributoIntegrativoImporto = avviso.ContributoIntegrativoImporto ?? 0,
-                AliquotaIVA = avviso.AliquotaIVA ?? 0,
-                ImportoIVA = avviso.ImportoIVA ?? 0,
-                Note = avviso.Note,
-                DescrizionePratica = pratica.Titolo ?? pratica.Note ?? "Servizio professionale",
-
-                NomeProfessionista = utente?.Nome,
-                CognomeProfessionista = utente?.Cognome,
-                IndirizzoProfessionista = operatore?.Indirizzo,
-                CittaProfessionista = cittaProf?.NameLocalita,
-                CAPProfessionista = cittaProf?.CAP,
-                PartitaIVAProfessionista = operatore?.PIVA,
-
-                RagioneSocialeCliente = !string.IsNullOrWhiteSpace(cliente?.RagioneSociale) ? cliente.RagioneSociale : $"{cliente?.Nome} {cliente?.Cognome}".Trim(),
-                IndirizzoCliente = cliente?.Indirizzo,
-                CittaCliente = cittaCliente?.NameLocalita,
-                CAPCliente = cittaCliente?.CAP,
-                PartitaIVACliente = cliente?.PIVA
-            };
-
-            return new Rotativa.ViewAsPdf("~/Views/AvvisiParcella/PDF_AvvisoParcella.cshtml", model)
-            {
-                FileName = $"AvvisoParcella_{idAvviso}.pdf",
-                PageSize = Rotativa.Options.Size.A4,
-                PageMargins = new Rotativa.Options.Margins(20, 10, 20, 10)
-            };
         }
+
+        // ===========================================================
+        // 🖨️ GENERA PDF AVVISO PARCELLA (Rotativa)
+        // ===========================================================
+        [HttpPost]
+        [ValidateInput(false)]
+        public ActionResult GeneraPDFAvvisoParcellaDaHtml()
+        {
+            try
+            {
+                // ======================================================
+                // 🔍 VALIDAZIONE INPUT
+                // ======================================================
+                if (!int.TryParse(Request.Form["idAvviso"], out int idAvviso))
+                    return Json(new { success = false, message = "❌ ID avviso non valido." });
+
+                string html = Request.Unvalidated["html"];
+                if (string.IsNullOrWhiteSpace(html))
+                    return Json(new { success = false, message = "❌ Contenuto HTML mancante." });
+
+                // ======================================================
+                // 🔍 DATI AVVISO, PRATICA E CLIENTE
+                // ======================================================
+                var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == idAvviso);
+                if (avviso == null)
+                    return Json(new { success = false, message = "❌ Avviso parcella non trovato." });
+
+                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == avviso.ID_Pratiche);
+                var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == pratica.ID_Cliente);
+
+                // ======================================================
+                // 🧹 PULIZIA HTML (rettangolini, shape, immagini vuote)
+                // ======================================================
+                html = Regex.Replace(html, @"background(-color)?:\s*[^;""']+;?", "", RegexOptions.IgnoreCase);
+                html = Regex.Replace(html, @"<div[^>]*(border|width|height)[^>]*>\s*</div>", "", RegexOptions.IgnoreCase);
+                html = Regex.Replace(html, @"<span[^>]*(width|height)\s*:\s*\d+(\.\d+)?(pt|in|cm|mm)[^>]*>\s*</span>", "", RegexOptions.IgnoreCase);
+                html = Regex.Replace(html, @"<p[^>]*>\s*(<span[^>]*(width|height)\s*:\s*\d+(\.\d+)?(pt|in|cm|mm)[^>]*>\s*</span>)+\s*</p>", "", RegexOptions.IgnoreCase);
+                html = Regex.Replace(html, @"<p[^>]*>(\s|&nbsp;)*</p>", "", RegexOptions.IgnoreCase);
+                html = Regex.Replace(html, @"<div[^>]*>(\s|&nbsp;)*</div>", "", RegexOptions.IgnoreCase);
+                html = Regex.Replace(html, @"<img[^>]*(src\s*=\s*['""]\s*['""][^>]*)?>", "", RegexOptions.IgnoreCase);
+                html = html.Trim();
+
+                // ======================================================
+                // ✍️ FIRME (file temporanei compatibili con Rotativa)
+                // ======================================================
+                string firmaFratiniFile = "", firmaDAmicoFile = "";
+                try
+                {
+                    string tempDir = Server.MapPath("~/Content/temp/");
+                    if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+
+                    string pathFratini = Server.MapPath("~/Content/img/Firme/Firma-Riccardo-Fratini.png");
+                    string pathDAmico = Server.MapPath("~/Content/img/Firme/Firma-Dario-D_Amico.png");
+
+                    if (System.IO.File.Exists(pathFratini))
+                    {
+                        firmaFratiniFile = Path.Combine(tempDir, "firma_fratini_temp.png");
+                        System.IO.File.Copy(pathFratini, firmaFratiniFile, true);
+                    }
+
+                    if (System.IO.File.Exists(pathDAmico))
+                    {
+                        firmaDAmicoFile = Path.Combine(tempDir, "firma_damico_temp.png");
+                        System.IO.File.Copy(pathDAmico, firmaDAmicoFile, true);
+                    }
+
+                    Trace.WriteLine($"✅ Firme temporanee salvate: {firmaFratiniFile} | {firmaDAmicoFile}");
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine("⚠️ Errore salvataggio firme temporanee: " + ex.Message);
+                }
+                // ======================================================
+                // 🔁 INSERISCI BLOCCO FIRME SUBITO DOPO "Distinti Saluti"
+                // ======================================================
+                string firmeHtml = $@"
+<div style='width:100%; margin-top:5px; margin-bottom:-10px; page-break-inside:avoid;'>
+    <table style='width:100%; border:none; border-collapse:collapse;'>
+        <tr>
+            <td style='width:50%; text-align:left; vertical-align:top; border:none;'>
+                <div style='margin-bottom:2px; font-weight:bold; font-family:Calibri, sans-serif;'>
+                    Avv. Riccardo Fratini – Presidente CdA
+                </div>
+                <img src='file:///{firmaFratiniFile.Replace("\\", "/")}' 
+                     alt='Firma Riccardo Fratini'
+                     style='width:95px; height:auto; margin-top:-3px; display:block;' />
+            </td>
+            <td style='width:50%; text-align:right; vertical-align:top; border:none;'>
+                <div style='margin-bottom:2px; font-weight:bold; font-family:Calibri, sans-serif;'>
+                    Avv. Dario D’Amico – Vice-Presidente CdA
+                </div>
+                <img src='file:///{firmaDAmicoFile.Replace("\\", "/")}' 
+                     alt='Firma Dario D’Amico'
+                     style='width:95px; height:auto; margin-top:-3px; display:block;' />
+            </td>
+        </tr>
+    </table>
+</div>";
+
+                html = Regex.Replace(html,
+                    "(Distinti\\s*Saluti\\.?)(</p>|</div>|<br\\s*/?>)?",
+                    "$1<br/>" + firmeHtml + "$2",
+                    RegexOptions.IgnoreCase);
+
+                Trace.WriteLine("✍️ Blocco firme inserito dopo 'Distinti Saluti.'");
+
+
+                // ======================================================
+                // 💄 CSS PDF
+                // ======================================================
+                string css = @"
+<style>
+@page { margin: 1.2cm; }
+body {
+    font-family: 'Calibri', Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.4;
+    color: #000;
+    margin: 0;
+}
+table {
+    border-collapse: collapse !important;
+    page-break-inside: avoid !important;
+    width: 100% !important;
+}
+img {
+    page-break-inside: avoid !important;
+    display: inline-block !important;
+}
+td, th {
+    padding: 3px 6px !important;
+    font-size: 10pt !important;
+}
+.page-break { page-break-after: always !important; }
+</style>";
+
+                html = css + html;
+
+                // ======================================================
+                // 🖨️ GENERAZIONE PDF
+                // ======================================================
+                string nomeCliente = cliente?.RagioneSociale ?? $"{cliente?.Cognome}_{cliente?.Nome}";
+                foreach (var c in Path.GetInvalidFileNameChars()) nomeCliente = nomeCliente.Replace(c, '_');
+                string nomeFile = $"AvvisoParcella_{nomeCliente}_{DateTime.Now:yyyyMMddHHmmss}.pdf";
+
+                var pdf = new Rotativa.ViewAsPdf("~/Views/TemplateIncarichi/TemplateCompilato.cshtml", (object)html)
+                {
+                    FileName = nomeFile,
+                    PageSize = Rotativa.Options.Size.A4,
+                    PageMargins = new Rotativa.Options.Margins(8, 8, 12, 8),
+                    CustomSwitches = "--disable-forms --print-media-type --disable-smart-shrinking --zoom 1.1"
+                };
+
+                byte[] pdfBytes = pdf.BuildPdf(ControllerContext);
+
+                // ======================================================
+                // 💾 SALVATAGGIO DOCUMENTO
+                // ======================================================
+                var documento = new DocumentiPratiche
+                {
+                    ID_Pratiche = pratica.ID_Pratiche,
+                    ID_RiferimentoAvvisoParcella = idAvviso,
+                    NomeFile = nomeFile,
+                    Documento = pdfBytes,
+                    Estensione = ".pdf",
+                    TipoContenuto = "application/pdf",
+                    Stato = "Da firmare",
+                    CategoriaDocumento = "Avviso Parcella",
+                    Note = "Avviso parcella generato automaticamente",
+                    DataCaricamento = DateTime.Now,
+                    ID_UtenteCaricamento = UserManager.GetIDUtenteCollegato()
+                };
+
+                db.DocumentiPratiche.Add(documento);
+                db.SaveChanges();
+
+                // ======================================================
+                // 🧹 PULIZIA FILE TEMPORANEI
+                // ======================================================
+                try
+                {
+                    if (System.IO.File.Exists(firmaFratiniFile)) System.IO.File.Delete(firmaFratiniFile);
+                    if (System.IO.File.Exists(firmaDAmicoFile)) System.IO.File.Delete(firmaDAmicoFile);
+                    Trace.WriteLine("🧹 File temporanei firme eliminati correttamente.");
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine("⚠️ Errore eliminazione file temporanei: " + ex.Message);
+                }
+
+                Trace.WriteLine($"✅ PDF salvato correttamente come {nomeFile}");
+                return Json(new { success = true, message = "✅ Avviso Parcella generato e salvato correttamente." });
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine("❌ Errore generazione PDF: " + ex.Message);
+                return Json(new { success = false, message = "❌ Errore generazione PDF: " + ex.Message });
+            }
+        }
+
+
+        // ===========================================================
+        // 📥 UPLOAD AVVISO PARCELLA FIRMATO (SALVATAGGIO IN DATABASE)
+        // ===========================================================
+        [HttpPost]
+        public ActionResult SalvaAvvisoParcellaFirmato(int idAvviso, HttpPostedFileBase file)
+        {
+            try
+            {
+                // ======================================================
+                // 🔍 Validazioni base
+                // ======================================================
+                if (file == null || file.ContentLength == 0)
+                    return Json(new { success = false, message = "❌ Nessun file selezionato." });
+
+                if (!file.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                    return Json(new { success = false, message = "❌ Il file deve essere in formato PDF." });
+
+                // ======================================================
+                // 📦 Recupera avviso e pratica associata
+                // ======================================================
+                var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == idAvviso);
+                if (avviso == null)
+                    return Json(new { success = false, message = "❌ Avviso parcella non trovato." });
+
+                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == avviso.ID_Pratiche);
+                if (pratica == null)
+                    return Json(new { success = false, message = "❌ Pratica non trovata." });
+
+                // ======================================================
+                // 💾 Lettura file binario
+                // ======================================================
+                byte[] fileData;
+                using (var binaryReader = new BinaryReader(file.InputStream))
+                    fileData = binaryReader.ReadBytes(file.ContentLength);
+
+                // ======================================================
+                // 🗂️ Crea o aggiorna documento esistente per QUESTO AVVISO
+                // ======================================================
+                var documentoEsistente = db.DocumentiPratiche
+                    .FirstOrDefault(d => d.ID_RiferimentoAvvisoParcella == idAvviso &&
+                                         d.CategoriaDocumento == "Avviso Parcella");
+
+                if (documentoEsistente == null)
+                {
+                    // 🔹 Inserimento nuovo documento
+                    var documento = new DocumentiPratiche
+                    {
+                        ID_Pratiche = pratica.ID_Pratiche,
+                        ID_RiferimentoAvvisoParcella = idAvviso,
+                        NomeFile = Path.GetFileName(file.FileName),
+                        Estensione = ".pdf",
+                        TipoContenuto = "application/pdf",
+                        Documento = fileData,
+                        Stato = "Firmato",
+                        CategoriaDocumento = "Avviso Parcella",
+                        Note = "Avviso parcella firmato caricato manualmente",
+                        DataCaricamento = DateTime.Now,
+                        ID_UtenteCaricamento = UserManager.GetIDUtenteCollegato()
+                    };
+
+                    db.DocumentiPratiche.Add(documento);
+                }
+                else
+                {
+                    // 🔄 Aggiornamento documento già presente
+                    documentoEsistente.Documento = fileData;
+                    documentoEsistente.NomeFile = Path.GetFileName(file.FileName);
+                    documentoEsistente.DataCaricamento = DateTime.Now;
+                    documentoEsistente.Note = "Avviso parcella firmato aggiornato";
+                    documentoEsistente.ID_UtenteCaricamento = UserManager.GetIDUtenteCollegato();
+                }
+
+                db.SaveChanges();
+
+                // ======================================================
+                // ✅ Ritorno per aggiornare UI immediatamente
+                // ======================================================
+                return Json(new
+                {
+                    success = true,
+                    message = "✅ Avviso parcella firmato caricato correttamente.",
+                    nomeFile = Path.GetFileName(file.FileName),
+                    idAvviso = idAvviso
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "❌ Errore durante il caricamento: " + ex.Message
+                });
+            }
+        }
+
+
+        // ===========================================================
+        // 📚 ELENCO DOCUMENTI AVVISO PARCELLA
+        // ===========================================================
+        [HttpGet]
+        public ActionResult GetDocumentiAvvisoParcella(int idAvviso)
+        {
+            try
+            {
+                var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == idAvviso);
+                if (avviso == null)
+                    return Json(new { success = false, message = "❌ Avviso non trovato." }, JsonRequestBehavior.AllowGet);
+
+                var praticaId = avviso.ID_Pratiche;
+
+                var documenti = db.DocumentiPratiche
+                    .Where(d => d.ID_Pratiche == praticaId && d.CategoriaDocumento.Contains("Avviso Parcella"))
+                    .Select(d => new
+                    {
+                        d.ID_Documento,
+                        d.NomeFile,
+                        d.Stato,
+                        d.DataCaricamento,
+                        d.Note
+                    })
+                    .OrderByDescending(d => d.DataCaricamento)
+                    .ToList();
+
+                return Json(new { success = true, documenti }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = "❌ Errore durante il caricamento dei documenti: " + ex.Message }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
+        [HttpGet]
+        public ActionResult ScaricaAvvisoParcella(int idAvviso)
+        {
+            try
+            {
+                var documento = db.DocumentiPratiche
+                    .Where(d => d.ID_RiferimentoAvvisoParcella == idAvviso &&
+                                d.CategoriaDocumento == "Avviso Parcella")
+                    .OrderByDescending(d => d.DataCaricamento)
+                    .FirstOrDefault();
+
+                if (documento == null)
+                    return HttpNotFound("❌ Nessun documento trovato per questo avviso parcella.");
+
+                string nomeFile = !string.IsNullOrWhiteSpace(documento.NomeFile)
+                    ? documento.NomeFile
+                    : $"AvvisoParcella_{idAvviso}_{DateTime.Now:yyyyMMdd}.pdf";
+
+                return File(documento.Documento, "application/pdf", nomeFile);
+            }
+            catch (Exception ex)
+            {
+                return new HttpStatusCodeResult(HttpStatusCode.InternalServerError,
+                    "Errore durante il download: " + ex.Message);
+            }
+        }
+
+
+        /*Fine Gestione Template Avviso Parcella */
 
         [HttpGet]
         public ActionResult EsportaAvvisiParcellaCsv(DateTime? da, DateTime? a)
         {
+            System.Diagnostics.Debug.WriteLine("========== [EsportaAvvisiParcellaCsv] DEBUG AVVIO ==========");
+            System.Diagnostics.Debug.WriteLine($"🕓 {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+
             int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
             var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
 
@@ -8759,84 +12600,264 @@ namespace SinergiaMvc.Controllers
             DateTime inizio = da ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             DateTime fine = a ?? DateTime.Today.AddDays(1).AddTicks(-1);
 
+            System.Diagnostics.Debug.WriteLine($"📆 Range: {inizio:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+
+            // 📊 Recupero avvisi nel range
             var avvisi = db.AvvisiParcella
                 .Where(avv => avv.DataAvviso >= inizio && avv.DataAvviso <= fine)
                 .OrderBy(avv => avv.DataAvviso)
                 .ToList();
 
+            // 🧾 Intestazione CSV aggiornata
             var sb = new StringBuilder();
-            sb.AppendLine("ID Avviso;Pratica;Data Avviso;Importo;Contributo Integrativo (%);IVA (%);Totale;Stato;Metodo Pagamento");
+            sb.AppendLine("ID Avviso;Pratica;Responsabile;Owner Cliente;Tipologia;Fase Giudiziale;" +
+                          "Data Avviso;Data Invio;Data Competenza;Trimestre Competenza;" +
+                          "Importo Base;Importo Acconto;Contributo Integrativo (%);Importo CI;" +
+                          "IVA (%);Importo IVA;Rimborso Spese (%);Importo Rimborso;Totale Avviso;" +
+                          "Totale Incassato;Residuo Effettivo;Stato Incasso;Metodo Pagamento;Note");
 
             foreach (var avv in avvisi)
             {
+                // 🔍 Pratica collegata
                 var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == avv.ID_Pratiche);
 
+                // 👤 Responsabile e Owner
+                string nomeResponsabile = "(N/D)";
+                string nomeOwner = "(N/D)";
+
+                if (pratica?.ID_UtenteResponsabile != null)
+                {
+                    var resp = db.Utenti.FirstOrDefault(u => u.ID_Utente == pratica.ID_UtenteResponsabile);
+                    if (resp != null) nomeResponsabile = $"{resp.Nome} {resp.Cognome}";
+                }
+
+                if (pratica?.ID_Cliente != null)
+                {
+                    var owner = (from c in db.Clienti
+                                 join o in db.OperatoriSinergia on c.ID_Operatore equals o.ID_Cliente
+                                 where c.ID_Cliente == pratica.ID_Cliente
+                                 select o.Nome + " " + o.Cognome).FirstOrDefault();
+                    if (!string.IsNullOrEmpty(owner)) nomeOwner = owner;
+                }
+
+                // ============================================================
+                // 💳 Importi base
+                // ============================================================
                 decimal importo = avv.Importo ?? 0;
+                decimal importoAcconto = avv.ImportoAcconto ?? 0;
                 decimal ciPerc = avv.ContributoIntegrativoPercentuale ?? 0;
+                decimal ciImporto = avv.ContributoIntegrativoImporto ?? 0;
                 decimal ivaPerc = avv.AliquotaIVA ?? 0;
-                decimal totale = (avv.Importo ?? 0) + (avv.ContributoIntegrativoImporto ?? 0) + (avv.ImportoIVA ?? 0);
+                decimal ivaImporto = avv.ImportoIVA ?? 0;
+                decimal rimborsoPerc = avv.RimborsoSpesePercentuale ?? 0;
+                decimal rimborsoImporto = avv.ImportoRimborsoSpese ?? 0;
+                decimal totaleAvviso = avv.TotaleAvvisiParcella ?? (importo + ciImporto + ivaImporto + rimborsoImporto);
+
+                // ============================================================
+                // 💰 Incassi collegati
+                // ============================================================
+                var incassiCollegati = db.Incassi.Where(i => i.ID_AvvisoParcella == avv.ID_AvvisoParcelle).ToList();
+                decimal totaleIncassato = incassiCollegati.Sum(i => i.Importo);
+                decimal residuoEffettivo = totaleAvviso - totaleIncassato;
+                if (residuoEffettivo < 0) residuoEffettivo = 0;
+
+                string statoIncasso = totaleIncassato == 0 ? "Da incassare" :
+                                      (residuoEffettivo > 0 ? "Parziale" : "Pagato");
+
+                // ============================================================
+                // 🗓️ Date e trimestre di competenza
+                // ============================================================
+                DateTime? dataInvio = avv.DataInvio;
+                DateTime? dataCompetenza = avv.DataCompetenzaEconomica ?? avv.DataAvviso;
+                string trimestre = "N/D";
+
+                if (dataCompetenza.HasValue)
+                {
+                    int month = dataCompetenza.Value.Month;
+                    int quarter = (month - 1) / 3 + 1;
+                    trimestre = $"T{quarter} {dataCompetenza.Value.Year}";
+                }
+
+                // ============================================================
+                // 🧾 Riga CSV
+                // ============================================================
+                string titoloPratica = pratica?.Titolo?.Replace(";", ",") ?? "(N/D)";
+                string note = string.IsNullOrWhiteSpace(avv.Note) ? "" : avv.Note.Replace(";", ",");
+                string tipologia = avv.TipologiaAvviso ?? "-";
+                string fase = avv.FaseGiudiziale ?? "-";
+                string metodo = avv.MetodoPagamento ?? "-";
+                string stato = avv.Stato ?? "-";
 
                 sb.AppendLine($"{avv.ID_AvvisoParcelle};" +
-                              $"{(pratica?.Titolo ?? "(N/D)")};" +
+                              $"{titoloPratica};" +
+                              $"{nomeResponsabile};" +
+                              $"{nomeOwner};" +
+                              $"{tipologia};" +
+                              $"{fase};" +
                               $"{avv.DataAvviso:dd/MM/yyyy};" +
+                              $"{(dataInvio.HasValue ? dataInvio.Value.ToString("dd/MM/yyyy") : "-")};" +
+                              $"{(dataCompetenza.HasValue ? dataCompetenza.Value.ToString("dd/MM/yyyy") : "-")};" +
+                              $"{trimestre};" +
                               $"{importo:N2};" +
+                              $"{importoAcconto:N2};" +
                               $"{ciPerc:N0}%;" +
+                              $"{ciImporto:N2};" +
                               $"{ivaPerc:N0}%;" +
-                              $"{totale:N2};" +
-                              $"{avv.Stato};" +
-                              $"{avv.MetodoPagamento}");
+                              $"{ivaImporto:N2};" +
+                              $"{rimborsoPerc:N0}%;" +
+                              $"{rimborsoImporto:N2};" +
+                              $"{totaleAvviso:N2};" +
+                              $"{totaleIncassato:N2};" +
+                              $"{residuoEffettivo:N2};" +
+                              $"{statoIncasso};" +
+                              $"{metodo};" +
+                              $"{note}");
             }
 
+            // ============================================================
+            // 📤 Esportazione CSV
+            // ============================================================
             byte[] buffer = Encoding.UTF8.GetBytes(sb.ToString());
-            return File(buffer, "text/csv", $"AvvisiParcella_{inizio:yyyyMMdd}_{fine:yyyyMMdd}.csv");
+            string nomeFile = $"AvvisiParcella_{inizio:yyyyMMdd}_{fine:yyyyMMdd}.csv";
+            return File(buffer, "text/csv", nomeFile);
         }
+
+
 
         [HttpGet]
         public ActionResult EsportaAvvisiParcellaPdf(DateTime? da, DateTime? a)
         {
+            System.Diagnostics.Debug.WriteLine("========== [EsportaAvvisiParcellaPdf] DEBUG AVVIO ==========");
+            System.Diagnostics.Debug.WriteLine($"🕓 {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+
             int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
             var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-
             if (utenteCorrente == null)
                 return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
 
+            // 📅 Range date (mese corrente di default)
             DateTime inizio = da ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             DateTime fine = a ?? DateTime.Today.AddDays(1).AddTicks(-1);
 
+            System.Diagnostics.Debug.WriteLine($"📆 Range: {inizio:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+
+            // 📊 Recupero avvisi nel range con arricchimento dati
             var lista = db.AvvisiParcella
                 .Where(avv => avv.DataAvviso >= inizio && avv.DataAvviso <= fine)
                 .OrderBy(avv => avv.DataAvviso)
                 .ToList()
-                .Select(avv => new AvvisoParcellaViewModel
+                .Select(avv =>
                 {
-                    ID_AvvisoParcelle = avv.ID_AvvisoParcelle,
-                    ID_Pratiche = avv.ID_Pratiche ?? 0,
-                    DataAvviso = avv.DataAvviso,
-                    Importo = avv.Importo ?? 0,
-                    ContributoIntegrativoImporto = avv.ContributoIntegrativoImporto,
-                    AliquotaIVA = avv.AliquotaIVA,
-                    ImportoIVA = avv.ImportoIVA,
-                    Stato = avv.Stato,
-                    MetodoPagamento = avv.MetodoPagamento,
-                    NomePratica = db.Pratiche
-                        .Where(p => p.ID_Pratiche == avv.ID_Pratiche)
-                        .Select(p => p.Titolo)
-                        .FirstOrDefault() ?? "(N/D)",
-                    TotaleAvvisoParcella =
-                        (avv.Importo ?? 0) +
-                        (avv.ContributoIntegrativoImporto ?? 0) +
-                        (avv.ImportoIVA ?? 0)
+                    // 🔍 Pratica collegata
+                    var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == avv.ID_Pratiche);
+
+                    // 👤 Responsabile pratica
+                    string nomeResponsabile = "(N/D)";
+                    if (pratica?.ID_UtenteResponsabile != null)
+                    {
+                        var resp = db.Utenti.FirstOrDefault(u => u.ID_Utente == pratica.ID_UtenteResponsabile);
+                        if (resp != null)
+                            nomeResponsabile = $"{resp.Nome} {resp.Cognome}";
+                    }
+
+                    // 👑 Owner cliente
+                    string nomeOwner = "(N/D)";
+                    if (pratica?.ID_Cliente != null)
+                    {
+                        nomeOwner = (from c in db.Clienti
+                                     join o in db.OperatoriSinergia on c.ID_Operatore equals o.ID_Cliente
+                                     where c.ID_Cliente == pratica.ID_Cliente
+                                     select o.Nome + " " + o.Cognome).FirstOrDefault() ?? "(N/D)";
+                    }
+
+                    // ============================================================
+                    // 💰 Calcoli economici e incassi
+                    // ============================================================
+                    decimal importoBase = avv.Importo ?? 0;
+                    decimal importoAcconto = avv.ImportoAcconto ?? 0;
+                    decimal ciPerc = avv.ContributoIntegrativoPercentuale ?? 0;
+                    decimal ciImporto = avv.ContributoIntegrativoImporto ?? 0;
+                    decimal ivaPerc = avv.AliquotaIVA ?? 0;
+                    decimal ivaImporto = avv.ImportoIVA ?? 0;
+                    decimal rimborsoPerc = avv.RimborsoSpesePercentuale ?? 0;
+                    decimal rimborsoImporto = avv.ImportoRimborsoSpese ?? 0;
+
+                    decimal totaleAvviso = avv.TotaleAvvisiParcella ??
+                                           (importoBase + ciImporto + ivaImporto + rimborsoImporto);
+
+                    // 💳 Incassi collegati
+                    var incassi = db.Incassi.Where(i => i.ID_AvvisoParcella == avv.ID_AvvisoParcelle).ToList();
+                    decimal totaleIncassato = incassi.Sum(i => i.Importo);
+                    decimal residuoEffettivo = totaleAvviso - totaleIncassato;
+                    if (residuoEffettivo < 0) residuoEffettivo = 0;
+
+                    string statoIncasso = totaleIncassato == 0 ? "Da incassare" :
+                                          (residuoEffettivo > 0 ? "Parziale" : "Pagato");
+
+                    // ============================================================
+                    // 🗓️ Date e trimestre di competenza
+                    // ============================================================
+                    DateTime? dataInvio = avv.DataInvio;
+                    DateTime? dataCompetenza = avv.DataCompetenzaEconomica ?? avv.DataAvviso;
+                    string trimestre = "N/D";
+
+                    if (dataCompetenza.HasValue)
+                    {
+                        int month = dataCompetenza.Value.Month;
+                        int quarter = (month - 1) / 3 + 1;
+                        trimestre = $"T{quarter} {dataCompetenza.Value.Year}";
+                    }
+
+                    return new AvvisoParcellaViewModel
+                    {
+                        ID_AvvisoParcelle = avv.ID_AvvisoParcelle,
+                        ID_Pratiche = avv.ID_Pratiche ?? 0,
+                        NomePratica = pratica?.Titolo ?? "(N/D)",
+                        NomeResponsabilePratica = nomeResponsabile,
+                        NomeOwnerCliente = nomeOwner,
+
+                        DataAvviso = avv.DataAvviso,
+                        DataInvio = dataInvio,
+                        DataCompetenzaEconomica = dataCompetenza,
+                        TrimestreCompetenza = trimestre,
+
+                        Stato = statoIncasso,
+                        MetodoPagamento = avv.MetodoPagamento,
+                        Note = avv.Note,
+
+                        TipologiaAvviso = avv.TipologiaAvviso,
+                        FaseGiudiziale = avv.FaseGiudiziale,
+                        ID_CompensoOrigine = avv.ID_CompensoOrigine,
+
+                        // 💵 Dati economici completi
+                        Importo = importoBase,
+                        ImportoAcconto = importoAcconto,
+                        ContributoIntegrativoPercentuale = ciPerc,
+                        ContributoIntegrativoImporto = ciImporto,
+                        AliquotaIVA = ivaPerc,
+                        ImportoIVA = ivaImporto,
+                        RimborsoSpesePercentuale = rimborsoPerc,
+                        ImportoRimborsoSpese = rimborsoImporto,
+                        TotaleAvvisoParcella = totaleAvviso,
+                        TotaleIncassato = totaleIncassato,
+                        ImportoResiduoEffettivo = residuoEffettivo
+                    };
                 })
                 .ToList();
 
-            return new Rotativa.ViewAsPdf("~/Views/AvvisiParcella/PDF_AvvisoParcella.cshtml", lista)
+            // ============================================================
+            // 📄 Generazione PDF orizzontale per leggibilità
+            // ============================================================
+            return new Rotativa.ViewAsPdf("~/Views/AvvisiParcella/PDF_AvvisiParcella_Riepilogo.cshtml", lista)
             {
                 FileName = $"AvvisiParcella_{inizio:yyyyMMdd}_{fine:yyyyMMdd}.pdf",
                 PageSize = Rotativa.Options.Size.A4,
-                PageOrientation = Rotativa.Options.Orientation.Landscape
+                PageOrientation = Rotativa.Options.Orientation.Landscape,
+                PageMargins = new Rotativa.Options.Margins(15, 10, 15, 10)
             };
         }
 
+    
         #endregion
 
         #region REGISTRAZIONE INCASSI 
@@ -8845,169 +12866,205 @@ namespace SinergiaMvc.Controllers
         {
             return View("~/Views/Incassi/GestioneIncassi.cshtml");
         }
-
         public ActionResult GestioneIncassiList(int? idPratica = null)
         {
             try
             {
+                System.Diagnostics.Trace.WriteLine("═══════════════════════════════════════════════");
+                System.Diagnostics.Trace.WriteLine($"📥 [GestioneIncassiList] Avvio metodo alle {DateTime.Now:HH:mm:ss}");
+
                 int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+                System.Diagnostics.Trace.WriteLine($"👤 ID utente corrente rilevato da sessione: {idUtenteCorrente}");
+
                 var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
 
-                if (utenteCorrente == null)
-                    throw new InvalidOperationException("❌ Utente non autenticato o non trovato.");
+                // 🧠 Fallback Admin
+                if (utenteCorrente == null && idUtenteCorrente == 0)
+                {
+                    utenteCorrente = db.Utenti.FirstOrDefault(u => u.TipoUtente == "Admin");
+                    System.Diagnostics.Trace.WriteLine("⚠️ Utente nullo, forzato Admin di sistema come fallback.");
+                }
 
-                // Passo anche il tipo utente alla view
+                if (utenteCorrente == null)
+                {
+                    System.Diagnostics.Trace.WriteLine("❌ Utente non trovato. Interrompo esecuzione.");
+                    throw new InvalidOperationException("❌ Utente non autenticato o non trovato.");
+                }
+
+                System.Diagnostics.Trace.WriteLine($"✅ Utente trovato: {utenteCorrente.Nome} {utenteCorrente.Cognome} (ID={utenteCorrente.ID_Utente})");
+                System.Diagnostics.Trace.WriteLine($"🏷️ TipoUtente dal DB: '{utenteCorrente.TipoUtente}'");
+
                 ViewBag.TipoUtente = utenteCorrente.TipoUtente;
 
-                IQueryable<Incassi> query;
-                try
-                {
-                    query = db.Incassi;
-                    if (idPratica.HasValue)
-                        query = query.Where(i => i.ID_Pratiche == idPratica.Value);
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("❌ Errore durante la query sugli Incassi.", ex);
-                }
-
+                // ======================================================
                 // 🔐 Gestione permessi
-                bool puoAggiungere = false;
-                bool puoModificare = false;
-                bool puoEliminare = false;
+                // ======================================================
+                bool puoAggiungere = false, puoModificare = false, puoEliminare = false;
 
-                try
+                string tipoUtente = utenteCorrente.TipoUtente?.Trim().ToLowerInvariant() ?? "";
+                System.Diagnostics.Trace.WriteLine($"🔎 TipoUtente normalizzato: '{tipoUtente}'");
+
+                if (tipoUtente == "admin")
                 {
-                    if (utenteCorrente.TipoUtente == "Admin")
+                    puoAggiungere = puoModificare = puoEliminare = true;
+                    System.Diagnostics.Trace.WriteLine("✅ Riconosciuto come ADMIN — accesso completo attivo.");
+                }
+                else
+                {
+                    var permessiDb = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
+                    puoAggiungere = permessiDb.Any(p => p.Aggiungi == true);
+                    puoModificare = permessiDb.Any(p => p.Modifica == true);
+                    puoEliminare = permessiDb.Any(p => p.Elimina == true);
+
+                    System.Diagnostics.Trace.WriteLine($"🔐 Permessi utente standard → Aggiungi={puoAggiungere}, Modifica={puoModificare}, Elimina={puoEliminare}");
+                }
+
+                // ======================================================
+                // 📘 1️⃣ Recupera AVVISI PARCELLA "INVIATI" o "PAGATI"
+                // ======================================================
+                var avvisiQuery = db.AvvisiParcella
+                    .Where(a => a.Stato == "Inviato" || a.Stato == "Pagato" || a.Stato == "Parziale");
+
+                if (idPratica.HasValue)
+                {
+                    avvisiQuery = avvisiQuery.Where(a => a.ID_Pratiche == idPratica.Value);
+                    System.Diagnostics.Trace.WriteLine($"🎯 Filtro ID_Pratiche attivo → {idPratica.Value}");
+                }
+
+                var avvisi = avvisiQuery.ToList();
+                System.Diagnostics.Trace.WriteLine($"📄 Avvisi parcella trovati: {avvisi.Count}");
+
+                // ======================================================
+                // 📘 2️⃣ Composizione elenco IncassiViewModel
+                // ======================================================
+                var elenco = new List<IncassoViewModel>();
+                int counter = 0;
+
+                foreach (var a in avvisi)
+                {
+                    counter++;
+                    var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == a.ID_Pratiche);
+                    var incasso = db.Incassi.FirstOrDefault(i => i.ID_AvvisoParcella == a.ID_AvvisoParcelle);
+
+                    elenco.Add(new IncassoViewModel
                     {
-                        puoAggiungere = puoModificare = puoEliminare = true;
-                    }
-                    else if (utenteCorrente.TipoUtente == "Professionista" || utenteCorrente.TipoUtente == "Collaboratore")
-                    {
-                        var permessiDb = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
-                        puoAggiungere = permessiDb.Any(p => p.Aggiungi == true);
-                        puoModificare = permessiDb.Any(p => p.Modifica == true);
-                        puoEliminare = permessiDb.Any(p => p.Elimina == true);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("❌ Errore durante il recupero dei permessi utente.", ex);
-                }
-
-                List<IncassoViewModel> lista;
-                try
-                {
-                    lista = query
-                        .OrderByDescending(i => i.DataIncasso)
-                        .ToList()
-                        .Select(i =>
-                        {
-                            Pratiche pratica;
-                            try
-                            {
-                                pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == i.ID_Pratiche);
-                            }
-                            catch (Exception ex)
-                            {
-                                throw new InvalidOperationException($"❌ Errore nel recupero della pratica con ID {i.ID_Pratiche}.", ex);
-                            }
-
-                            decimal utileNetto;
-                            try
-                            {
-                                utileNetto = db.BilancioProfessionista
-                                    .Where(b =>
-                                        b.ID_Pratiche == i.ID_Pratiche &&
-                                        b.Categoria == "Utile netto da incasso")
-                                    .OrderByDescending(b => b.DataRegistrazione)
-                                    .Select(b => (decimal?)b.Importo)
-                                    .FirstOrDefault() ?? 0;
-                            }
-                            catch (Exception ex)
-                            {
-                                throw new InvalidOperationException($"❌ Errore nel calcolo dell'utile netto per l'incasso {i.ID_Incasso}.", ex);
-                            }
-
-                            return new IncassoViewModel
-                            {
-                                ID_Incasso = i.ID_Incasso,
-                                ID_Pratiche = i.ID_Pratiche ?? 0,
-                                DataIncasso = i.DataIncasso,
-                                Importo = i.Importo,
-                                MetodoPagamento = i.ModalitaPagamento,
-                                NomePratica = pratica?.Titolo ?? "(N/D)",
-                                UtileNetto = utileNetto,
-                                VersaInPlafond = i.VersaInPlafond,
-                                PuoEliminare = puoEliminare,
-                                PuoModificare = puoModificare
-                            };
-                        })
-                        .ToList();
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("❌ Errore durante la costruzione della lista incassi (ViewModel).", ex);
+                        ID_Incasso = incasso?.ID_Incasso ?? 0,
+                        ID_Pratiche = a.ID_Pratiche ?? 0,
+                        ID_AvvisoParcella = a.ID_AvvisoParcelle,
+                        NomePratica = pratica?.Titolo ?? "(N/D)",
+                        DataCompetenza = a.DataAvviso,
+                        DataIncasso = incasso?.DataIncasso,
+                        Importo = a.TotaleAvvisiParcella ?? a.Importo ?? 0,
+                        UtileNetto = incasso?.Utile ?? 0,
+                        MetodoPagamento = incasso?.ModalitaPagamento ?? a.MetodoPagamento ?? "—",
+                        VersaInPlafond = incasso?.VersaInPlafond ?? false,
+                        StatoAvviso = a.Stato,
+                        Stato = incasso != null ? "Incassato" : (a.Stato == "Pagato" ? "Pagato" : "Da incassare"),
+                        PuoEliminare = puoEliminare,
+                        PuoModificare = puoModificare
+                    });
                 }
 
-                try
-                {
-                    // 🔐 Passaggio permessi alla View
-                    ViewBag.PuoAggiungere = puoAggiungere;
-                    ViewBag.PuoModificare = puoModificare;
-                    ViewBag.PuoEliminare = puoEliminare;
-                    ViewBag.Permessi = new PermessiViewModel
-                    {
-                        ID_Utente = utenteCorrente.ID_Utente,
-                        NomeUtente = utenteCorrente.Nome + " " + utenteCorrente.Cognome,
-                        Permessi = new List<PermessoSingoloViewModel>
-                {
-                    new PermessoSingoloViewModel
-                    {
-                        Aggiungi = puoAggiungere,
-                        Modifica = puoModificare,
-                        Elimina = puoEliminare
-                    }
-                }
-                    };
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("❌ Errore durante l'impostazione dei permessi nella ViewBag.", ex);
-                }
+                System.Diagnostics.Trace.WriteLine($"📊 Totale incassi composti: {elenco.Count}");
 
-                try
-                {
-                    // ⬇️ Carica le pratiche per la modale incasso
-                    ViewBag.Pratiche = db.Pratiche
-                        .Where(p => p.Stato != "Eliminato")
-                        .ToList()
-                        .Select(p => new SelectListItem
-                        {
-                            Value = p.ID_Pratiche.ToString(),
-                            Text = p.ID_Pratiche + " - " + p.Titolo
-                        }).ToList();
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("❌ Errore durante il caricamento delle pratiche per la modale incasso.", ex);
-                }
+                elenco = elenco.OrderByDescending(x => x.DataCompetenza).ToList();
 
-                return PartialView("~/Views/Incassi/_GestioneIncassiList.cshtml", lista);
-            }
-            catch (Exception)
+                // ======================================================
+                // 📘 3️⃣ Passaggio permessi alla View
+                // ======================================================
+                ViewBag.PuoAggiungere = puoAggiungere;
+                ViewBag.PuoModificare = puoModificare;
+                ViewBag.PuoEliminare = puoEliminare;
+
+                ViewBag.Permessi = new PermessiViewModel
+                {
+                    ID_Utente = utenteCorrente.ID_Utente,
+                    NomeUtente = $"{utenteCorrente.Nome} {utenteCorrente.Cognome}",
+                    Permessi = new List<PermessoSingoloViewModel>
             {
-                // 👇 Lasciamo propagare l'errore al gestore Application_Error / Error.cshtml
-                throw;
+                new PermessoSingoloViewModel
+                {
+                    Aggiungi = puoAggiungere,
+                    Modifica = puoModificare,
+                    Elimina = puoEliminare
+                }
+            }
+                };
+
+                // ======================================================
+                // 📘 4️⃣ Carica pratiche per la modale incasso
+                // ======================================================
+                var pratiche = db.Pratiche.Where(p => p.Stato != "Eliminato").ToList();
+                ViewBag.Pratiche = pratiche
+                    .Select(p => new SelectListItem
+                    {
+                        Value = p.ID_Pratiche.ToString(),
+                        Text = $"{p.ID_Pratiche} - {p.Titolo}"
+                    })
+                    .ToList();
+
+                System.Diagnostics.Trace.WriteLine($"📚 Pratiche caricate per modale: {pratiche.Count}");
+
+                // ======================================================
+                // 📘 5️⃣ Ritorna la partial aggiornata
+                // ======================================================
+                System.Diagnostics.Trace.WriteLine("✅ [GestioneIncassiList] Completato con successo.\n");
+                System.Diagnostics.Trace.WriteLine("═══════════════════════════════════════════════");
+
+                return PartialView("~/Views/Incassi/_GestioneIncassiList.cshtml", elenco);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"❌ [GestioneIncassiList] Errore: {ex.Message}");
+                throw new InvalidOperationException("❌ Errore durante il caricamento della lista incassi.", ex);
             }
         }
+
+
 
         [HttpPost]
         public ActionResult CreaIncasso(IncassoViewModel model)
         {
-            if (!ModelState.IsValid)
-                return Json(new { success = false, message = "Compilare correttamente tutti i campi richiesti." });
+            // ====================================================
+            // 🌍 Cultura invariata: numeri col punto (SQL friendly)
+            // ====================================================
+            System.Threading.Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            System.Threading.Thread.CurrentThread.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
 
+            // ====================================================
+            // 💰 Normalizza l'importo PRIMA del controllo ModelState
+            // ====================================================
+            if (Request.Form["Importo"] != null)
+            {
+                var raw = Request.Form["Importo"].Trim().Replace(",", ".");
+                if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out decimal parsed))
+                {
+                    model.Importo = parsed;
+                    System.Diagnostics.Trace.WriteLine($"✅ [CreaIncasso] Importo normalizzato: {parsed:N2}");
+                    ModelState.Remove("Importo");
+                }
+                else
+                {
+                    System.Diagnostics.Trace.WriteLine($"⚠️ [CreaIncasso] Importo non convertibile: {raw}");
+                }
+            }
+
+            if (!ModelState.IsValid)
+            {
+                var errori = ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage + (e.Exception != null ? $" | EX: {e.Exception.Message}" : ""))
+                    .ToList();
+                System.Diagnostics.Trace.WriteLine("❌ [CreaIncasso] Errori ModelState:");
+                foreach (var err in errori)
+                    System.Diagnostics.Trace.WriteLine("   → " + err);
+                return Json(new { success = false, message = "Errore nei dati inviati: " + string.Join("; ", errori) });
+            }
+
+            // ====================================================
+            // 🔐 Controllo utente e permessi
+            // ====================================================
             int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
             var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
             if (utente == null)
@@ -9022,40 +13079,116 @@ namespace SinergiaMvc.Controllers
             {
                 DateTime now = DateTime.Now;
 
-                // 🔍 Recupero pratica e verifica importo
+                // ====================================================
+                // 1️⃣ PRATICA + AVVISO
+                // ====================================================
                 var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == model.ID_Pratiche);
                 if (pratica == null)
                     return Json(new { success = false, message = "Pratica non trovata." });
 
-                decimal budget = pratica.Budget;
-                decimal incassatoTotale = db.Incassi
-                    .Where(i => i.ID_Pratiche == model.ID_Pratiche)
-                    .Select(i => i.Importo)
-                    .DefaultIfEmpty(0)
-                    .Sum();
+                var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == model.ID_AvvisoParcella);
+                if (avviso == null)
+                    return Json(new { success = false, message = "Avviso parcella collegato non trovato." });
 
-                // 🔒 Blocco: non superare il budget
-                if ((incassatoTotale + model.Importo) > budget)
-                {
+                // ====================================================
+                // 2️⃣ IMPORTI E CONTROLLI
+                // ====================================================
+                decimal totaleAvviso = avviso.TotaleAvvisiParcella ?? avviso.Importo ?? 0m;
+                if (totaleAvviso <= 0)
+                    return Json(new { success = false, message = "L'importo totale dell’avviso non è valido." });
+
+                decimal giaIncassato = db.Incassi
+                    .Where(i => i.ID_AvvisoParcella == avviso.ID_AvvisoParcelle)
+                    .Select(i => (decimal?)i.Importo)
+                    .DefaultIfEmpty(0)
+                    .Sum() ?? 0m;
+
+                decimal residuo = Math.Max(0m, totaleAvviso - giaIncassato);
+                decimal importoIncasso = model.Importo;
+
+                if (importoIncasso <= 0)
+                    return Json(new { success = false, message = "Inserire un importo incasso valido." });
+
+                if (importoIncasso > residuo)
                     return Json(new
                     {
                         success = false,
-                        message = $"⚠️ L'importo supera il budget della pratica.\nTotale incassato: {incassatoTotale:C}\nImporto nuovo: {model.Importo:C}\nBudget massimo: {budget:C}"
+                        message = $"L'incasso supera il residuo dell'avviso.\nResiduo: {residuo:N2} €"
                     });
-                }
+
+                // ====================================================
+                // 3️⃣ DATE DI RIFERIMENTO
+                // ====================================================
+                DateTime dataCompetenzaEconomica = avviso.DataAvviso ?? now;
+                DateTime dataIncasso = model.DataIncasso ?? now;
+
+                // ====================================================
+                // 4️⃣ 🔢 CALCOLI ACCESSORI — LOGICA POST-TRATTENUTA
+                // ====================================================
+                decimal baseImponibile = avviso.Importo ?? 0m;
+
+                // 🔹 Trattenuta Sinergia
+                var ricTratt = db.RicorrenzeCosti.FirstOrDefault(r =>
+                    r.Categoria == "Trattenuta Sinergia" && r.Attivo && r.TipoValore == "Percentuale");
+                decimal percTrattenuta = ricTratt?.Valore ?? 0m;
+                decimal quotaTrattenuta = Math.Round(baseImponibile * (percTrattenuta / 100m), 2);
+                decimal baseDopoTrattenuta = baseImponibile - quotaTrattenuta;
+
+                // 🔹 Percentuali CI e Spese Generali
+                decimal percSpeseGenerali = avviso.RimborsoSpesePercentuale ?? 0m;
+                decimal percCI = avviso.ContributoIntegrativoPercentuale ?? 0m;
+
+                // 🔹 Calcoli
+                decimal speseGeneraliImporto = Math.Round(baseDopoTrattenuta * (percSpeseGenerali / 100m), 2);
+                decimal contributoIntegrativoImporto = Math.Round(baseDopoTrattenuta * (percCI / 100m), 2);
+
+                // 🔹 IVA
+                decimal ivaAvviso = avviso.ImportoIVA ?? 0m;
+                decimal fattore = totaleAvviso > 0 ? (importoIncasso / totaleAvviso) : 0m;
+                decimal ivaProRata = Math.Round(ivaAvviso * fattore, 2);
+
+                // 🔹 Totale netto plafond coerente
+                decimal importoNettoPlafond = Math.Round(importoIncasso + speseGeneraliImporto, 2);
+
+                System.Diagnostics.Trace.WriteLine("──────────────────────────────────────────────────────────────");
+                System.Diagnostics.Trace.WriteLine($"📘 [CreaIncasso] Calcolo post-trattenuta:");
+                System.Diagnostics.Trace.WriteLine($"   Base Imponibile ............ {baseImponibile:N2} €");
+                System.Diagnostics.Trace.WriteLine($"   Trattenuta Sinergia ({percTrattenuta:N1}%) .... {quotaTrattenuta:N2} €");
+                System.Diagnostics.Trace.WriteLine($"   Base dopo trattenuta ....... {baseDopoTrattenuta:N2} €");
+                System.Diagnostics.Trace.WriteLine($"   Spese Generali ({percSpeseGenerali:N1}%) .... {speseGeneraliImporto:N2} €");
+                System.Diagnostics.Trace.WriteLine($"   Contributo Integrativo ({percCI:N1}%) .... {contributoIntegrativoImporto:N2} €");
+                System.Diagnostics.Trace.WriteLine($"   IVA (pro-rata) ............. {ivaProRata:N2} €");
+                System.Diagnostics.Trace.WriteLine($"   Totale Netto Plafond ....... {importoNettoPlafond:N2} €");
+                System.Diagnostics.Trace.WriteLine("──────────────────────────────────────────────────────────────");
+
+                // ====================================================
+                // 5️⃣ CREA INCASSO
+                // ====================================================
+                var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == pratica.ID_Cliente);
+                int? idOwner = cliente?.ID_Operatore;
 
                 var incasso = new Incassi
                 {
-                    ID_Pratiche = model.ID_Pratiche,
-                    DataIncasso = (DateTime)model.DataIncasso,
-                    Importo = model.Importo,
+                    ID_Pratiche = pratica.ID_Pratiche,
+                    ID_AvvisoParcella = avviso.ID_AvvisoParcelle,
+                    DataIncasso = dataIncasso,
+                    Importo = importoIncasso,
+                    ImportoTotale = totaleAvviso,
+                    ImportoNetto = importoNettoPlafond,
+                    ImportoVersatoPlafond = 0m,
                     ModalitaPagamento = model.MetodoPagamento?.Trim(),
-                    ID_UtenteCreatore = idUtenteCorrente,
-                    VersaInPlafond = model.VersaInPlafond == true
+                    VersaInPlafond = model.VersaInPlafond ?? false,
+                    StatoIncasso = "Registrato",
+                    Note = model.Note?.Trim(),
+                    DataCompetenzaEconomica = dataCompetenzaEconomica,
+                    DataCompetenzaFinanziaria = dataIncasso,
+                    ID_Responsabile = pratica.ID_UtenteResponsabile,
+                    ID_OwnerCliente = idOwner,
+                    ID_UtenteCreatore = idUtenteCorrente
                 };
 
                 db.Incassi.Add(incasso);
-                db.SaveChanges(); // Recupero ID_Incasso
+                db.SaveChanges();
 
                 db.Incassi_a.Add(new Incassi_a
                 {
@@ -9066,249 +13199,425 @@ namespace SinergiaMvc.Controllers
                     ModalitaPagamento = incasso.ModalitaPagamento,
                     ID_UtenteCreatore = incasso.ID_UtenteCreatore,
                     NumeroVersione = 1,
-                    ModificheTestuali = $"✅ Inserito incasso da {incasso.Importo:C} per pratica ID = {incasso.ID_Pratiche} da utente ID = {idUtenteCorrente} in data {now:g}"
+                    ModificheTestuali = $"✅ Inserito incasso per avviso #{avviso.ID_AvvisoParcelle} (importo {importoIncasso:N2} €)"
                 });
+                db.SaveChanges();
 
-                UtileHelper.EseguiRipartizioneDaIncasso(incasso.ID_Pratiche.Value, incasso.Importo);
+                // ====================================================
+                // 6️⃣ RIPARTIZIONE
+                // ====================================================
+                UtileHelper.EseguiRipartizioneDaIncasso(pratica.ID_Pratiche, importoIncasso, incasso.ID_Incasso, avviso.ID_AvvisoParcelle, avviso.ID_CompensoOrigine);
 
-                // ✅ Versa in plafond, se selezionato
-                if (incasso.VersaInPlafond == true)
+                // ====================================================
+                // 7️⃣ COMPENSI + PLAFOND + STATO AVVISO
+                // ====================================================
+                var vociRicavo = db.BilancioProfessionista
+                    .Where(b => b.ID_Pratiche == pratica.ID_Pratiche &&
+                                b.ID_Incasso == incasso.ID_Incasso &&
+                                b.Origine == "Incasso" &&
+                                b.TipoVoce == "Ricavo" &&
+                                !b.Categoria.Contains("Trattenuta") &&
+                                b.Importo > 0)
+                    .ToList();
+
+                foreach (var voce in vociRicavo)
                 {
-                    var utile = db.BilancioProfessionista
-                        .Where(b => b.ID_Pratiche == incasso.ID_Pratiche &&
-                                    b.Categoria == "Utile netto da incasso")
-                        .OrderByDescending(b => b.DataRegistrazione)
-                        .FirstOrDefault();
-
-                    if (utile != null && utile.Importo > 0)
+                    var nuovoCompenso = new CompensiPratica
                     {
-                        db.PlafondUtente.Add(new PlafondUtente
+                        ID_Pratiche = (int)voce.ID_Pratiche,
+                        ID_UtenteDestinatario = voce.ID_Professionista,
+                        Importo = voce.Importo,
+                        Tipo = "Incasso",
+                        Descrizione = $"Quota incasso {now:MMMM yyyy} - {voce.Categoria}",
+                        DataInserimento = now,
+                        ID_UtenteCreatore = idUtenteCorrente
+                    };
+                    db.CompensiPratica.Add(nuovoCompenso);
+                    db.SaveChanges();
+
+                    db.CompensiPratica_a.Add(new CompensiPratica_a
+                    {
+                        ID_CompensoOriginale = nuovoCompenso.ID_Compenso,
+                        ID_Pratiche = nuovoCompenso.ID_Pratiche,
+                        ID_UtenteDestinatario = nuovoCompenso.ID_UtenteDestinatario,
+                        Tipo = nuovoCompenso.Tipo,
+                        Descrizione = nuovoCompenso.Descrizione,
+                        Importo = nuovoCompenso.Importo,
+                        DataInserimento = nuovoCompenso.DataInserimento,
+                        ID_UtenteCreatore = nuovoCompenso.ID_UtenteCreatore,
+                        DataArchiviazione = now,
+                        ID_UtenteArchiviazione = idUtenteCorrente,
+                        NumeroVersione = 1,
+                        ModificheTestuali = $"💰 Compenso registrato da incasso ID {incasso.ID_Incasso} ({voce.Categoria} - {voce.Importo:N2} €)"
+                    });
+                    db.SaveChanges();
+                }
+
+                // 💰 Versamento in plafond
+                if (model.VersaInPlafond == true)
+                {
+                    foreach (var voce in vociRicavo)
+                    {
+                        bool esisteGia = db.PlafondUtente.Any(p =>
+                            p.ID_Incasso == incasso.ID_Incasso &&
+                            p.ID_Utente == voce.ID_Professionista &&
+                            p.TipoPlafond == "Incasso");
+
+                        if (esisteGia) continue;
+
+                        var nuovoPlafond = new PlafondUtente
                         {
-                            ID_Utente = pratica.ID_UtenteResponsabile,
-                            ImportoTotale = utile.Importo,
-                            TipoPlafond = "Incasso",
-                            DataInizio = now.Date,
-                            DataFine = null,
-                            ID_Pratiche = incasso.ID_Pratiche,
-                            ID_UtenteCreatore = idUtenteCorrente,
-                            ID_UtenteUltimaModifica = null,
-                            DataUltimaModifica = null,
+                            ID_Utente = voce.ID_Professionista,
                             ID_Incasso = incasso.ID_Incasso,
-                            Importo = utile.Importo,
+                            ID_Pratiche = pratica.ID_Pratiche,
+                            TipoPlafond = "Incasso",
+                            Importo = voce.Importo,
+                            ImportoTotale = voce.Importo,
                             DataVersamento = now,
+                            DataInizio = now.Date,
+                            ID_UtenteCreatore = idUtenteCorrente,
                             ID_UtenteInserimento = idUtenteCorrente,
+                            Operazione = "Versamento da incasso pratica",
                             DataInserimento = now,
-                            Note = $"Versamento da incasso ID {incasso.ID_Incasso} - pratica {pratica.ID_Pratiche}"
+                            Note = $"💰 Versamento da incasso ID {incasso.ID_Incasso} | Professionista ID {voce.ID_Professionista}"
+                        };
+
+                        db.PlafondUtente.Add(nuovoPlafond);
+                        db.SaveChanges();
+
+                        db.PlafondUtente_a.Add(new PlafondUtente_a
+                        {
+                            ID_PlannedPlafond_Archivio = nuovoPlafond.ID_PlannedPlafond,
+                            ID_Utente = nuovoPlafond.ID_Utente,
+                            ID_Pratiche = nuovoPlafond.ID_Pratiche,
+                            TipoPlafond = nuovoPlafond.TipoPlafond,
+                            ImportoTotale = nuovoPlafond.ImportoTotale,
+                            Importo = nuovoPlafond.Importo,
+                            DataVersamento = nuovoPlafond.DataVersamento,
+                            DataArchiviazione = now,
+                            NumeroVersione = 1,
+                            ModificheTestuali = $"💰 Versamento da incasso pratica {pratica.ID_Pratiche} = {nuovoPlafond.Importo:N2} € (Professionista ID {nuovoPlafond.ID_Utente})"
                         });
+                        db.SaveChanges();
                     }
                 }
 
-                // ✅ Imposta lo stato dell'avviso parcella a "Pagato" se collegato
-                var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_Pratiche == incasso.ID_Pratiche);
-                if (avviso != null)
-                {
-                    avviso.Stato = "Pagato";
-                    avviso.DataModifica = DateTime.Now;
-                    avviso.ID_UtenteModifica = idUtenteCorrente;
-                }
+                // 🔄 Aggiorna stato avviso
+                decimal incassatoLordo = db.Incassi
+                    .Where(i => i.ID_AvvisoParcella == avviso.ID_AvvisoParcelle)
+                    .Select(i => (decimal?)i.ImportoTotale)
+                    .DefaultIfEmpty(0)
+                    .Sum() ?? 0m;
 
+                decimal residuoDopo = Math.Round(totaleAvviso - incassatoLordo, 2);
+                if (Math.Abs(residuoDopo) <= 0.5m) residuoDopo = 0;
+
+                avviso.Stato = residuoDopo <= 0.00m ? "Pagato"
+                                : residuoDopo < totaleAvviso ? "Parziale"
+                                : "Inviato";
+
+                avviso.DataModifica = now;
+                avviso.ID_UtenteModifica = idUtenteCorrente;
+                db.Entry(avviso).State = System.Data.Entity.EntityState.Modified;
+
+                incasso.StatoIncasso = avviso.Stato;
+                incasso.ImportoVersatoPlafond = model.VersaInPlafond == true ? importoNettoPlafond : 0m;
+                db.Entry(incasso).State = System.Data.Entity.EntityState.Modified;
                 db.SaveChanges();
 
-                return Json(new { success = true, message = "✅ Incasso registrato correttamente." });
+                System.Diagnostics.Trace.WriteLine($"✅ [CreaIncasso] Completato. Stato avviso → {avviso.Stato}");
+
+                return Json(new
+                {
+                    success = true,
+                    message = (avviso.Stato == "Pagato")
+                        ? $"✅ Incasso registrato. Avviso #{avviso.ID_AvvisoParcelle} PAGATO."
+                        : $"✅ Incasso registrato. Residuo avviso: {residuoDopo:N2} €.",
+                    idIncasso = incasso.ID_Incasso,
+                    residuo = residuoDopo
+                });
+            }
+            catch (System.Data.Entity.Validation.DbEntityValidationException ex)
+            {
+                var dettagli = string.Join("; ",
+                    ex.EntityValidationErrors.SelectMany(e => e.ValidationErrors)
+                        .Select(v => $"Campo: {v.PropertyName} → Errore: {v.ErrorMessage}"));
+
+                System.Diagnostics.Trace.WriteLine("❌ [CreaIncasso] Validation error: " + dettagli);
+                return Json(new { success = false, message = "Errore validazione Entity: " + dettagli });
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Trace.WriteLine($"❌ [CreaIncasso] Errore generico: {ex}");
                 return Json(new { success = false, message = "Errore durante il salvataggio: " + ex.Message });
             }
         }
 
 
-        [HttpPost]
-        public ActionResult ModificaIncasso(IncassoViewModel model)
-        {
-            if (!ModelState.IsValid)
-                return Json(new { success = false, message = "Compilare correttamente tutti i campi obbligatori." });
 
-            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
-            var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-            if (utente == null)
-                return Json(new { success = false, message = "Utente non autenticato." });
+        /* Get Incasso commentato in data 20/10/2025 in quanto ho commentanto  la modifica per l'incassi non va bene */
+        //[HttpPost]
+        //public ActionResult ModificaIncasso(IncassoViewModel model)
+        //{
+        //    if (!ModelState.IsValid)
+        //        return Json(new { success = false, message = "Compilare correttamente tutti i campi obbligatori." });
 
-            bool autorizzato = utente.TipoUtente == "Admin" ||
-                               db.Permessi.Any(p => p.ID_Utente == idUtenteCorrente && p.Modifica == true);
-            if (!autorizzato)
-                return Json(new { success = false, message = "Non hai i permessi per modificare l’incasso." });
+        //    int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+        //    var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
+        //    if (utente == null)
+        //        return Json(new { success = false, message = "Utente non autenticato." });
 
-            try
-            {
-                var incasso = db.Incassi.FirstOrDefault(i => i.ID_Incasso == model.ID_Incasso);
-                if (incasso == null)
-                    return Json(new { success = false, message = "Incasso non trovato." });
+        //    bool autorizzato = utente.TipoUtente == "Admin" ||
+        //                       db.Permessi.Any(p => p.ID_Utente == idUtenteCorrente && p.Modifica == true);
+        //    if (!autorizzato)
+        //        return Json(new { success = false, message = "Non hai i permessi per modificare l’incasso." });
 
-                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == model.ID_Pratiche);
-                if (pratica == null)
-                    return Json(new { success = false, message = "Pratica non trovata." });
+        //    try
+        //    {
+        //        var incasso = db.Incassi.FirstOrDefault(i => i.ID_Incasso == model.ID_Incasso);
+        //        if (incasso == null)
+        //            return Json(new { success = false, message = "Incasso non trovato." });
 
-                decimal budget = pratica.Budget;
+        //        var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == model.ID_Pratiche);
+        //        if (pratica == null)
+        //            return Json(new { success = false, message = "Pratica non trovata." });
 
-                // 🔍 Calcola totale incassi escluso quello corrente
-                decimal incassatoTotale = db.Incassi
-                    .Where(i => i.ID_Pratiche == model.ID_Pratiche && i.ID_Incasso != model.ID_Incasso)
-                    .Select(i => i.Importo)
-                    .DefaultIfEmpty(0)
-                    .Sum();
+        //        var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == model.ID_AvvisoParcella);
+        //        if (avviso == null)
+        //            return Json(new { success = false, message = "Avviso parcella collegato non trovato." });
 
-                // 🔒 Blocco se la modifica porterebbe a superare il budget
-                if ((incassatoTotale + model.Importo) > budget)
-                {
-                    return Json(new
-                    {
-                        success = false,
-                        message = $"⚠️ L'importo aggiornato supera il budget della pratica.\nTotale altri incassi: {incassatoTotale:C}\nNuovo importo: {model.Importo:C}\nBudget massimo: {budget:C}"
-                    });
-                }
+        //        DateTime now = DateTime.Now;
 
-                int ultimaVersione = db.Incassi_a
-                    .Where(i => i.ID_Archivio == incasso.ID_Incasso)
-                    .OrderByDescending(i => i.NumeroVersione)
-                    .Select(i => i.NumeroVersione)
-                    .FirstOrDefault();
+        //        // 🔍 Calcola totale incassi escluso quello corrente
+        //        decimal incassatoTotale = db.Incassi
+        //            .Where(i => i.ID_Pratiche == model.ID_Pratiche && i.ID_Incasso != model.ID_Incasso)
+        //            .Select(i => i.Importo)
+        //            .DefaultIfEmpty(0)
+        //            .Sum();
 
-                List<string> modifiche = new List<string>();
-                void Check(string campo, object oldVal, object newVal)
-                {
-                    if ((oldVal?.ToString() ?? "") != (newVal?.ToString() ?? ""))
-                        modifiche.Add($"- {campo}: '{oldVal}' → '{newVal}'");
-                }
+        //        decimal budget = pratica.Budget;
+        //        if ((incassatoTotale + model.Importo) > budget)
+        //        {
+        //            return Json(new
+        //            {
+        //                success = false,
+        //                message = $"⚠️ L'importo aggiornato supera il budget della pratica.\nTotale altri incassi: {incassatoTotale:C}\nNuovo importo: {model.Importo:C}\nBudget massimo: {budget:C}"
+        //            });
+        //        }
 
-                Check("ID_Pratiche", incasso.ID_Pratiche, model.ID_Pratiche);
-                Check("DataIncasso", incasso.DataIncasso, model.DataIncasso);
-                Check("Importo", incasso.Importo, model.Importo);
-                Check("MetodoPagamento", incasso.ModalitaPagamento, model.MetodoPagamento);
-                Check("VersaInPlafond", incasso.VersaInPlafond, model.VersaInPlafond);
+        //        int ultimaVersione = db.Incassi_a
+        //            .Where(i => i.ID_Archivio == incasso.ID_Incasso)
+        //            .OrderByDescending(i => i.NumeroVersione)
+        //            .Select(i => i.NumeroVersione)
+        //            .FirstOrDefault();
 
-                // 🔁 Applica modifiche
-                incasso.ID_Pratiche = model.ID_Pratiche;
-                incasso.DataIncasso = (DateTime)model.DataIncasso;
-                incasso.Importo = model.Importo;
-                incasso.ModalitaPagamento = model.MetodoPagamento?.Trim();
-                incasso.VersaInPlafond = model.VersaInPlafond == true;
+        //        List<string> modifiche = new List<string>();
+        //        void Check(string campo, object oldVal, object newVal)
+        //        {
+        //            if ((oldVal?.ToString() ?? "") != (newVal?.ToString() ?? ""))
+        //                modifiche.Add($"- {campo}: '{oldVal}' → '{newVal}'");
+        //        }
 
-                db.Incassi_a.Add(new Incassi_a
-                {
-                    ID_Archivio = incasso.ID_Incasso,
-                    ID_Pratiche = incasso.ID_Pratiche,
-                    DataIncasso = incasso.DataIncasso,
-                    Importo = incasso.Importo,
-                    ModalitaPagamento = incasso.ModalitaPagamento,
-                    ID_UtenteCreatore = incasso.ID_UtenteCreatore,
-                    NumeroVersione = ultimaVersione + 1,
-                    ModificheTestuali = modifiche.Any()
-                        ? $"✏️ Modifica effettuata da ID_Utente = {idUtenteCorrente} il {DateTime.Now:g}:\n{string.Join("\n", modifiche)}"
-                        : "Modifica salvata senza cambiamenti rilevanti"
-                });
+        //        Check("DataIncasso", incasso.DataIncasso, model.DataIncasso);
+        //        Check("Importo", incasso.Importo, model.Importo);
+        //        Check("MetodoPagamento", incasso.ModalitaPagamento, model.MetodoPagamento);
+        //        Check("VersaInPlafond", incasso.VersaInPlafond, model.VersaInPlafond);
 
-                // 🔁 Elimina voci esistenti associate all’incasso
-                db.BilancioProfessionista.RemoveRange(db.BilancioProfessionista
-                    .Where(b => b.ID_Incasso == incasso.ID_Incasso));
+        //        // 🔁 Applica modifiche
+        //        incasso.DataIncasso = model.DataIncasso ?? now;
+        //        incasso.Importo = model.Importo;
+        //        incasso.ModalitaPagamento = model.MetodoPagamento?.Trim();
+        //        incasso.VersaInPlafond = model.VersaInPlafond == true;
 
-                // 🔁 Esegui ripartizione aggiornata
-                UtileHelper.EseguiRipartizioneDaIncasso(incasso.ID_Pratiche.Value, incasso.Importo);
+        //        // 🗂 Archivia versione aggiornata
+        //        db.Incassi_a.Add(new Incassi_a
+        //        {
+        //            ID_Archivio = incasso.ID_Incasso,
+        //            ID_Pratiche = incasso.ID_Pratiche,
+        //            DataIncasso = incasso.DataIncasso,
+        //            Importo = incasso.Importo,
+        //            ModalitaPagamento = incasso.ModalitaPagamento,
+        //            ID_UtenteCreatore = incasso.ID_UtenteCreatore,
+        //            NumeroVersione = ultimaVersione + 1,
+        //            ModificheTestuali = modifiche.Any()
+        //                ? $"✏️ Modifica effettuata da ID_Utente = {idUtenteCorrente} il {now:g}:\n{string.Join("\n", modifiche)}"
+        //                : "Modifica salvata senza cambiamenti rilevanti"
+        //        });
 
-                // ✅ Versa in plafond se selezionato
-                if (incasso.VersaInPlafond == true)
-                {
-                    var utile = db.BilancioProfessionista
-                        .Where(b => b.ID_Pratiche == incasso.ID_Pratiche &&
-                                    b.Categoria == "Utile netto da incasso")
-                        .OrderByDescending(b => b.DataRegistrazione)
-                        .FirstOrDefault();
+        //        // 🔁 Rimuove vecchie voci di bilancio e plafond legate a questo incasso
+        //        db.BilancioProfessionista.RemoveRange(db.BilancioProfessionista
+        //            .Where(b => b.ID_Incasso == incasso.ID_Incasso));
 
-                    if (utile != null && utile.Importo > 0)
-                    {
-                        db.PlafondUtente.Add(new PlafondUtente
-                        {
-                            ID_Utente = pratica.ID_UtenteResponsabile,
-                            ImportoTotale = utile.Importo,
-                            ID_Pratiche = incasso.ID_Pratiche,
-                            TipoPlafond = "Incasso",
-                            DataInizio = DateTime.Now.Date,
-                            DataFine = null,
-                            ID_UtenteCreatore = idUtenteCorrente,
-                            ID_UtenteUltimaModifica = null,
-                            DataUltimaModifica = null,
-                            ID_Incasso = incasso.ID_Incasso,
-                            Importo = utile.Importo,
-                            DataVersamento = DateTime.Now,
-                            ID_UtenteInserimento = idUtenteCorrente,
-                            DataInserimento = DateTime.Now,
-                            Note = $"Versamento da incasso ID {incasso.ID_Incasso} - pratica {pratica.ID_Pratiche}"
-                        });
-                    }
-                }
+        //        db.PlafondUtente.RemoveRange(db.PlafondUtente
+        //            .Where(p => p.ID_Incasso == incasso.ID_Incasso));
 
-                db.SaveChanges();
-                return Json(new { success = true, message = "✅ Incasso modificato correttamente." });
-            }
-            catch (Exception ex)
-            {
-                return Json(new { success = false, message = "Errore durante la modifica: " + ex.Message });
-            }
-        }
+        //        // 🔁 Esegui ripartizione aggiornata
+        //        UtileHelper.EseguiRipartizioneDaIncasso(incasso.ID_Pratiche.Value, incasso.Importo);
+
+        //        // 💰 Versa in plafond, se selezionato
+        //        if (incasso.VersaInPlafond == true)
+        //        {
+        //            decimal totaleAvviso = (decimal)(avviso.TotaleAvvisiParcella ?? avviso.Importo ?? 0m);
+        //            decimal iva = avviso.ImportoIVA ?? 0m;
+        //            decimal contributoIntegrativo = avviso.ContributoIntegrativoImporto ?? 0m;
+
+        //            decimal? speseGenerali = db.BilancioProfessionista
+        //                .Where(b => b.ID_Pratiche == pratica.ID_Pratiche &&
+        //                            b.Categoria == "Spese Generali" &&
+        //                            b.Stato != "Annullato")
+        //                .Select(b => (decimal?)b.Importo)
+        //                .DefaultIfEmpty(0)
+        //                .Sum();
+
+        //            decimal importoNettoPlafond = Math.Round((totaleAvviso + (speseGenerali ?? 0) - iva - contributoIntegrativo), 2);
+
+        //            if (importoNettoPlafond > 0)
+        //            {
+        //                var nuovoPlafond = new PlafondUtente
+        //                {
+        //                    ID_Utente = pratica.ID_UtenteResponsabile,
+        //                    ID_Incasso = incasso.ID_Incasso,
+        //                    ID_Pratiche = pratica.ID_Pratiche,
+        //                    TipoPlafond = "Incasso",
+        //                    Importo = importoNettoPlafond,
+        //                    ImportoTotale = importoNettoPlafond,
+        //                    DataVersamento = now,
+        //                    DataInizio = now.Date,
+        //                    ID_UtenteCreatore = idUtenteCorrente,
+        //                    ID_UtenteInserimento = idUtenteCorrente,
+        //                    DataInserimento = now,
+        //                    Note = $"💰 Versamento netto aggiornato da incasso ID {incasso.ID_Incasso} - Avviso #{avviso.ID_AvvisoParcelle} - Pratica {pratica.Titolo}"
+        //                };
+
+        //                db.PlafondUtente.Add(nuovoPlafond);
+        //                db.SaveChanges();
+
+        //                // 🗂 Archiviazione in PlafondUtente_a
+        //                db.PlafondUtente_a.Add(new PlafondUtente_a
+        //                {
+        //                    ID_PlannedPlafond_Archivio = nuovoPlafond.ID_PlannedPlafond,
+        //                    ID_Utente = nuovoPlafond.ID_Utente,
+        //                    ID_Incasso = nuovoPlafond.ID_Incasso,
+        //                    ID_Pratiche = nuovoPlafond.ID_Pratiche,
+        //                    TipoPlafond = nuovoPlafond.TipoPlafond,
+        //                    Importo = nuovoPlafond.Importo,
+        //                    ImportoTotale = nuovoPlafond.ImportoTotale,
+        //                    DataVersamento = nuovoPlafond.DataVersamento,
+        //                    DataInizio = nuovoPlafond.DataInizio,
+        //                    ID_UtenteCreatore = nuovoPlafond.ID_UtenteCreatore,
+        //                    ID_UtenteInserimento = nuovoPlafond.ID_UtenteInserimento,
+        //                    DataInserimento = nuovoPlafond.DataInserimento,
+        //                    NumeroVersione = 1,
+        //                    ModificheTestuali = $"✏️ Modifica plafond generata automaticamente dal sistema in data {now:g}"
+        //                });
+        //            }
+        //        }
+
+        //        // 🔄 Aggiorna stato Avviso
+        //        avviso.Stato = "Pagato";
+        //        avviso.DataModifica = now;
+        //        avviso.ID_UtenteModifica = idUtenteCorrente;
+        //        db.Entry(avviso).State = System.Data.Entity.EntityState.Modified;
+
+        //        db.SaveChanges();
+
+        //        return Json(new { success = true, message = "✅ Incasso modificato e aggiornato correttamente." });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return Json(new { success = false, message = "Errore durante la modifica: " + ex.Message });
+        //    }
+        //}
 
 
+        /* Modifca commentata in data 20/10/2025 in quanto reputo che la modifica per l'incassi non va bene */
+        //[HttpGet]
+        //public ActionResult GetIncasso(int id)
+        //{
+        //    try
+        //    {
+        //        var incasso = (from i in db.Incassi
+        //                       join p in db.Pratiche on i.ID_Pratiche equals p.ID_Pratiche into praticaJoin
+        //                       from p in praticaJoin.DefaultIfEmpty()
 
+        //                       join a in db.AvvisiParcella on i.ID_AvvisoParcella equals a.ID_AvvisoParcelle into avvisoJoin
+        //                       from a in avvisoJoin.DefaultIfEmpty()
 
+        //                       where i.ID_Incasso == id
+        //                       select new
+        //                       {
+        //                           i.ID_Incasso,
+        //                           i.ID_Pratiche,
+        //                           i.ID_AvvisoParcella,
+        //                           i.DataIncasso,
+        //                           i.Importo,
+        //                           i.ModalitaPagamento,
+        //                           i.ID_UtenteCreatore,
+        //                           i.VersaInPlafond,
+        //                           PraticaTitolo = p.Titolo,
+        //                           Budget = p.Budget,
+        //                           AvvisoImporto = a.Importo,
+        //                           AvvisoTotale = a.TotaleAvvisiParcella,
+        //                           AvvisoIVA = a.ImportoIVA,
+        //                           AvvisoAliquota = a.AliquotaIVA,
+        //                           AvvisoContributo = a.ContributoIntegrativoImporto,
+        //                           AvvisoDataCompetenza = a.DataAvviso
+        //                       }).FirstOrDefault();
 
-        [HttpGet]
-        public ActionResult GetIncasso(int id)
-        {
-            try
-            {
-                var incasso = (from i in db.Incassi
-                               join p in db.Pratiche on i.ID_Pratiche equals p.ID_Pratiche into praticaJoin
-                               from p in praticaJoin.DefaultIfEmpty()
+        //        if (incasso == null)
+        //            return Json(new { success = false, message = "Incasso non trovato." }, JsonRequestBehavior.AllowGet);
 
-                               join a in db.AvvisiParcella on i.ID_AvvisoParcella equals a.ID_AvvisoParcelle into avvisoJoin
-                               from a in avvisoJoin.DefaultIfEmpty()
+        //        // 🔹 Calcola il netto per il plafond
+        //        decimal totaleAvviso = (decimal)(incasso.AvvisoTotale ?? incasso.AvvisoImporto ?? 0m);
+        //        decimal iva = incasso.AvvisoIVA ?? 0m;
+        //        decimal contributoIntegrativo = incasso.AvvisoContributo ?? 0m;
 
-                               where i.ID_Incasso == id
-                               select new IncassoViewModel
-                               {
-                                   ID_Incasso = i.ID_Incasso,
-                                   ID_Pratiche = i.ID_Pratiche ?? 0,
-                                   ID_AvvisoParcella = i.ID_AvvisoParcella ?? 0,
-                                   DataIncasso = i.DataIncasso, // ✅ DateTime?
+        //        // 🔹 Spese generali
+        //        decimal? speseGenerali = db.BilancioProfessionista
+        //            .Where(b => b.ID_Pratiche == incasso.ID_Pratiche &&
+        //                        b.Categoria == "Spese Generali" &&
+        //                        b.Stato != "Annullato")
+        //            .Select(b => (decimal?)b.Importo)
+        //            .DefaultIfEmpty(0)
+        //            .Sum();
 
-                                   Importo = i.Importo,
-                                   MetodoPagamento = i.ModalitaPagamento,
-                                   ID_UtenteCreatore = i.ID_UtenteCreatore,
-                                   VersaInPlafond = i.VersaInPlafond == true,
+        //        decimal importoNettoPlafond = Math.Round((totaleAvviso + (speseGenerali ?? 0) - iva - contributoIntegrativo), 2);
 
-                                   // Dati Pratica
-                                   NomePratica = p != null ? p.Titolo : "(Pratica sconosciuta)",
-                                   TotalePratica = p != null ? p.Budget : 0,
+        //        var vm = new IncassoViewModel
+        //        {
+        //            ID_Incasso = incasso.ID_Incasso,
+        //            ID_Pratiche = incasso.ID_Pratiche ?? 0,
+        //            ID_AvvisoParcella = incasso.ID_AvvisoParcella ?? 0,
+        //            DataIncasso = incasso.DataIncasso,
+        //            Importo = incasso.Importo,
+        //            MetodoPagamento = incasso.ModalitaPagamento,
+        //            ID_UtenteCreatore = incasso.ID_UtenteCreatore,
+        //            VersaInPlafond = incasso.VersaInPlafond == true,
 
-                                   // Dati Avviso Parcella
-                                   ImportoAvviso = a != null ? a.Importo : 0,
-                                   ImportoIVA = a != null ? a.ImportoIVA : 0,
-                                   AliquotaIVA = a != null ? a.AliquotaIVA : 0
-                               }).FirstOrDefault();
+        //            // 🔹 Dati Pratica
+        //            NomePratica = incasso.PraticaTitolo ?? "(Pratica sconosciuta)",
+        //            TotalePratica = incasso.Budget,
 
-                if (incasso == null)
-                    return Json(new { success = false, message = "Incasso non trovato." }, JsonRequestBehavior.AllowGet);
+        //            // 🔹 Dati Avviso Parcella
+        //            ImportoAvviso = incasso.AvvisoImporto ?? 0m,
+        //            ImportoIVA = incasso.AvvisoIVA ?? 0m,
+        //            AliquotaIVA = incasso.AvvisoAliquota ?? 0m,
+        //            DataCompetenza = incasso.AvvisoDataCompetenza,
+        //            DescrizioneAvvisoParcella = $"Avviso parcella #{incasso.ID_AvvisoParcella} – Competenza {incasso.AvvisoDataCompetenza:dd/MM/yyyy}",
 
-                // ✅ TEST OUTPUT SU CONSOLE
-                System.Diagnostics.Debug.WriteLine("🟡 DataIncasso restituita: " + (incasso.DataIncasso?.ToString("yyyy-MM-dd") ?? "NULL"));
+        //            // 🔹 Calcolato
+        //            UtileNetto = importoNettoPlafond
+        //        };
 
-                return Json(new { success = true, incasso }, JsonRequestBehavior.AllowGet);
-            }
-            catch (Exception ex)
-            {
-                return Json(new { success = false, message = "Errore durante il caricamento: " + ex.Message }, JsonRequestBehavior.AllowGet);
-            }
-        }
+        //        System.Diagnostics.Debug.WriteLine($"🟢 [GetIncasso] Restituito incasso ID {id}, netto plafond = {importoNettoPlafond:N2}");
 
+        //        return Json(new { success = true, incasso = vm }, JsonRequestBehavior.AllowGet);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return Json(new { success = false, message = "Errore durante il caricamento: " + ex.Message }, JsonRequestBehavior.AllowGet);
+        //    }
+        //}
 
 
         [HttpPost]
@@ -9332,6 +13641,13 @@ namespace SinergiaMvc.Controllers
                 if (incasso == null)
                     return Json(new { success = false, message = "Incasso non trovato." });
 
+                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == incasso.ID_Pratiche);
+                var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == incasso.ID_AvvisoParcella);
+                DateTime now = DateTime.Now;
+
+                System.Diagnostics.Trace.WriteLine($"🗑️ [EliminaIncasso] Inizio eliminazione incasso ID={id} per pratica {pratica?.ID_Pratiche}");
+                System.Diagnostics.Trace.WriteLine("──────────────────────────────────────────────");
+
                 // 🔢 Numero versione precedente
                 int ultimaVersione = db.Incassi_a
                     .Where(i => i.ID_Archivio == incasso.ID_Incasso)
@@ -9339,7 +13655,7 @@ namespace SinergiaMvc.Controllers
                     .Select(i => (int?)i.NumeroVersione)
                     .FirstOrDefault() ?? 0;
 
-                // 🗂 Archivia la versione prima dell'eliminazione
+                // 🗂 Archivia incasso prima della rimozione
                 db.Incassi_a.Add(new Incassi_a
                 {
                     ID_Archivio = incasso.ID_Incasso,
@@ -9349,87 +13665,687 @@ namespace SinergiaMvc.Controllers
                     ModalitaPagamento = incasso.ModalitaPagamento,
                     ID_UtenteCreatore = incasso.ID_UtenteCreatore,
                     VersaInPlafond = incasso.VersaInPlafond ?? false,
-                    DataArchiviazione = DateTime.Now,
+                    DataArchiviazione = now,
                     NumeroVersione = ultimaVersione + 1,
-                    ModificheTestuali = $"🗑️ Eliminazione incasso effettuata da ID_Utente = {idUtenteCorrente} il {DateTime.Now:dd/MM/yyyy HH:mm}"
+                    ModificheTestuali = $"🗑️ Eliminazione incasso eseguita da utente ID={idUtenteCorrente} in data {now:g}"
                 });
 
-                // 🧹 Rimozione voci collegate
+                // 🔁 Archivia e rimuovi eventuali righe di plafond collegate
+                var plafonds = db.PlafondUtente.Where(p => p.ID_Incasso == incasso.ID_Incasso).ToList();
+                foreach (var pl in plafonds)
+                {
+                    int ultimaVerPl = db.PlafondUtente_a
+                        .Where(a => a.ID_PlannedPlafond_Archivio == pl.ID_PlannedPlafond)
+                        .OrderByDescending(a => a.NumeroVersione)
+                        .Select(a => (int?)a.NumeroVersione)
+                        .FirstOrDefault() ?? 0;
 
-                // 🔁 Bilancio
-                db.BilancioProfessionista.RemoveRange(db.BilancioProfessionista
-                    .Where(b => b.ID_Incasso == incasso.ID_Incasso));
+                    db.PlafondUtente_a.Add(new PlafondUtente_a
+                    {
+                        ID_PlannedPlafond_Archivio = pl.ID_PlannedPlafond,
+                        ID_Utente = pl.ID_Utente,
+                        ID_Incasso = pl.ID_Incasso,
+                        ID_Pratiche = pl.ID_Pratiche,
+                        TipoPlafond = pl.TipoPlafond,
+                        Importo = pl.Importo,
+                        ImportoTotale = pl.ImportoTotale,
+                        DataVersamento = pl.DataVersamento,
+                        DataInizio = pl.DataInizio,
+                        DataFine = pl.DataFine,
+                        ID_UtenteCreatore = pl.ID_UtenteCreatore,
+                        ID_UtenteInserimento = pl.ID_UtenteInserimento,
+                        DataInserimento = pl.DataInserimento,
+                        DataArchiviazione = now,
+                        NumeroVersione = ultimaVerPl + 1,
+                        ModificheTestuali = $"🗑️ Eliminazione automatica plafond da incasso ID={incasso.ID_Incasso}"
+                    });
+                }
 
-                // 🔁 PlafondUtente (se presente)
-                db.PlafondUtente.RemoveRange(db.PlafondUtente
-                    .Where(p => p.ID_Incasso == incasso.ID_Incasso));
+                // 🧹 Elimina plafonds collegati (dopo archiviazione)
+                if (plafonds.Any())
+                {
+                    System.Diagnostics.Trace.WriteLine($"🧹 Eliminazione {plafonds.Count} righe da PlafondUtente (collegate all’incasso {incasso.ID_Incasso})");
+                    db.PlafondUtente.RemoveRange(plafonds);
+                }
 
-                // 🔁 CompensiPratica (solo quelli derivati da incasso)
-                db.CompensiPratica.RemoveRange(db.CompensiPratica
+                // 🧹 Elimina voci da BilancioProfessionista collegate all’incasso
+                var bilancioVoci = db.BilancioProfessionista
+                    .Where(b => b.ID_Incasso == incasso.ID_Incasso)
+                    .ToList();
+
+                if (bilancioVoci.Any())
+                {
+                    System.Diagnostics.Trace.WriteLine($"🧾 Rimozione {bilancioVoci.Count} voci da BilancioProfessionista (origine 'Incasso')");
+                    db.BilancioProfessionista.RemoveRange(bilancioVoci);
+                }
+
+                // 🔁 Elimina compensi collegati (creati al momento dell’incasso)
+                var compensi = db.CompensiPratica
                     .Where(c => c.ID_Pratiche == incasso.ID_Pratiche &&
                                 c.Tipo == "Incasso" &&
-                                c.Importo == incasso.Importo));
+                                c.ID_UtenteDestinatario != null)
+                    .ToList();
 
-                // ❌ Rimozione incasso
+                if (compensi.Any())
+                {
+                    System.Diagnostics.Trace.WriteLine($"💼 Eliminazione {compensi.Count} compensi collegati a incasso (CompensiPratica).");
+                    db.CompensiPratica.RemoveRange(compensi);
+                }
+
+                // 🔁 Aggiorna stato avviso parcella (se presente)
+                if (avviso != null)
+                {
+                    decimal altriIncassi = db.Incassi
+                        .Where(i => i.ID_AvvisoParcella == avviso.ID_AvvisoParcelle && i.ID_Incasso != incasso.ID_Incasso)
+                        .Select(i => (decimal?)i.Importo)
+                        .DefaultIfEmpty(0)
+                        .Sum() ?? 0m;
+
+                    decimal totaleAvviso = avviso.TotaleAvvisiParcella ?? avviso.Importo ?? 0m;
+                    decimal residuo = totaleAvviso - altriIncassi;
+
+                    if (residuo <= 0)
+                        avviso.Stato = "Pagato";
+                    else if (altriIncassi > 0 && residuo > 0)
+                        avviso.Stato = "Parziale";
+                    else
+                        avviso.Stato = "Inviato";
+
+                    avviso.DataModifica = now;
+                    avviso.ID_UtenteModifica = idUtenteCorrente;
+                    db.Entry(avviso).State = System.Data.Entity.EntityState.Modified;
+
+                    System.Diagnostics.Trace.WriteLine($"📄 [Avviso] Stato aggiornato → {avviso.Stato} (Residuo {residuo:N2} €)");
+                }
+
+                // 🧹 Elimina incasso effettivo
                 db.Incassi.Remove(incasso);
-
                 db.SaveChanges();
 
-                return Json(new { success = true, message = "✅ Incasso eliminato correttamente." });
+                System.Diagnostics.Trace.WriteLine($"✅ [EliminaIncasso] Completata eliminazione per incasso {id}.\n");
+
+                return Json(new
+                {
+                    success = true,
+                    message = $"✅ Incasso eliminato. {(avviso != null ? $"Avviso #{avviso.ID_AvvisoParcelle} ora '{avviso.Stato}'" : "Nessun avviso collegato")}."
+                });
+            }
+            catch (System.Data.Entity.Validation.DbEntityValidationException ex)
+            {
+                var dettagli = string.Join("; ",
+                    ex.EntityValidationErrors.SelectMany(e => e.ValidationErrors)
+                        .Select(v => $"Campo: {v.PropertyName} → Errore: {v.ErrorMessage}"));
+
+                System.Diagnostics.Trace.WriteLine($"❌ [EliminaIncasso] Errore validazione: {dettagli}");
+                return Json(new { success = false, message = "Errore validazione Entity: " + dettagli });
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Trace.WriteLine($"❌ [EliminaIncasso] Errore generico: {ex}");
                 return Json(new { success = false, message = "Errore durante l'eliminazione: " + ex.Message });
+            }
+        }
+
+        [HttpGet]
+        public ActionResult GetDatiIncassoDaAvviso(int idAvviso)
+        {
+            try
+            {
+                System.Diagnostics.Trace.WriteLine($"🔍 [GetDatiIncassoDaAvviso] ID avviso: {idAvviso}");
+
+                // =====================================================
+                // 🔗 JOIN COMPLETA
+                // =====================================================
+                var avv = (from av in db.AvvisiParcella
+                           join pr in db.Pratiche on av.ID_Pratiche equals pr.ID_Pratiche
+                           join c in db.Clienti on pr.ID_Cliente equals c.ID_Cliente
+                           join ow in db.OperatoriSinergia on c.ID_Operatore equals ow.ID_Cliente into joinOwner
+                           from ow in joinOwner.DefaultIfEmpty()
+                           join resp in db.Utenti on pr.ID_UtenteResponsabile equals resp.ID_Utente into joinResp
+                           from resp in joinResp.DefaultIfEmpty()
+                           where av.ID_AvvisoParcelle == idAvviso
+                           select new
+                           {
+                               Avviso = av,
+                               Pratica = pr,
+                               Cliente = c,
+                               Owner = ow,
+                               Responsabile = resp
+                           }).FirstOrDefault();
+
+                if (avv == null)
+                    return Json(new { success = false, message = "Avviso parcella non trovato." }, JsonRequestBehavior.AllowGet);
+
+                var avviso = avv.Avviso;
+                var pratica = avv.Pratica;
+                var cliente = avv.Cliente;
+                var owner = avv.Owner;
+                var responsabile = avv.Responsabile;
+
+                // =====================================================
+                // 💰 CALCOLI BASE IMPORTI
+                // =====================================================
+                decimal importoImponibile = avviso.Importo ?? 0;
+                decimal percentualeSpeseGenerali = avviso.RimborsoSpesePercentuale ?? 0;
+                decimal percentualeContributoIntegrativo = avviso.ContributoIntegrativoPercentuale ?? 0;
+                decimal aliquotaIVA = avviso.AliquotaIVA ?? 0;
+                decimal importoIVA = avviso.ImportoIVA ?? 0;
+                decimal totaleAvviso = avviso.TotaleAvvisiParcella ?? avviso.Importo ?? 0m;
+
+                bool stessoProfessionista = (owner != null && responsabile != null)
+                    ? owner.ID_Cliente == responsabile.ID_Utente
+                    : false;
+
+                // =====================================================
+                // 🧩 OWNER FEE DAL CLUSTER
+                // =====================================================
+                decimal percentualeOwner = 0m;
+                var clusterOwner = db.Cluster
+                    .Where(c => c.ID_Pratiche == pratica.ID_Pratiche && c.TipoCluster == "Owner")
+                    .OrderByDescending(c => c.DataAssegnazione)
+                    .FirstOrDefault();
+
+                if (clusterOwner != null)
+                    percentualeOwner = clusterOwner.PercentualePrevisione;
+
+                // =====================================================
+                // 🏛️ TRATTENUTA SINERGIA
+                // =====================================================
+                decimal percentualeTrattenutaSinergia = 0m;
+                var ricorrenzaTrattenuta = db.RicorrenzeCosti
+                    .FirstOrDefault(r => r.Categoria == "Trattenuta Sinergia" &&
+                                         r.TipoValore == "Percentuale" &&
+                                         r.Attivo == true);
+
+                if (ricorrenzaTrattenuta != null)
+                    percentualeTrattenutaSinergia = ricorrenzaTrattenuta.Valore;
+
+                decimal quotaTrattenutaSinergia = Math.Round(importoImponibile * (percentualeTrattenutaSinergia / 100m), 2);
+                decimal baseDopoTrattenuta = importoImponibile - quotaTrattenutaSinergia;
+
+                System.Diagnostics.Trace.WriteLine($"💰 Trattenuta Sinergia {percentualeTrattenutaSinergia:N1}% = {quotaTrattenutaSinergia:N2} €");
+                System.Diagnostics.Trace.WriteLine($"➡️ Base dopo trattenuta Sinergia = {baseDopoTrattenuta:N2} €");
+
+                // =====================================================
+                // 👥 COLLABORATORI DA CLUSTER (su base post-trattenuta)
+                // =====================================================
+                var listaCollaboratoriCluster = new List<dynamic>();
+
+                var clusterList = (
+                    from c in db.Cluster
+                    join u in db.Utenti on c.ID_Utente equals u.ID_Utente into joinUtente
+                    from u in joinUtente.DefaultIfEmpty()
+                    join o in db.OperatoriSinergia on c.ID_Utente equals o.ID_Cliente into joinOperatore
+                    from o in joinOperatore.DefaultIfEmpty()
+                    where c.ID_Pratiche == pratica.ID_Pratiche && c.TipoCluster == "Collaboratore"
+                    select new { c, u, o }
+                ).ToList();
+
+                decimal totaleCollaboratoriCluster = 0m;
+                foreach (var item in clusterList)
+                {
+                    decimal perc = Math.Max(0, Math.Min(100, item.c.PercentualePrevisione));
+                    decimal importoCalc = Math.Round(baseDopoTrattenuta * (perc / 100m), 2);
+                    totaleCollaboratoriCluster += importoCalc;
+
+                    string nome = item.u != null
+                        ? $"{item.u.Nome} {item.u.Cognome}"
+                        : (item.o != null ? $"{item.o.Nome} {item.o.Cognome}" : "—");
+
+                    listaCollaboratoriCluster.Add(new
+                    {
+                        ID_Utente = item.c.ID_Utente,
+                        Nome = nome,
+                        Percentuale = perc,
+                        Importo = importoCalc
+                    });
+                }
+
+                // =====================================================
+                // 👥 COLLABORATORI DA COMPENSI DETTAGLIO (JSON)
+                // =====================================================
+                var listaCollaboratoriDettaglio = new List<object>();
+                int? idCompenso = avviso.ID_CompensoOrigine;
+
+                var compensi = db.CompensiPraticaDettaglio
+                    .Where(c => c.ID_Pratiche == pratica.ID_Pratiche &&
+                                (!idCompenso.HasValue || c.ID_RigaCompenso == idCompenso.Value))
+                    .ToList();
+
+                decimal totaleCollaboratoriDettaglio = 0m;
+                foreach (var comp in compensi)
+                {
+                    if (!string.IsNullOrEmpty(comp.Collaboratori))
+                    {
+                        var collaboratori = Newtonsoft.Json.JsonConvert.DeserializeObject<List<dynamic>>(comp.Collaboratori);
+
+                        foreach (var coll in collaboratori)
+                        {
+                            decimal perc = (decimal)(coll.Percentuale ?? 0);
+                            if (perc <= 0) continue;
+
+                            decimal quota = Math.Round(baseDopoTrattenuta * (perc / 100m), 2);
+                            totaleCollaboratoriDettaglio += quota;
+
+                            listaCollaboratoriDettaglio.Add(new
+                            {
+                                Nome = (string)(coll.NomeCollaboratore ?? "-"),
+                                Percentuale = perc,
+                                Importo = quota
+                            });
+                        }
+                    }
+                }
+
+                // =====================================================
+                // 📊 SPESE GENERALI (su base post-trattenuta)
+                // =====================================================
+                decimal speseGeneraliImporto = Math.Round(baseDopoTrattenuta * (percentualeSpeseGenerali / 100m), 2);
+
+                // =====================================================
+                // 💶 OWNER FEE (su base post-trattenuta)
+                // =====================================================
+                decimal quotaOwner = (!stessoProfessionista && percentualeOwner > 0)
+                    ? Math.Round(baseDopoTrattenuta * (percentualeOwner / 100m), 2)
+                    : 0m;
+
+                // =====================================================
+                // 🧾 CONTRIBUTO INTEGRATIVO (su base post-trattenuta)
+                // =====================================================
+                decimal contributoIntegrativoImporto = Math.Round(baseDopoTrattenuta * (percentualeContributoIntegrativo / 100m), 2);
+
+                // =====================================================
+                // 💶 CALCOLO NETTO PROFESSIONISTA
+                // =====================================================
+                decimal totaleCollaboratori = totaleCollaboratoriCluster + totaleCollaboratoriDettaglio;
+                decimal importoNettoFinale = Math.Round(
+                    (baseDopoTrattenuta + speseGeneraliImporto)
+                    - (quotaOwner + contributoIntegrativoImporto + totaleCollaboratori),
+                    2);
+
+                // =====================================================
+                // 📦 MODELLO RISPOSTA COMPLETO
+                // =====================================================
+                var model = new
+                {
+                    ID_AvvisoParcelle = avviso.ID_AvvisoParcelle,
+                    TitoloAvviso = avviso.TitoloAvviso,
+                    ID_Pratiche = pratica.ID_Pratiche,
+                    NomePratica = pratica.Titolo,
+                    NomeCliente = cliente != null
+                        ? (!string.IsNullOrEmpty(cliente.RagioneSociale)
+                            ? cliente.RagioneSociale
+                            : $"{cliente.Nome} {cliente.Cognome}")
+                        : "-",
+                    NomeOwner = owner != null ? $"{owner.Nome} {owner.Cognome}" : "-",
+                    NomeResponsabile = responsabile != null ? $"{responsabile.Nome} {responsabile.Cognome}" : "-",
+
+                    TotaleAvviso = totaleAvviso,
+                    ImportoImponibile = importoImponibile,
+                    ImportoIVA = importoIVA,
+                    AliquotaIVA = aliquotaIVA,
+                    BaseDopoTrattenuta = baseDopoTrattenuta,
+                    QuotaTrattenutaSinergia = quotaTrattenutaSinergia,
+                    PercentualeTrattenutaSinergia = percentualeTrattenutaSinergia,
+                    PercentualeOwner = percentualeOwner,
+                    QuotaOwner = quotaOwner,
+                    PercentualeSpeseGenerali = percentualeSpeseGenerali,
+                    SpeseGeneraliImporto = speseGeneraliImporto,
+                    PercentualeContributoIntegrativo = percentualeContributoIntegrativo,
+                    ContributoIntegrativoImporto = contributoIntegrativoImporto,
+
+                    CollaboratoriCluster = listaCollaboratoriCluster,
+                    CollaboratoriDettaglio = listaCollaboratoriDettaglio,
+                    TotaleCollaboratori = totaleCollaboratori,
+
+                    ImportoNettoFinale = importoNettoFinale
+                };
+
+                return Json(new { success = true, dati = model }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("❌ Errore GetDatiIncassoDaAvviso: " + ex);
+                return Json(new { success = false, message = ex.Message }, JsonRequestBehavior.AllowGet);
             }
         }
 
 
         [HttpGet]
-        public ActionResult RiepilogoTrattenuteESinergia(int idPratica)
+        public ActionResult RiepilogoTrattenuteESinergia(int idAvviso)
         {
-            using (var db = new SinergiaDB())
-            {
-                DateTime oggi = DateTime.Today;
-                DateTime primoDelMese = new DateTime(oggi.Year, oggi.Month, 1);
-                DateTime primoDelMeseSuccessivo = primoDelMese.AddMonths(1);
+            System.Diagnostics.Trace.WriteLine("═══════════════════════════════════════════════════");
+            System.Diagnostics.Trace.WriteLine($"📥 [RiepilogoTrattenuteESinergia] Avvio metodo per ID_AvvisoParcella = {idAvviso}");
+            System.Diagnostics.Trace.WriteLine($"🕓 {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
 
-                var lista = (
-                    from b in db.BilancioProfessionista
-                    join p in db.Pratiche on b.ID_Pratiche equals p.ID_Pratiche into praticheJoin
-                    from p in praticheJoin.DefaultIfEmpty()
-                    join os in db.OperatoriSinergia on b.ID_Professionista equals os.ID_Cliente into osJoin
-                    from os in osJoin.DefaultIfEmpty()
-                    join u in db.Utenti on os.ID_UtenteCollegato equals u.ID_Utente into utentiJoin
-                    from u in utentiJoin.DefaultIfEmpty()
-                    where
-                        b.ID_Pratiche == idPratica && // ✅ FILTRO per la pratica selezionata
-                        (
-                            b.Categoria == "Trattenuta Sinergia" ||
-                            b.Categoria == "Trattenuta Sinergia Personalizzata"
-                        // Se hai rimosso "Costo Resident", puoi togliere anche qui
-                        ) &&
-                        DbFunctions.TruncateTime(b.DataRegistrazione) >= primoDelMese &&
-                        DbFunctions.TruncateTime(b.DataRegistrazione) < primoDelMeseSuccessivo &&
-                        (
-                            p == null ||
-                            (p.Stato == "Contrattualizzazione" || p.Stato == "Lavorazione" || p.Stato == "Concluse")
-                        )
-                    select new RicavoSinergiaViewModel
+            try
+            {
+                using (var db = new SinergiaDB())
+                {
+                    DateTime oggi = DateTime.Today;
+                    DateTime primoDelMese = new DateTime(oggi.Year, oggi.Month, 1);
+                    DateTime primoDelMeseSuccessivo = primoDelMese.AddMonths(1);
+
+                    var listaGrezza = (
+                        from b in db.BilancioProfessionista
+                        join i in db.Incassi on b.ID_Incasso equals i.ID_Incasso
+                        join a in db.AvvisiParcella on i.ID_AvvisoParcella equals a.ID_AvvisoParcelle
+                        join p in db.Pratiche on b.ID_Pratiche equals p.ID_Pratiche into joinPratiche
+                        from p in joinPratiche.DefaultIfEmpty()
+                        join u in db.Utenti on b.ID_Professionista equals u.ID_Utente into joinU
+                        from u in joinU.DefaultIfEmpty()
+                        where
+                            a.ID_AvvisoParcelle == idAvviso &&
+                            a.Stato == "Pagato" &&
+                            b.Origine == "Incasso" &&
+                            (
+                                b.Categoria == "Trattenuta Sinergia" ||
+                                b.Categoria == "Rimborso Spese Sinergia"
+                            ) &&
+                            DbFunctions.TruncateTime(b.DataRegistrazione) >= primoDelMese &&
+                            DbFunctions.TruncateTime(b.DataRegistrazione) < primoDelMeseSuccessivo
+                        select new
+                        {
+                            b.ID_Bilancio,
+                            b.ID_Pratiche,
+                            b.ID_Professionista,
+                            TitoloPratica = p.Titolo,
+                            Nome = u.Nome,
+                            Cognome = u.Cognome,
+                            b.Categoria,
+                            b.Importo,
+                            b.DataRegistrazione,
+                            b.Origine,
+                            ID_Avviso = a.ID_AvvisoParcelle,
+                            StatoAvviso = a.Stato,
+                            ImportoAvviso = a.Importo,
+                            TotaleAvviso = a.TotaleAvvisiParcella,
+                            i.DataIncasso
+                        }
+                    ).ToList();
+
+                    var lista = listaGrezza.Select(x => new RicavoSinergiaViewModel
                     {
-                        ID_Pratiche = b.ID_Pratiche,
-                        ID_Professionista = b.ID_Professionista,
-                        Titolo = p != null ? p.Titolo : "N.D.",
-                        NomeProfessionista = u != null ? u.Nome + " " + u.Cognome : "N.D.",
-                        Categoria = b.Categoria,
-                        Importo = b.Importo,
-                        DataRegistrazione = b.DataRegistrazione
+                        ID_Pratiche = x.ID_Pratiche,
+                        ID_Professionista = x.ID_Professionista,
+                        Titolo = x.TitoloPratica ?? "N.D.",
+                        NomeProfessionista = (x.Nome != null && x.Cognome != null)
+                            ? $"{x.Nome} {x.Cognome}"
+                            : "N.D.",
+                        Categoria = x.Categoria,
+                        Importo = x.Importo,
+                        DataRegistrazione = x.DataRegistrazione,
+                        DataIncasso = x.DataIncasso,
+                        StatoAvviso = x.StatoAvviso,
+                        DescrizioneAvviso = $"Avviso Parcella #{x.ID_Avviso}",
+                        ImportoAvviso = x.ImportoAvviso ?? 0m,
+                        TotaleAvviso = x.TotaleAvviso ?? 0m
                     }).ToList();
 
-                return PartialView("~/Views/Incassi/_RiepilogoRicaviSinergia.cshtml", lista);
+                    System.Diagnostics.Trace.WriteLine($"✅ [RiepilogoTrattenuteESinergia] Query OK → {lista.Count} righe trovate.");
+                    return PartialView("~/Views/Incassi/_RiepilogoRicaviSinergia.cshtml", lista);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("❌ [RiepilogoTrattenuteESinergia] ERRORE!");
+                System.Diagnostics.Trace.WriteLine($"💬 {ex.Message}");
+                return Content($"<div style='padding:20px;color:red;font-weight:bold'>❌ Errore nel riepilogo Sinergia:<br>{ex.Message}</div>");
             }
         }
 
 
+        [HttpGet]
+        public ActionResult GetDettaglioIncasso(int id)
+        {
+            try
+            {
+                var incasso = db.Incassi.FirstOrDefault(i => i.ID_Incasso == id);
+                if (incasso == null)
+                    return Json(new { success = false, message = "Incasso non trovato." },
+                                JsonRequestBehavior.AllowGet);
+
+                var avviso = db.AvvisiParcella.FirstOrDefault(a => a.ID_AvvisoParcelle == incasso.ID_AvvisoParcella);
+                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == incasso.ID_Pratiche);
+
+                // ============================================================
+                // 💰 IMPORTO TOTALE DELL'AVVISO (Importo + IVA + Contributo)
+                // ============================================================
+                decimal importoTotale = 0;
+                if (avviso != null)
+                {
+                    importoTotale =
+                        (avviso.Importo ?? 0) +
+                        (avviso.ImportoIVA ?? 0) +
+                        (avviso.ContributoIntegrativoImporto ?? 0);
+                }
+                else
+                {
+                    importoTotale = incasso.Importo;
+                }
+
+                // ============================================================
+                // 📦 COSTRUZIONE OGGETTO RISULTATO
+                // ============================================================
+                var result = new
+                {
+                    ID_Incasso = incasso.ID_Incasso,
+                    Pratica = pratica?.Titolo ?? "(N/D)",
+                    Avviso = avviso?.ID_AvvisoParcelle.ToString() ?? "(N/D)",
+                    TitoloAvviso = avviso?.TitoloAvviso ?? "(Senza titolo)",
+
+                    DataCompetenzaEconomica = Convert.ToDateTime(incasso.DataCompetenzaEconomica).ToString("dd/MM/yyyy"),
+                    DataCompetenzaFinanziaria = Convert.ToDateTime(incasso.DataCompetenzaFinanziaria).ToString("dd/MM/yyyy"),
+                    DataIncasso = Convert.ToDateTime(incasso.DataIncasso).ToString("dd/MM/yyyy"),
+
+                    MetodoPagamento = incasso.ModalitaPagamento ?? avviso?.MetodoPagamento ?? "—",
+                    ImportoTotale = $"{importoTotale:N2} €",
+                    VersaInPlafond = incasso.VersaInPlafond == true ? "Sì" :
+                                     incasso.VersaInPlafond == false ? "No" : "(N/D)",
+                    Note = incasso.Note ?? ""
+                };
+
+                return Json(new { success = true, data = result }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ [GetDettaglioIncasso] Errore: {ex}");
+                return Json(new { success = false, message = "Errore durante il caricamento del dettaglio incasso." },
+                            JsonRequestBehavior.AllowGet);
+            }
+        }
+
+
+
+        //[HttpGet]
+        //public ActionResult GetDatiAvvisoParcella(int idPratica)
+        //{
+        //    try
+        //    {
+        //        var avviso = (
+        //            from a in db.AvvisiParcella
+        //            join p in db.Pratiche on a.ID_Pratiche equals p.ID_Pratiche
+        //            where a.ID_Pratiche == idPratica
+        //                  && a.Stato != "Eliminato"
+        //                  && a.Stato != "Pagato" // 🔹 Evita di proporre avvisi già saldati
+        //            orderby a.DataAvviso descending
+        //            select new
+        //            {
+        //                a.ID_AvvisoParcelle,
+        //                a.DataAvviso,
+        //                a.Stato,
+        //                a.MetodoPagamento,
+        //                a.Importo,
+        //                a.ImportoIVA,
+        //                a.TotaleAvvisiParcella,
+        //                p.Titolo,
+        //                p.Budget
+        //            }).FirstOrDefault();
+
+        //        if (avviso == null)
+        //        {
+        //            return Json(new
+        //            {
+        //                success = true,
+        //                avviso = "Nessun avviso da incassare",
+        //                importoSenzaIVA = 0m,
+        //                importoConIVA = 0m,
+        //                metodoPagamento = "",
+        //                nomePratica = "(Nessuna pratica trovata o avviso già pagato)",
+        //                totalePratica = 0m,
+        //                dataAvviso = (DateTime?)null,
+        //                stato = ""
+        //            }, JsonRequestBehavior.AllowGet);
+        //        }
+
+        //        // ✅ Restituisce dati più completi per la modale incasso
+        //        return Json(new
+        //        {
+        //            success = true,
+        //            idAvvisoParcella = avviso.ID_AvvisoParcelle,
+        //            descrizioneAvviso = $"Avviso parcella #{avviso.ID_AvvisoParcelle}",
+        //            dataAvviso = avviso.DataAvviso?.ToString("dd/MM/yyyy"),
+        //            stato = avviso.Stato,
+        //            importoSenzaIVA = avviso.Importo ?? 0m,
+        //            importoIVA = avviso.ImportoIVA ?? 0m,
+        //            importoConIVA = avviso.TotaleAvvisiParcella ?? 0m,
+        //            metodoPagamento = avviso.MetodoPagamento,
+        //            nomePratica = avviso.Titolo,
+        //            totalePratica = avviso.Budget
+        //        }, JsonRequestBehavior.AllowGet);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return Json(new
+        //        {
+        //            success = false,
+        //            message = "Errore durante il recupero dati avviso: " + ex.Message
+        //        }, JsonRequestBehavior.AllowGet);
+        //    }
+        //}
+
+        [HttpGet]
+        public ActionResult EsportaIncassiCsv(DateTime? da, DateTime? a)
+        {
+            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+            var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
+
+            if (utenteCorrente == null)
+                return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
+
+            // 📅 Periodo (mese corrente se non specificato)
+            DateTime inizio = da ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            DateTime fine = a ?? DateTime.Today.AddDays(1).AddTicks(-1);
+
+            // 🔹 Recupera incassi nel periodo con join agli avvisi e pratiche
+            var incassi = (
+                from i in db.Incassi
+                join p in db.Pratiche on i.ID_Pratiche equals p.ID_Pratiche into praticheJoin
+                from p in praticheJoin.DefaultIfEmpty()
+
+                join avv in db.AvvisiParcella on i.ID_AvvisoParcella equals avv.ID_AvvisoParcelle into avvisiJoin
+                from avv in avvisiJoin.DefaultIfEmpty()
+
+                where i.DataIncasso >= inizio && i.DataIncasso <= fine
+                orderby i.DataIncasso
+                select new
+                {
+                    i.ID_Incasso,
+                    Pratica = p.Titolo,
+                    i.DataIncasso,
+                    i.Importo,
+                    i.ModalitaPagamento,
+                    i.VersaInPlafond,
+                    ID_AvvisoParcella = avv.ID_AvvisoParcelle,
+                    StatoAvviso = avv.Stato,
+                    DataAvviso = avv.DataAvviso,
+                    TotaleAvviso = avv.TotaleAvvisiParcella
+                }).ToList();
+
+            // 📄 Costruzione CSV
+            var sb = new StringBuilder();
+            sb.AppendLine("ID Incasso;Pratica;Data Incasso;Importo;Metodo Pagamento;Versa in Plafond;ID Avviso;Data Avviso;Totale Avviso;Stato Avviso");
+
+            foreach (var i in incassi)
+            {
+                sb.AppendLine(string.Join(";", new string[]
+                {
+            i.ID_Incasso.ToString(),
+            (i.Pratica ?? "(N/D)").Replace(";", ","), // 🔸 Evita rottura CSV
+            i.DataIncasso.ToString("dd/MM/yyyy"),
+            i.Importo.ToString("N2"),
+            (i.ModalitaPagamento ?? "-"),
+            (i.VersaInPlafond == true ? "SI" : "NO"),
+            (i.ID_AvvisoParcella > 0 ? $"#{i.ID_AvvisoParcella}" : ""),
+            i.DataAvviso?.ToString("dd/MM/yyyy") ?? "",
+            i.TotaleAvviso?.ToString("N2") ?? "0.00",
+            (i.StatoAvviso ?? "-")
+                }));
+            }
+
+            byte[] buffer = Encoding.UTF8.GetBytes(sb.ToString());
+            string nomeFile = $"Incassi_{inizio:yyyyMMdd}_{fine:yyyyMMdd}.csv";
+            return File(buffer, "text/csv", nomeFile);
+        }
+
+        [HttpGet]
+        public ActionResult EsportaIncassiPdf(DateTime? da, DateTime? a)
+        {
+            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+            var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
+
+            if (utenteCorrente == null)
+                return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
+
+            // 📅 Periodo (mese corrente se non specificato)
+            DateTime inizio = da ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            DateTime fine = a ?? DateTime.Today.AddDays(1).AddTicks(-1);
+
+            // 🔹 Recupera incassi nel periodo con join alle pratiche e avvisi parcella
+            var lista = (
+                from i in db.Incassi
+                join p in db.Pratiche on i.ID_Pratiche equals p.ID_Pratiche into praticheJoin
+                from p in praticheJoin.DefaultIfEmpty()
+
+                join avv in db.AvvisiParcella on i.ID_AvvisoParcella equals avv.ID_AvvisoParcelle into avvisiJoin
+                from avv in avvisiJoin.DefaultIfEmpty()
+
+                where i.DataIncasso >= inizio && i.DataIncasso <= fine
+                orderby i.DataIncasso
+                select new IncassoViewModel
+                {
+                    ID_Incasso = i.ID_Incasso,
+                    ID_Pratiche = i.ID_Pratiche ?? 0,
+                    DataIncasso = i.DataIncasso,
+                    Importo = i.Importo,
+                    MetodoPagamento = i.ModalitaPagamento,
+                    VersaInPlafond = i.VersaInPlafond,
+                    NomePratica = p != null ? p.Titolo : "(N/D)",
+
+                    // 🔹 Dati Avviso collegato
+                    ID_AvvisoParcella = avv != null ? avv.ID_AvvisoParcelle : 0,
+                    DescrizioneAvvisoParcella = avv != null ? $"Avviso #{avv.ID_AvvisoParcelle}" : "—",
+                    TotalePratica = p != null ? p.Budget : 0,
+                    ImportoAvviso = avv != null ? (decimal?)avv.Importo : 0,
+                    ImportoIVA = avv != null ? (decimal?)avv.ImportoIVA : 0,
+                    AliquotaIVA = avv != null ? (decimal?)avv.AliquotaIVA : 0,
+                    Stato = avv != null ? avv.Stato : "—"
+                }).ToList();
+
+            // ✅ Genera il PDF con Rotativa
+            return new Rotativa.ViewAsPdf("~/Views/Incassi/ReportIncassiPdf.cshtml", lista)
+            {
+                FileName = $"Incassi_{inizio:yyyyMMdd}_{fine:yyyyMMdd}.pdf",
+                PageSize = Rotativa.Options.Size.A4,
+                PageOrientation = Rotativa.Options.Orientation.Landscape, // 📄 meglio in orizzontale se ci sono molte colonne
+                CustomSwitches = "--encoding UTF-8"
+            };
+        }
+
+
+
+
+        /* ex versa utile in plafond non serve commentato in data 15/7/2025 */
         //[HttpPost]
         //public JsonResult VersaUtileInPlafond(int idIncasso)
         //{
@@ -9496,130 +14412,6 @@ namespace SinergiaMvc.Controllers
         //        return Json(new { success = false, message = "Errore durante il versamento: " + ex.Message });
         //    }
         //}
-
-        [HttpGet]
-        public ActionResult EsportaIncassiCsv(DateTime? da, DateTime? a)
-        {
-            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
-            var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-
-            if (utenteCorrente == null)
-                return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
-
-            // 📅 Periodo (mese corrente se non specificato)
-            DateTime inizio = da ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-            DateTime fine = a ?? DateTime.Today.AddDays(1).AddTicks(-1);
-
-            var incassi = db.Incassi
-                .Where(i => i.DataIncasso >= inizio && i.DataIncasso <= fine)
-                .OrderBy(i => i.DataIncasso)
-                .ToList();
-
-            var sb = new StringBuilder();
-            sb.AppendLine("ID Incasso;Pratica;Data Incasso;Importo;Metodo Pagamento;Versa in Plafond");
-
-            foreach (var i in incassi)
-            {
-                var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == i.ID_Pratiche);
-                sb.AppendLine($"{i.ID_Incasso};" +
-                              $"{(pratica?.Titolo ?? "(N/D)")};" +
-                              $"{i.DataIncasso:dd/MM/yyyy};" +
-                              $"{i.Importo:N2};" +
-                              $"{i.ModalitaPagamento};" +
-                              $"{(i.VersaInPlafond == true ? "SI" : "NO")}");
-            }
-
-            byte[] buffer = Encoding.UTF8.GetBytes(sb.ToString());
-            return File(buffer, "text/csv", $"Incassi_{inizio:yyyyMMdd}_{fine:yyyyMMdd}.csv");
-        }
-
-
-
-        [HttpGet]
-        public ActionResult EsportaIncassiPdf(DateTime? da, DateTime? a)
-        {
-            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
-            var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-
-            if (utenteCorrente == null)
-                return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
-
-            // 📅 Periodo
-            DateTime inizio = da ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-            DateTime fine = a ?? DateTime.Today.AddDays(1).AddTicks(-1);
-
-            var lista = db.Incassi
-                .Where(i => i.DataIncasso >= inizio && i.DataIncasso <= fine)
-                .OrderBy(i => i.DataIncasso)
-                .ToList()
-                .Select(i => new IncassoViewModel
-                {
-                    ID_Incasso = i.ID_Incasso,
-                    ID_Pratiche = i.ID_Pratiche ?? 0,
-                    DataIncasso = i.DataIncasso,
-                    Importo = i.Importo,
-                    MetodoPagamento = i.ModalitaPagamento,
-                    NomePratica = db.Pratiche
-                                    .Where(p => p.ID_Pratiche == i.ID_Pratiche)
-                                    .Select(p => p.Titolo)
-                                    .FirstOrDefault() ?? "(N/D)",
-                    VersaInPlafond = i.VersaInPlafond
-                })
-                .ToList();
-
-            return new Rotativa.ViewAsPdf("~/Views/Incassi/ReportIncassiPdf.cshtml", lista)
-            {
-                FileName = $"Incassi_{inizio:yyyyMMdd}_{fine:yyyyMMdd}.pdf",
-                PageSize = Rotativa.Options.Size.A4,
-                PageOrientation = Rotativa.Options.Orientation.Portrait
-            };
-        }
-
-
-
-        [HttpGet]
-        public ActionResult GetDatiAvvisoParcella(int idPratica)
-        {
-            var avviso = (from a in db.AvvisiParcella
-                          join p in db.Pratiche on a.ID_Pratiche equals p.ID_Pratiche
-                          where a.ID_Pratiche == idPratica && a.Stato != "Eliminato"
-                          orderby a.DataAvviso descending
-                          select new
-                          {
-                              DescrizioneAvviso = "Avviso parcella #" + a.ID_AvvisoParcelle,
-                              ImportoSenzaIVA = (decimal?)a.Importo,
-                              ImportoConIVA = (decimal?)a.TotaleAvvisiParcella,
-                              MetodoPagamento = a.MetodoPagamento, // ✅ aggiunto
-                              NomePratica = p.Titolo,
-                              TotalePratica = p.Budget
-                          }).FirstOrDefault();
-
-            if (avviso == null)
-            {
-                return Json(new
-                {
-                    success = true,
-                    avviso = "Nessun avviso",
-                    importoSenzaIVA = 0m,
-                    importoConIVA = 0m,
-                    metodoPagamento = "",
-                    nomePratica = "(Nessuna pratica trovata)",
-                    totalePratica = 0m
-                }, JsonRequestBehavior.AllowGet);
-            }
-
-            return Json(new
-            {
-                success = true,
-                avviso = avviso.DescrizioneAvviso,
-                importoSenzaIVA = avviso.ImportoSenzaIVA,
-                importoConIVA = avviso.ImportoConIVA,
-                metodoPagamento = avviso.MetodoPagamento,
-                nomePratica = avviso.NomePratica,
-                totalePratica = avviso.TotalePratica
-            }, JsonRequestBehavior.AllowGet);
-        }
-
 
 
         #endregion

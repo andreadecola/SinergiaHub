@@ -98,5 +98,9 @@ namespace Sinergia.Model
         public int NumeroVersione { get; set; }
 
         public string ModificheTestuali { get; set; }
+
+        public int? ID_ServizioFornitore { get; set; }
+
+        public int? ID_CategoriaServizi { get; set; }
     }
 }

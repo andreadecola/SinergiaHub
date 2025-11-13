@@ -44,5 +44,10 @@ namespace Sinergia.Model
         public int NumeroVersione { get; set; }
 
         public string ModificheTestuali { get; set; }
+
+        [StringLength(100)]
+        public string CategoriaDocumento { get; set; }
+
+        public int? ID_RiferimentoAvvisoParcella { get; set; }
     }
 }

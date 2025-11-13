@@ -158,7 +158,7 @@ namespace Sinergia.App_Helpers
 
                 if (tipoUtente == "Admin")
                 {
-                    // ✅ Solo professionisti, niente aziende
+                    // ✅ Solo professionisti
                     var clienti = db.OperatoriSinergia
                         .Where(c => c.Stato == "Attivo" && c.TipoCliente == "Professionista")
                         .OrderBy(c => c.Nome)
@@ -168,12 +168,10 @@ namespace Sinergia.App_Helpers
                             Text = c.Nome + " " + (c.Cognome ?? "") + " | Professionista"
                         }).ToList();
 
-
                     lista.AddRange(clienti);
                 }
                 else if (tipoUtente == "Professionista")
                 {
-                    // Singolo cliente professionista legato all'utente
                     var cliente = db.OperatoriSinergia.FirstOrDefault(c =>
                         c.ID_UtenteCollegato == idUtente &&
                         c.TipoCliente == "Professionista" &&
@@ -183,12 +181,31 @@ namespace Sinergia.App_Helpers
                     {
                         lista.Add(new SelectListItem
                         {
-                            Value = "P_" + cliente.ID_Cliente.ToString(), // 👈 prefisso P_
+                            Value = "P_" + cliente.ID_Cliente.ToString(),
                             Text = cliente.Nome + " " + (cliente.Cognome ?? "") + " | " + cliente.TipoCliente
                         });
                     }
                 }
+                else if (tipoUtente == "Collaboratore")
+                {
+                    var professionisti = (
+                        from r in db.RelazioneUtenti
+                        join o in db.OperatoriSinergia
+                            on r.ID_Utente equals o.ID_Cliente   // collegamento giusto
+                        where r.ID_UtenteAssociato == idUtente   // collaboratore corrente
+                              && r.Stato == "Attivo"
+                              && o.TipoCliente == "Professionista"
+                              && o.Stato == "Attivo"
+                        orderby o.Nome
+                        select new SelectListItem
+                        {
+                            Value = "P_" + o.ID_Cliente.ToString(),
+                            Text = o.Nome + " " + (o.Cognome ?? "") + " | Professionista"
+                        }
+                    ).ToList();
 
+                    lista.AddRange(professionisti);
+                }
                 return lista;
             }
         }

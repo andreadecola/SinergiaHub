@@ -12,7 +12,6 @@ namespace Sinergia.Model
         [Key]
         public int ID_Cliente { get; set; }
 
-        [Required]
         [StringLength(255)]
         public string Nome { get; set; }
 

@@ -42,5 +42,19 @@ namespace Sinergia.Model
         public int? ID_UtenteUltimaModifica { get; set; }
 
         public int? ID_ProfessionistaIntestatario { get; set; }
+
+        public string Collaboratori { get; set; }
+
+        [StringLength(255)]
+        public string FaseGiudiziale { get; set; }
+
+        public decimal? ImportoInviatoAllaFatturazione { get; set; }
+
+        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+        public decimal? ImportoResiduo { get; set; }
+
+        public DateTime? DataCompetenzaEconomica { get; set; }
+
+        public int? ID_AvvisoParcella { get; set; }
     }
 }

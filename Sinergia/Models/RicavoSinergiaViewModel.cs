@@ -19,5 +19,12 @@ namespace Sinergia.Models
         public decimal TotaleResident { get; set; }
 
         public decimal TotaleComplessivo => TotaleTrattenute + TotaleResident;
+
+        // 🆕 Aggiunte per il riepilogo esteso
+        public DateTime? DataIncasso { get; set; }          // Data effettiva incasso
+        public string StatoAvviso { get; set; }             // Stato dell’avviso (es. Inviato, Pagato)
+        public string DescrizioneAvviso { get; set; }       // Avviso parcella collegato
+        public decimal? ImportoAvviso { get; set; }         // Importo netto avviso
+        public decimal? TotaleAvviso { get; set; }          // Totale avviso con IVA e contributi
     }
 }

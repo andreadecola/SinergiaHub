@@ -1,9 +1,12 @@
 ﻿@model Sinergia.Models.TipologieCostiViewModel
 @{
     var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
+    bool isCostoSpeciale = Model.Nome != null &&
+                           (Model.Nome.Contains("Trattenuta Sinergia") || Model.Nome.Contains("Owner Fee"));
 }
 
 <div class="d-flex justify-content-center flex-wrap gap-1">
+
     @* ✏️ Modifica *@
     @if (permessiUtente?.Permessi.Any(p => p.Modifica) == true)
     {
@@ -32,12 +35,15 @@
         <i class="fa-solid fa-euro-sign"></i>
     </button>
 
-    @* 👤 Assegna a professionisti *@
-    <button class="btn btn-success btn-sm"
-            title="Assegna a professionisti"
-            onclick="apriAssegnaCostoGenerale(@Model.ID_TipoCosto)">
-        <i class="fa fa-user"></i>
-    </button>
+    @* 👤 Assegna a professionisti → nascosto solo per costi speciali *@
+    @if (!isCostoSpeciale)
+    {
+        <button class="btn btn-success btn-sm"
+                title="Assegna a professionisti"
+                onclick="apriAssegnaCostoGenerale(@Model.ID_TipoCosto)">
+            <i class="fa fa-user"></i>
+        </button>
+    }
 
     @* 👥 Visualizza assegnati *@
     @if (Model.NumeroAssegnati > 0)
@@ -49,4 +55,3 @@
         </button>
     }
 </div>
-

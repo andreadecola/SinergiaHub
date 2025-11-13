@@ -42,5 +42,30 @@ namespace Sinergia.Model
         public DateTime? DataModifica { get; set; }
 
         public int? ID_UtenteModifica { get; set; }
+
+        public int? ID_ResponsabilePratica { get; set; }
+
+        public int? ID_OwnerCliente { get; set; }
+
+        [StringLength(50)]
+        public string TipologiaAvviso { get; set; }
+
+        public int? ID_CompensoOrigine { get; set; }
+
+        [StringLength(255)]
+        public string FaseGiudiziale { get; set; }
+
+        public decimal? RimborsoSpesePercentuale { get; set; }
+
+        public decimal? ImportoRimborsoSpese { get; set; }
+
+        public decimal? ImportoAcconto { get; set; }
+
+        public DateTime? DataInvio { get; set; }
+
+        public DateTime? DataCompetenzaEconomica { get; set; }
+
+        [StringLength(200)]
+        public string TitoloAvviso { get; set; }
     }
 }

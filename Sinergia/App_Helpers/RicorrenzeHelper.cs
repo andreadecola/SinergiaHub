@@ -1,4 +1,5 @@
 ﻿using Sinergia.Model;
+using Sinergia.Models;
 using System;
 using System.Collections.Generic;
 using System.Data.Entity.Validation;
@@ -142,7 +143,7 @@ namespace Sinergia.App_Helpers
                     decimal totaleTrattenute = 0;
                     decimal totaleOwnerFee = 0;
                     decimal totaleCostiPratica = 0;
-                    decimal totaleQuoteCollaboratori = 0;
+                    decimal totaleCompensi = 0;
 
                     // ============================
                     // ✅ COSTI TRATTENUTA
@@ -230,27 +231,65 @@ namespace Sinergia.App_Helpers
                     }
 
                     // ============================
-                    // ✅ COLLABORATORI
+                    // ✅ COMPENSI RIGA PER RIGA
                     // ============================
-                    var collaboratori = db.Cluster
-                        .Where(c => c.ID_Pratiche == idPratica && c.TipoCluster == "Collaboratore")
+                    var compensi = db.CompensiPraticaDettaglio
+                        .Where(c => c.ID_Pratiche == idPratica)
                         .ToList();
 
-                    foreach (var collab in collaboratori)
+                    foreach (var comp in compensi)
                     {
-                        if (collab.PercentualePrevisione > 0)
-                        {
-                            decimal quotaRicavo = Math.Round(budget * (collab.PercentualePrevisione / 100m), 2);
-                            totaleQuoteCollaboratori += quotaRicavo;
+                        decimal importoBase = comp.Importo ?? 0m;
 
+                        // moltiplica se previsto
+                        if (comp.ValoreStimato.HasValue && comp.ValoreStimato.Value > 0)
+                            importoBase *= comp.ValoreStimato.Value;
+
+                        int? idTitolare = comp.ID_ProfessionistaIntestatario;
+                        decimal importoResiduo = importoBase;
+
+                        // 👥 Gestione collaboratori JSON
+                        if (!string.IsNullOrEmpty(comp.Collaboratori))
+                        {
+                            try
+                            {
+                                var collaboratori = Newtonsoft.Json.JsonConvert
+                                    .DeserializeObject<List<CollaboratoreCompensoDTO>>(comp.Collaboratori);
+
+                                foreach (var col in collaboratori)
+                                {
+                                    decimal quota = Math.Round(importoBase * (col.Percentuale / 100m), 2);
+                                    importoResiduo -= quota;
+
+                                    voci.Add(new BilancioProfessionista
+                                    {
+                                        ID_Professionista = col.ID_Collaboratore,
+                                        DataRegistrazione = oggi,
+                                        TipoVoce = "Ricavo",
+                                        Categoria = "Quota Collaboratore",
+                                        Descrizione = $"Quota {col.NomeCollaboratore} {col.Percentuale:0.##}%",
+                                        Importo = quota,
+                                        Stato = "Previsionale",
+                                        Origine = "Pratica",
+                                        ID_Pratiche = idPratica,
+                                        ID_UtenteInserimento = idUtenteInserimento,
+                                        DataInserimento = DateTime.Now
+                                    });
+                                }
+                            }
+                            catch { /* ignoro se JSON non valido */ }
+                        }
+
+                        if (idTitolare.HasValue && importoResiduo > 0)
+                        {
                             voci.Add(new BilancioProfessionista
                             {
-                                ID_Professionista = collab.ID_Utente,
+                                ID_Professionista = idTitolare.Value,
                                 DataRegistrazione = oggi,
                                 TipoVoce = "Ricavo",
-                                Categoria = "Quota Collaboratore",
-                                Descrizione = $"Quota ricavo collaboratore {collab.PercentualePrevisione:0.##}%",
-                                Importo = quotaRicavo,
+                                Categoria = "Compenso Titolare",
+                                Descrizione = comp.Descrizione,
+                                Importo = importoResiduo,
                                 Stato = "Previsionale",
                                 Origine = "Pratica",
                                 ID_Pratiche = idPratica,
@@ -258,6 +297,8 @@ namespace Sinergia.App_Helpers
                                 DataInserimento = DateTime.Now
                             });
                         }
+
+                        totaleCompensi += importoBase;
                     }
 
                     // ============================
@@ -289,29 +330,6 @@ namespace Sinergia.App_Helpers
                     }
 
                     // ============================
-                    // ✅ RICAVO RESIDUO RESPONSABILE
-                    // ============================
-                    decimal ricavoResponsabile = budget - (totaleTrattenute + totaleOwnerFee + totaleQuoteCollaboratori + totaleCostiPratica);
-
-                    if (ricavoResponsabile > 0)
-                    {
-                        voci.Add(new BilancioProfessionista
-                        {
-                            ID_Professionista = idResponsabile,
-                            DataRegistrazione = oggi,
-                            TipoVoce = "Ricavo",
-                            Categoria = "Compenso Responsabile",
-                            Descrizione = "Quota residua responsabile",
-                            Importo = ricavoResponsabile,
-                            Stato = "Previsionale",
-                            Origine = "Pratica",
-                            ID_Pratiche = idPratica,
-                            ID_UtenteInserimento = idUtenteInserimento,
-                            DataInserimento = DateTime.Now
-                        });
-                    }
-
-                    // ============================
                     // ✅ Salvataggio
                     // ============================
                     db.BilancioProfessionista.AddRange(voci);
@@ -331,6 +349,7 @@ namespace Sinergia.App_Helpers
                 throw;
             }
         }
+
 
 
 

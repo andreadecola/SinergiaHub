@@ -71,9 +71,10 @@
                 <tr>
                     <th class="id w-5">ID</th>
                     <th class="w-20">Nome</th>
-                    <th class="w-20">Tipo</th>
-                    <th class="w-20 d-none d-md-table-cell">Email</th>
-                    <th class="w-15 d-none d-md-table-cell">P.IVA</th>
+                    <th class="w-15">Tipo</th>
+                    <th class="w-15">Categoria Servizi</th> @* 🆕 nuova colonna *@
+                    <th class="w-15 d-none d-md-table-cell">Email</th>
+                    <th class="w-10 d-none d-md-table-cell">P.IVA</th>
                     <th class="w-10">Stato</th>
                     <th class="w-10">Ruolo</th>
                     @if (mostraAzioni)
@@ -89,6 +90,7 @@
                         <td class="id">@a.ID_Azienda</td>
                         <td>@a.Nome</td>
                         <td>@a.TipoRagioneSociale</td>
+                        <td>@(string.IsNullOrEmpty(a.NomeCategoriaServizi) ? "-" : a.NomeCategoriaServizi)</td> @* 🆕 *@
                         <td class="d-none d-md-table-cell">@a.Email</td>
                         <td class="d-none d-md-table-cell">@a.PartitaIVA</td>
                         <td class="stato">@a.Stato</td>
@@ -126,6 +128,7 @@
 
             <div class="fw-bold text-primary">@a.Nome</div>
             <div class="small text-muted"><strong>Tipo:</strong> @a.TipoRagioneSociale</div>
+            <div class="small text-muted"><strong>Categoria Servizi:</strong> @(string.IsNullOrEmpty(a.NomeCategoriaServizi) ? "-" : a.NomeCategoriaServizi)</div> @* 🆕 *@
             <div class="small text-muted"><strong>Email:</strong> @a.Email</div>
             <div class="small text-muted"><strong>P.IVA:</strong> @a.PartitaIVA</div>
             <div class="small text-muted"><strong>Telefono:</strong> @a.Telefono</div>
@@ -148,6 +151,7 @@
         </div>
     }
 </div>
+
 
 <!-- 🔄 Paginazione -->
 <div id="paginazioneAziende" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
@@ -203,10 +207,7 @@
                     <div class="row">
                         <div class="col-md-4 mb-2">
                             <label class="form-label">Codice Fiscale</label>
-                            <input type="text"
-                                   name="CodiceFiscale"
-                                   class="form-control form-control-sm codice-fiscale-input"
-                                   maxlength="255" />
+                            <input type="text" name="CodiceFiscale" class="form-control form-control-sm codice-fiscale-input" maxlength="255" />
                             <small id="erroreCodiceFiscale" class="text-danger d-none">
                                 ⚠️ Il Codice Fiscale deve contenere 16 caratteri (solo per persone fisiche)
                             </small>
@@ -269,6 +270,7 @@
                             <input type="text" name="DescrizioneAttivita" class="form-control form-control-sm" />
                             <small class="text-muted d-none" data-prev="DescrizioneAttivita"></small>
                         </div>
+
                         <div class="col-md-4 mb-2">
                             <label class="form-label">Settore Merceologico</label>
                             <select name="ID_SettoreFornitore" id="ID_SettoreFornitore" class="form-control form-control-sm">
@@ -276,6 +278,19 @@
                             </select>
                             <small class="text-muted d-none" data-prev="SettoreFornitore"></small>
                         </div>
+
+                        <!-- 🆕 NUOVO CAMPO: CATEGORIA SERVIZI -->
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Categoria Servizi</label>
+                            <select name="ID_CategoriaServizi" id="ID_CategoriaServizi" class="form-control form-control-sm">
+                                <option value="">Seleziona categoria...</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="CategoriaServizi"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 6 -->
+                    <div class="row">
                         <div class="col-md-4 mb-2">
                             <label class="form-label">Stato Azienda *</label>
                             <select name="Stato" class="form-control form-control-sm" required>
@@ -284,11 +299,7 @@
                             </select>
                             <small class="text-muted d-none" data-prev="Stato"></small>
                         </div>
-                    </div>
-
-                    <!-- RIGA 6: NOTE (larghezza piena) -->
-                    <div class="row">
-                        <div class="col-md-12 mb-2">
+                        <div class="col-md-8 mb-2">
                             <label class="form-label">Note</label>
                             <input type="text" name="Note" class="form-control form-control-sm" />
                             <small class="text-muted d-none" data-prev="Note"></small>
@@ -350,39 +361,62 @@
     </div>
 </div>
 
-<!-- Modale Assegna Utenti -->
-<div class="modal fade" id="assegnaUtenteModal" tabindex="-1" aria-labelledby="assegnaUtenteModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+<!-- Modale principale (Gestione Relazioni) -->
+<!--<div class="modal fade" id="gestioneAssegnatiModal" tabindex="-1" aria-labelledby="gestioneAssegnatiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
 
             <div class="modal-header">
-                <h5 class="modal-title" id="assegnaUtenteModalLabel">Assegna Utente all'Fornitore</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                <h5 class="modal-title" id="gestioneAssegnatiModalLabel">Gestione Assegnazioni</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
             <div class="modal-body">
+                <h6 class="fw-bold">Già assegnati</h6>
+                <div id="listaAssegnati"></div>
+            </div>
 
-                <!-- Lista utenti -->
-                <div id="listaUtenti">
-                    <!-- Gli utenti verranno caricati qui -->
-                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" onclick="apriAggiungiAssegnazioni()">➕ Aggiungi</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
 
-                <hr>
+        </div>
+    </div>
+</div>-->
+@* Seconda modale (Nuova assegnazione) *@
+<div class="modal fade" id="aggiungiAssegnazioniModal" tabindex="-1" aria-labelledby="aggiungiAssegnazioniModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
 
-                <!-- Tipo Relazione -->
+            <div class="modal-header">
+                <h5 class="modal-title" id="aggiungiAssegnazioniModalLabel">Nuova Assegnazione</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Professionisti -->
                 <div class="mb-3">
-                    <label for="tipoRelazione" class="form-label">Tipo di Relazione</label>
-                    <select id="tipoRelazione" class="form-select">
-                        <option value="Collaborazione">Collaborazione</option>
-                        <option value="Segnalazione">Segnalazione</option>
-                        <option value="Partnership">Partnership</option>
+                    <label class="form-label fw-bold">Professionisti</label>
+                    <select id="ddlProfessionisti" class="form-select form-select-sm" multiple size="4">
+                        <option value="all">-- Tutti i professionisti --</option>
                     </select>
+                    <div class="form-text">Puoi selezionare uno o più professionisti tramite il tasto CTRL.</div>
                 </div>
 
-                <!-- Stato -->
+                <!-- Team -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Team</label>
+                    <select id="ddlTeam" class="form-select form-select-sm" multiple size="3">
+                        <option value="all">-- Tutti i team --</option>
+                    </select>
+                    <div class="form-text">Puoi selezionare uno o più team tramite il tasto CTRL .</div>
+                </div>
+
+                <!-- Stato relazione -->
                 <div class="mb-3">
                     <label for="statoRelazione" class="form-label">Stato della Relazione</label>
-                    <select id="statoRelazione" class="form-select">
+                    <select id="statoRelazione" class="form-select form-select-sm">
                         <option value="Attivo">Attivo</option>
                         <option value="Terminato">Terminato</option>
                     </select>
@@ -391,16 +425,19 @@
                 <!-- Note -->
                 <div class="mb-3">
                     <label for="noteRelazione" class="form-label">Note</label>
-                    <textarea id="noteRelazione" class="form-control" rows="2" placeholder="Inserisci note opzionali..."></textarea>
+                    <textarea id="noteRelazione" class="form-control form-control-sm" rows="2"></textarea>
                 </div>
             </div>
+
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-primary" onclick="salvaAssegnazioneUtente()">Salva</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="salvaAssegnazioni()">Salva</button>
             </div>
+
         </div>
     </div>
 </div>
+
 <!-- Modale Visualizza Utenti Assegnati -->
 <div class="modal fade" id="utentiAssegnatiModal" tabindex="-1" aria-labelledby="utentiAssegnatiModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -418,7 +455,7 @@
 
             <div class="modal-footer">
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
-                <button type="button" class="btn btn-outline-primary" onclick="apriAssegnaUtente(aziendaSelezionataId)">Aggiungi Utenti</button>
+                <button type="button" class="btn btn-outline-primary" onclick="apriAggiungiAssegnazioni(aziendaSelezionataId)">Aggiungi Utenti</button>
             </div>
         </div>
     </div>
@@ -488,6 +525,7 @@
         caricaTipiRagioneSociale();
         caricaCittaENazioni();
         caricaSettoriMerceologiciFornitori();
+        caricaCategorieServizi();
 
         // Nascondo toggle versioni
         $("#toggleVersioniWrapperAzienda").addClass("d-none");
@@ -603,6 +641,9 @@
                             ddlSettori.value = azienda.ID_SettoreFornitore;
                         }
                     });
+
+                // 🆕 Categorie Servizi
+                caricaCategorieServizi(azienda.ID_CategoriaServizi);
 
                 // 🏦 Dati bancari
                 $('[name="NomeBanca"]').val(azienda.NomeBanca || '');
@@ -760,6 +801,38 @@
                 }
             });
     }
+
+
+    // 🔽 Carica le categorie servizi nella select
+    function caricaCategorieServizi(idSelezionata = null) {
+        fetch('/Utenti/GetCategorieServizi')
+            .then(r => r.json())
+            .then(data => {
+                const select = document.getElementById('ID_CategoriaServizi');
+                if (!select) return;
+                select.innerHTML = '<option value="">Seleziona categoria...</option>';
+
+                data.forEach(cat => {
+                    const opt = document.createElement('option');
+                    opt.value = cat.ID_Categoria;
+                    opt.textContent = cat.Nome;
+                    select.appendChild(opt);
+                });
+
+                // ✅ imposta la categoria salvata sull'azienda (se presente)
+                if (idSelezionata) {
+                    select.value = idSelezionata;
+                }
+            })
+            .catch(err => console.error("Errore caricamento categorie:", err));
+    }
+
+
+    // Esegui il caricamento ogni volta che si apre la modale
+    $('#aziendaModal').on('show.bs.modal', function () {
+        caricaCategorieServizi();
+    });
+
 
     function gestisciDocumenti(idAzienda) {
         fetch(`/Utenti/GetDocumentiAzienda?idAzienda=${idAzienda}`)
@@ -1036,120 +1109,145 @@
 
     let aziendaSelezionataId = null;
 
-    function apriAssegnaUtente(idAzienda) {
-        // Chiudi la modale degli utenti assegnati, se aperta
-        const modalUtenti = bootstrap.Modal.getInstance(document.getElementById('utentiAssegnatiModal'));
-        if (modalUtenti) {
-            modalUtenti.hide();
-        }
+    function apriGestioneAssegnati(idAzienda) {
+        aziendaSelezionataId = idAzienda;
 
-        // Dopo una breve attesa per chiusura modale, apri quella di assegnazione
-        setTimeout(() => {
-            aziendaSelezionataId = idAzienda;
-            fetch(`/Utenti/GetUtenti`)
-                .then(response => response.json())
-                .then(utenti => {
-                    const lista = document.getElementById('listaUtenti');
-                    lista.innerHTML = '';
-                    utenti.forEach(utente => {
-                        const checkbox = document.createElement('input');
-                        checkbox.type = 'checkbox';
-                        checkbox.value = utente.ID_Utente;
-                        checkbox.id = `utente_${utente.ID_Utente}`;
-                        checkbox.className = 'form-check-input';
+        fetch(`/Utenti/VisualizzaUtentiAzienda?idAzienda=${idAzienda}`)
+            .then(r => r.json())
+            .then(data => {
+                const lista = document.getElementById("tabellaUtentiAssegnati");
 
-                        const label = document.createElement('label');
-                        label.htmlFor = checkbox.id;
-                        label.className = 'form-check-label ms-2';
-                        label.textContent = utente.NomeCompleto;
+                if (!lista) {
+                    console.error("❌ Elemento #tabellaUtentiAssegnati non trovato nel DOM");
+                    return;
+                }
 
-                        const div = document.createElement('div');
-                        div.className = 'form-check';
-                        div.appendChild(checkbox);
-                        div.appendChild(label);
+                console.log("✅ Dati ricevuti:", data);
 
-                        lista.appendChild(div);
+                if (!data || data.length === 0) {
+                    lista.innerHTML = `<p class="text-muted">Nessun assegnato.</p>`;
+                } else {
+                    let html = `<table class="table table-sm table-bordered">
+                              <thead>
+                                <tr>
+                                  <th>Nome</th>
+                                  <th>Tipo</th>
+                                  <th>Note</th>
+                                  <th>Azioni</th>
+                                </tr>
+                              </thead>
+                              <tbody>`;
+
+                    data.forEach(x => {
+                        html += `<tr>
+                               <td>${x.Nome || ""} ${x.Cognome ? x.Cognome : ""}</td>
+
+                                <td>${x.TipoRelazione}</td>
+                                <td>${x.Note || "-"}</td>
+                                <td>
+                                  <button class="btn btn-sm btn-danger" onclick="rimuoviRelazione(${x.ID_Relazione})">
+                                    <i class="fa fa-trash"></i>
+                                  </button>
+                                </td>
+                              </tr>`;
                     });
 
-                    const modal = new bootstrap.Modal(document.getElementById('assegnaUtenteModal'));
-                    modal.show();
-                });
-        }, 300); // tempo sufficiente per far completare l’animazione della chiusura
+                    html += `</tbody></table>`;
+                    lista.innerHTML = html;
+                }
+
+                // 👇 Apri la modale corretta
+                bootstrap.Modal.getOrCreateInstance(document.getElementById("utentiAssegnatiModal")).show();
+            })
+            .catch(err => {
+                console.error("❌ Errore fetch VisualizzaUtentiAzienda:", err);
+            });
     }
 
 
-    function salvaAssegnazioneUtente() {
-        const utentiSelezionati = Array.from(document.querySelectorAll('#listaUtenti input[type="checkbox"]:checked'))
-            .map(c => parseInt(c.value));
+    function apriAggiungiAssegnazioni() {
+        // Chiudi la lista utenti assegnati
+        const listaModal = bootstrap.Modal.getInstance(document.getElementById("utentiAssegnatiModal"));
+        if (listaModal) listaModal.hide();
 
-        const tipoRelazione = document.getElementById('tipoRelazione').value;
-        const statoRelazione = document.getElementById('statoRelazione').value;
-        const noteRelazione = document.getElementById('noteRelazione').value.trim();
+        // Carica professionisti
+        fetch(`/Utenti/GetUtentiDisponibili?idAzienda=${aziendaSelezionataId}`)
+            .then(r => r.json())
+            .then(utenti => {
+                const ddl = document.getElementById("ddlProfessionisti");
+                ddl.innerHTML = '<option value="all">-- Tutti i professionisti --</option>';
+                utenti.forEach(u => {
+                    ddl.innerHTML += `<option value="${u.ID_Utente}">${u.NomeUtente}</option>`;
+                });
+            });
 
-        if (utentiSelezionati.length === 0) {
-            toastr.error('⚠️ Seleziona almeno un utente.');
+        // Carica team
+        fetch(`/Utenti/GetTeamDisponibili?idAzienda=${aziendaSelezionataId}`)
+            .then(r => r.json())
+            .then(team => {
+                const ddl = document.getElementById("ddlTeam");
+                ddl.innerHTML = '<option value="all">-- Tutti i team --</option>';
+                team.forEach(t => {
+                    ddl.innerHTML += `<option value="${t.ID_Team}">${t.NomeTeam}</option>`;
+                });
+            });
+
+        // 👇 Mostra la modale di aggiunta
+        bootstrap.Modal.getOrCreateInstance(document.getElementById("aggiungiAssegnazioniModal")).show();
+    }
+
+    function salvaAssegnazioni() {
+        const idUtenti = Array.from(document.getElementById("ddlProfessionisti").selectedOptions).map(o => o.value);
+        const idTeam = Array.from(document.getElementById("ddlTeam").selectedOptions).map(o => o.value);
+
+        const statoRelazione = document.getElementById("statoRelazione").value;
+        const noteRelazione = document.getElementById("noteRelazione").value;
+
+        if (idUtenti.length === 0 && idTeam.length === 0) {
+            toastr.warning("⚠️ Seleziona almeno un professionista o un team.");
             return;
         }
 
-        Promise.allSettled(utentiSelezionati.map(idUtente => {
-            return fetch('/Utenti/AssegnaUtentiAzienda', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: new URLSearchParams({
-                    idAzienda: aziendaSelezionataId,
-                    idUtente: idUtente,
-                    tipoRelazione: tipoRelazione,
-                    statoRelazione: statoRelazione,
-                    noteRelazione: noteRelazione
-                })
+        fetch('/Utenti/AssegnaEntitaAzienda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                idAzienda: aziendaSelezionataId,
+                idUtenti: idUtenti,
+                idTeam: idTeam,
+                tipoRelazione: "Fornitore", // oppure puoi renderlo dinamico se serve
+                statoRelazione: statoRelazione,
+                noteRelazione: noteRelazione
             })
-                .then(response => {
-                    if (!response.ok) throw new Error(`Errore HTTP: ${response.status}`);
-                    return response.json();
-                })
-                .then(json => ({ idUtente, json }))
-                .catch(error => ({ idUtente, error }));
-        }))
-            .then(results => {
-                let successi = 0;
-                let fallimenti = 0;
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
 
-                results.forEach(risultato => {
-                    if (risultato.status === 'fulfilled') {
-                        const { idUtente, json, error } = risultato.value;
+                    // ✅ Chiudi la modale "Aggiungi"
+                    const modalAggiungi = bootstrap.Modal.getInstance(document.getElementById("aggiungiAssegnazioniModal"));
+                    if (modalAggiungi) modalAggiungi.hide();
 
-                        if (error) {
-                            fallimenti++;
-                            console.warn(`❌ Errore fetch utente ${idUtente}:`, error);
-                        } else if (json && json.success) {
-                            successi++;
-                        } else {
-                            fallimenti++;
-                            console.warn(`❌ Errore salvataggio utente ${idUtente}:`, json.message || "Nessun messaggio dal server");
-                        }
-                    } else {
-                        console.error(`❌ Promise rifiutata per un utente:`, risultato.reason);
-                        fallimenti++;
-                    }
-                });
+                    // ✅ Reset campi
+                    document.getElementById("ddlProfessionisti").selectedIndex = -1;
+                    document.getElementById("ddlTeam").selectedIndex = -1;
+                    document.getElementById("noteRelazione").value = "";
 
-                if (successi > 0) {
-                    toastr.success(`✅ ${successi} utente/i assegnato/i correttamente.`);
-                    setTimeout(() => location.reload(), 1000); // 👈 qui il reload della tabella
-                }
-
-
-                if (fallimenti > 0) {
-                    toastr.error(`❌ ${fallimenti} utente/i non assegnato/i. Guarda console per dettagli.`);
+                    // ✅ Ricarica tabella nella modale principale
+                    setTimeout(() => {
+                        apriGestioneAssegnati(aziendaSelezionataId);
+                    }, 300);
+                } else {
+                    toastr.error(res.message);
                 }
             })
             .catch(err => {
-                console.error('❌ Errore globale Promise.allSettled:', err);
-                toastr.error('Errore generale durante il salvataggio.');
+                console.error("❌ Errore:", err);
+                toastr.error("Errore durante il salvataggio.");
             });
     }
+
 
     function visualizzaUtentiAssegnati(idAzienda) {
         aziendaSelezionataId = idAzienda;
@@ -1198,14 +1296,16 @@
                     contenitore.innerHTML = html;
                 }
 
-                const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('utentiAssegnatiModal'));
-                modal.show();
+                // 👇 Apri la modale della lista assegnati
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('utentiAssegnatiModal')).show();
             })
             .catch(err => {
                 console.error("Errore caricamento utenti assegnati:", err);
                 toastr.error("Errore durante il caricamento degli utenti assegnati.");
             });
     }
+
+
 
 
 
@@ -1255,6 +1355,41 @@
             }
         });
     }
+
+
+    // Se l'utente seleziona "Tutti", seleziono automaticamente tutti gli altri
+    function abilitaSelezioneMultipla() {
+        const ddlProfessionisti = document.getElementById("ddlProfessionisti");
+        const ddlTeam = document.getElementById("ddlTeam");
+
+        ddlProfessionisti.addEventListener("change", function () {
+            if ([...this.selectedOptions].some(opt => opt.value === "all")) {
+                // seleziona tutti tranne "all"
+                for (let i = 0; i < this.options.length; i++) {
+                    if (this.options[i].value !== "all") {
+                        this.options[i].selected = true;
+                    }
+                }
+                // deseleziona "all"
+                this.options[0].selected = false;
+            }
+        });
+
+        ddlTeam.addEventListener("change", function () {
+            if ([...this.selectedOptions].some(opt => opt.value === "all")) {
+                for (let i = 0; i < this.options.length; i++) {
+                    if (this.options[i].value !== "all") {
+                        this.options[i].selected = true;
+                    }
+                }
+                this.options[0].selected = false;
+            }
+        });
+    }
+
+    // Attiva il comportamento quando la modale è aperta
+    document.getElementById("aggiungiAssegnazioniModal")
+        .addEventListener("shown.bs.modal", abilitaSelezioneMultipla);
 
 
     function selezionaECaricaDocumenti(idAzienda) {
@@ -1430,7 +1565,7 @@
     });
 
 
-    // GESTIONE CODICE FISCALE 
+    // GESTIONE CODICE FISCALE
     document.addEventListener("DOMContentLoaded", function () {
         const cfInputs = document.querySelectorAll(".codice-fiscale-input");
 

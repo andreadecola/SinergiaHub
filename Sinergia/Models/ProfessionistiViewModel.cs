@@ -8,11 +8,10 @@ namespace Sinergia.Models
     public class ProfessionistiViewModel
     {
         public int ID_Professionista { get; set; }
-       // public int ID_Utente { get; set; } // 👈 necessario per Gestione Permessi
-
+        // public int ID_Utente { get; set; } // 👈 necessario per Gestione Permessi
 
         public string Nome { get; set; }
-        public string Cognome {  get; set; }
+        public string Cognome { get; set; }
         public string TipoRagioneSociale { get; set; } // Es: Ditta Individuale, STP...
         public string PartitaIVA { get; set; }
         public string CodiceFiscale { get; set; }
@@ -30,10 +29,9 @@ namespace Sinergia.Models
         public int UtentiAssociati { get; set; } // Numero utenti associati
         public bool HaUtentiAssegnati { get; set; } // Per decidere se mostrare "Visualizza"
 
-        public bool PuòGestirePermessi { get; set; } // getsione permessi professionistta 
+        public bool PuòGestirePermessi { get; set; } // gestione permessi professionista 
 
-
-        // dati bancari 
+        // 🔹 Dati bancari 
         public string IBAN { get; set; }
         public string NomeBanca { get; set; }
         public string Intestatario { get; set; }
@@ -44,10 +42,8 @@ namespace Sinergia.Models
         public bool PuoModificare { get; set; }
         public bool PuoEliminare { get; set; }
 
-
-        // dati practice
-
-        public int ID_Professione{ get; set; }
+        // 🔹 Dati practice
+        public int ID_Professione { get; set; }
         public string NomePractice { get; set; }
 
         public string TipoProfessionista { get; set; } // "Resident" o "Esterno"
@@ -82,7 +78,17 @@ namespace Sinergia.Models
             }
         }
 
+        // ✅ Documenti associati al professionista
+        public List<DocumentoProfessionistaViewModel> Documenti { get; set; } = new List<DocumentoProfessionistaViewModel>();
+    }
 
-
+    // 🔹 ViewModel dedicato ai documenti
+    public class DocumentoProfessionistaViewModel
+    {
+        public int ID_Documento { get; set; }
+        public string NomeDocumento { get; set; }
+        public string TipoMime { get; set; }
+        public DateTime DataCaricamento { get; set; }
+        public string UtenteCaricamento { get; set; }
     }
 }

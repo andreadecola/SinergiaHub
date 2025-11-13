@@ -45,5 +45,9 @@ namespace Sinergia.Model
         public DateTime DataInserimento { get; set; }
 
         public int? ID_Incasso { get; set; }
+
+        public DateTime? DataCompetenzaEconomica { get; set; }
+
+        public DateTime? DataCompetenzaFinanziaria { get; set; }
     }
 }

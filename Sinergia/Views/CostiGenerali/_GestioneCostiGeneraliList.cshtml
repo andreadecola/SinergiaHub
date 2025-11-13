@@ -114,6 +114,12 @@
                                 @Html.Partial("~/Views/CostiGenerali/_AzioniCostoGenerale.cshtml", t)
                             </td>
                         }
+                        else
+                        {
+                            <td class="text-center text-muted small">—</td>
+                        }
+
+
                     </tr>
                 }
             </tbody>
@@ -143,6 +149,7 @@
                     @Html.Partial("~/Views/CostiGenerali/_AzioniCostoGenerale.cshtml", t)
                 </div>
             }
+
         </div>
     }
 </div>
@@ -644,26 +651,62 @@
                     // Imposta la categoria
                     selectCategoria.value = r.Categoria || "";
 
-                    // ✅ GESTIONE UNA TANTUM (basata su confronto date)
+                    // ✅ GESTIONE UNA TANTUM
                     const checkUnaTantum = document.getElementById("checkUnaTantum");
                     const dataInizio = r.DataInizio ? new Date(r.DataInizio).toISOString().slice(0, 10) : "";
                     const dataFine = r.DataFine ? new Date(r.DataFine).toISOString().slice(0, 10) : "";
                     checkUnaTantum.checked = dataInizio && dataFine && dataInizio === dataFine;
-
-                    // ✅ Chiama la funzione per bloccare/sbloccare i campi in base alla checkbox
                     aggiornaCampiUnaTantum();
+
+                    // ===================================================
+                    // ⚙️ Casi speciali: Trattenuta Sinergia / Owner Fee
+                    // ===================================================
+                    const èSpeciale = r.Categoria === "Trattenuta Sinergia" || r.Categoria === "Owner Fee";
+                    const periodicitaField = form.querySelector('[name="Periodicita"]');
+                    const dataInizioField = form.querySelector('[name="DataInizio"]');
+                    const dataFineField = form.querySelector('[name="DataFine"]');
+
+                    if (èSpeciale) {
+                        // Pulisce i campi e li disabilita
+                        periodicitaField.value = "";
+                        dataInizioField.value = "";
+                        dataFineField.value = "";
+
+                        periodicitaField.disabled = true;
+                        dataInizioField.disabled = true;
+                        dataFineField.disabled = true;
+
+                        // Nasconde la checkbox “Una Tantum” (non applicabile)
+                        document.getElementById("checkUnaTantum").closest(".form-check").style.display = "none";
+
+                        toastr.info(`⚙️ "${r.Categoria}" non richiede periodicità né date.`);
+                    } else {
+                        // Riabilita i campi per le categorie normali
+                        periodicitaField.disabled = false;
+                        dataInizioField.disabled = false;
+                        dataFineField.disabled = false;
+                        document.getElementById("checkUnaTantum").closest(".form-check").style.display = "";
+                    }
 
                 } else {
                     toastr.info("⏳ Nessuna ricorrenza trovata, puoi inserirne una nuova.");
                     // Nuova ricorrenza → default categoria "Costo Generale"
                     selectCategoria.value = "Costo Generale";
 
-                    // ✅ Reset anche dello stato checkbox
+                    // ✅ Reset checkbox
                     document.getElementById("checkUnaTantum").checked = false;
                     aggiornaCampiUnaTantum();
+
+                    // Riabilita tutti i campi per sicurezza
+                    form.querySelector('[name="Periodicita"]').disabled = false;
+                    form.querySelector('[name="DataInizio"]').disabled = false;
+                    form.querySelector('[name="DataFine"]').disabled = false;
+                    document.getElementById("checkUnaTantum").closest(".form-check").style.display = "";
                 }
 
-                // Imposta correttamente categoria visiva
+                // ===================================================
+                // 📋 Imposta correttamente categoria visiva
+                // ===================================================
                 const categoriaHidden = form.querySelector('[name="Categoria"]');
                 const staticText = document.getElementById("categoriaStatic");
                 const cat = selectCategoria.value;
@@ -675,7 +718,9 @@
                 selectCategoria.classList.add("d-none");
                 staticText.classList.remove("d-none");
 
-                // Mostra modale
+                // ===================================================
+                // 🧱 Mostra la modale
+                // ===================================================
                 new bootstrap.Modal(document.getElementById("ricorrenzaCostoModal")).show();
             })
             .catch(err => {
@@ -683,6 +728,7 @@
                 toastr.error("❌ Errore durante il caricamento della ricorrenza.");
             });
     }
+
 
 
     function salvaRicorrenzaCosto() {
@@ -713,24 +759,46 @@
         formData.set("DataInizio", dataInizioVal);
         formData.set("DataFine", dataFineVal);
 
-        // ✅ Casi speciali: Owner Fee e Trattenuta
-        if (categoria === "Owner Fee" || categoria === "Trattenuta Sinergia") {
+        // =====================================================
+        // ⚙️ Gestione casi speciali: Owner Fee / Trattenuta Sinergia
+        // =====================================================
+        const èSpeciale = categoria === "Owner Fee" || categoria === "Trattenuta Sinergia";
+        if (èSpeciale) {
             formData.set("Periodicita", "");
             formData.set("DataInizio", "");
             formData.set("DataFine", "");
+
+            // 🔒 Disabilita visivamente i campi nella modale
+            periodicitaField.disabled = true;
+            dataInizioField.disabled = true;
+            dataFineField.disabled = true;
         }
 
-        // 🔍 Validazione base
+        // =====================================================
+        // 🔍 Validazione dinamica
+        // =====================================================
         const idTipoCosto = formData.get("ID_AnagraficaCosto");
         const tipoValore = formData.get("TipoValore");
         const valore = formData.get("Valore");
         const periodicita = formData.get("Periodicita");
 
-        if (!idTipoCosto || !tipoValore || !valore || !categoria || !periodicita || !dataInizioVal) {
-            toastr.warning("⚠️ Compilare Periodicità e Data Inizio.");
+        // Campi obbligatori di base
+        if (!idTipoCosto || !tipoValore || !valore || !categoria) {
+            toastr.warning("⚠️ Compilare tutti i campi obbligatori.");
             return;
         }
 
+        // Solo per i costi NON speciali → serve periodicità e data
+        if (!èSpeciale) {
+            if (!periodicita || !dataInizioVal) {
+                toastr.warning("⚠️ Compilare Periodicità e Data Inizio.");
+                return;
+            }
+        }
+
+        // =====================================================
+        // 🚀 Invio al server
+        // =====================================================
         fetch('/Pratiche/SalvaRicorrenzaCostoGenerale', {
             method: 'POST',
             body: formData
@@ -742,14 +810,14 @@
                     const modal = bootstrap.Modal.getInstance(document.getElementById("ricorrenzaCostoModal"));
                     if (modal) modal.hide();
                 } else {
-                    toastr.error("❌ Errore durante il salvataggio: " + res.message);
+                    toastr.error("❌ Errore durante il salvataggio: " + (res.message || ""));
                 }
             })
             .catch(err => {
-                toastr.error("❌ Errore di rete: " + err);
+                console.error("Errore di rete:", err);
+                toastr.error("❌ Errore di rete durante il salvataggio.");
             });
     }
-
 
 
     // ✅ Funzione GLOBALE, dichiarata fuori da DOMContentLoaded

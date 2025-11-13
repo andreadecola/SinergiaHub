@@ -178,8 +178,7 @@
     <Reference Include="System.Web.Helpers, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.9\lib\net45\System.Web.Helpers.dll</HintPath>
     </Reference>
-    <Reference Include="System.Web.Mvc, Version=5.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
+    <Reference Include="System.Web.Mvc, Version=5.2.9.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.AspNet.Mvc.5.2.9\lib\net45\System.Web.Mvc.dll</HintPath>
     </Reference>
     <Reference Include="System.Web.Optimization, Version=1.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
@@ -221,6 +220,7 @@
     <Compile Include="App_Helpers\CostiHelper.cs" />
     <Compile Include="App_Helpers\DashboardHelper.cs" />
     <Compile Include="App_Helpers\DashRouteHandler.cs" />
+    <Compile Include="App_Helpers\DatabaseMaintenanceHelper.cs" />
     <Compile Include="App_Helpers\FatturaHelper.cs" />
     <Compile Include="App_Helpers\FotoProfiloHelper.cs" />
     <Compile Include="App_Helpers\GiornaliHelper.cs" />
@@ -315,8 +315,10 @@
     <Content Include="Content\css\bootstrap.rtl.css" />
     <Content Include="Content\css\bootstrap.rtl.min.css" />
     <Content Include="Content\css\style-mobile.css" />
+    <Content Include="Content\img\Firme\Firma-Dario-D_Amico.png" />
+    <Content Include="Content\img\Firme\Firma-Riccardo-Fratini.png" />
     <Content Include="Content\img\Icons\bandiera-italiana.png" />
-    <Content Include="Content\img\Icons\Logo col PNG.png" />
+    <Content Include="Content\img\Icons\Logo Nuovo.png" />
     <Content Include="favicon.ico" />
     <Content Include="Global.asax" />
     <Content Include="Content\css\Site.css" />
