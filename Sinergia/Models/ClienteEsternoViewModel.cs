@@ -39,6 +39,9 @@ namespace Sinergia.Models
         public string NomeCitta { get; set; }
         public string NomeNazione { get; set; }
 
+        public string DocumentoCliente_Nome { get; set; }
+        public bool HasDocumentoCliente { get; set; }
+
         // 🔹 Separiamo Owner e Associati
         public string OwnerVisualizzato { get; set; }            // Nome del professionista Owner
         public string AssociatiVisualizzati { get; set; }

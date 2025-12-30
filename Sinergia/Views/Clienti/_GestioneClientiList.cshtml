@@ -13,6 +13,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+
 @*<style>
         #clientiTable th,
         #clientiTable td {
@@ -88,19 +89,20 @@
     <form method="get" id="exportUtentiForm"
           class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
 
-        <button type="submit" formaction="@Url.Action("EsportaClientiCsv", "Utenti")"
-                class="btn btn-outline-success btn-sm"
-                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
-            <i class="bi bi-file-earmark-excel"></i> Excel/CSV
-        </button>
+        @*<button type="submit" formaction="@Url.Action("EsportaClientiCsv", "Utenti")"
+                    class="btn btn-outline-success btn-sm"
+                    style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+                <i class="bi bi-file-earmark-excel"></i> Excel/CSV
+            </button>*@
 
-        <button type="submit" formaction="@Url.Action("EsportaClientiPdf", "Utenti")"
-                class="btn btn-outline-danger btn-sm"
-                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
-            <i class="bi bi-file-earmark-pdf"></i> PDF
-        </button>
+        @*<button type="submit" formaction="@Url.Action("EsportaClientiPdf", "Utenti")"
+                    class="btn btn-outline-danger btn-sm"
+                    style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>*@
     </form>
 </div>
+
 
 
 <!-- 🔳 TABELLA: visibile solo su desktop e tablet -->
@@ -291,10 +293,15 @@
 
                             <div class="col-md-4">
                                 <label>Codice Fiscale</label>
+
                                 <input name="CodiceFiscale"
-                                       class="form-control form-control-sm codice-fiscale-input" />
+                                       maxlength="16"
+                                       class="form-control form-control-sm codice-fiscale-input"
+                                       oninput="this.value = this.value.toUpperCase().slice(0,16);" />
+
                                 <small class="text-muted d-none" data-prev="Codice Fiscale"></small>
                             </div>
+
 
 
                             <div class="col-md-4">
@@ -360,15 +367,42 @@
 
                         </div>
 
-                        <!-- NOTE -->
+                        <!-- NOTE  E DOCUMENTO -->
                         <div class="row mt-2">
-                            <div class="col-md-12">
+
+                            <!-- NOTE -->
+                            <div class="col-md-6">
                                 <label>Note</label>
-                                <textarea name="Note" class="form-control form-control-sm" rows="2"></textarea>
+                                <textarea name="Note" class="form-control form-control-sm" rows="1"></textarea>
                                 <small class="text-muted d-none" data-prev="Note"></small>
                             </div>
-                        </div>
 
+                            <!-- DOCUMENTO PDF -->
+                            <div class="col-md-6">
+                                <label class="fw-bold">Documento Cliente (PDF, max 8 MB)</label>
+
+                                <!-- Upload -->
+                                <input type="file"
+                                       name="DocumentoPDF"
+                                       id="documentoCliente"
+                                       accept="application/pdf"
+                                       class="form-control form-control-sm" />
+
+                                <!-- Documento salvato -->
+                                <div id="documentoEsistenteWrapper" class="mt-2 d-none">
+                                    <span class="text-success fw-bold">Documento già caricato:</span>
+                                    <span id="documentoClienteNome" class="ms-1 text-dark"></span>
+
+                                    <button type="button"
+                                            id="btnScaricaDocumentoCliente"
+                                            class="btn btn-light border btn-sm ms-2"
+                                            title="Scarica documento">
+                                        <i class="fa fa-download text-danger"></i>
+                                    </button>
+
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -440,8 +474,9 @@
 </div>
 
 
-
 <script>
+
+
     let idClienteDaEliminare = 0;
 
     function apriNuovoCliente() {
@@ -449,6 +484,11 @@
         form.reset();
         form.querySelector('[name="ID_Cliente"]').value = 0;
         document.getElementById("clienteModalLabel").textContent = "Nuovo Cliente";
+
+        // 🆕 Nascondi documento esistente
+        $("#documentoEsistenteWrapper").addClass("d-none");
+        $("#documentoClienteNome").text("");
+        $("#btnScaricaDocumentoCliente").attr("href", "#");
 
         // 🔴 Nascondi toggle e storico
         $("#toggleVersioniWrapper").addClass("d-none");
@@ -496,14 +536,11 @@
         const wrapperAssegna = document.getElementById("wrapperAssegnaProfessionista");
         if (typeof utenteLoggatoTipo !== "undefined") {
             if (utenteLoggatoTipo === "Admin" || utenteLoggatoTipo === "Collaboratore") {
-                // Admin e Collaboratore → mostrano la select
                 wrapperAssegna?.classList.remove("d-none");
             } else if (utenteLoggatoTipo === "Professionista") {
-                // Professionista → già precompilato hidden, non serve mostrare la select
                 wrapperAssegna?.classList.remove("d-none");
                 const hiddenInput = document.querySelector('#wrapperAssegnaProfessionista input[name="ID_Operatore"]');
                 if (hiddenInput && hiddenInput.value) {
-                    // Mostro anche la label readonly
                     const textBox = document.querySelector('#wrapperAssegnaProfessionista input[readonly]');
                     if (textBox) textBox.closest('div').classList.remove('d-none');
                 }
@@ -512,10 +549,10 @@
             }
         }
 
-
         // Mostra la modale
         new bootstrap.Modal(document.getElementById("clienteModal")).show();
     }
+
 
 
     function apriModificaCliente(id) {
@@ -527,12 +564,24 @@
                 const form = document.getElementById("clienteForm");
                 form.reset();
 
+                // 🔄 Popola i campi
                 for (const [k, v] of Object.entries(c)) {
                     const input = form.querySelector(`[name="${k}"]`);
                     if (input) input.value = v ?? '';
                 }
 
-                // 🔵 Mostra toggle
+                // 🆕 GESTIONE DOCUMENTO ESISTENTE
+                if (c.HasDocumentoCliente && c.DocumentoCliente_Nome) {
+                    $("#documentoEsistenteWrapper").removeClass("d-none");
+                    $("#documentoClienteNome").text(c.DocumentoCliente_Nome);
+                    $("#btnScaricaDocumentoCliente").data("id-cliente", c.ID_Cliente);
+                } else {
+                    $("#documentoEsistenteWrapper").addClass("d-none");
+                    $("#documentoClienteNome").text("");
+                    $("#btnScaricaDocumentoCliente").removeData("id-cliente");
+                }
+
+                // 🔵 Mostra toggle versione
                 $("#toggleVersioniWrapper").removeClass("d-none");
                 $("#toggleVersioni").prop("checked", false);
                 $("#storicoVersioni").addClass("d-none");
@@ -562,20 +611,9 @@
                             selectCitta.appendChild(opt);
                         });
 
-                        // ✅ Seleziona valori salvati
-                        if (c.ID_Nazione) {
-                            selectNazione.value = c.ID_Nazione;
-                        } else {
-                            const italia = data.nazioni.find(n => n.NameNazione.toLowerCase() === "italia");
-                            if (italia) selectNazione.value = italia.ID_BPCittaDN;
-                        }
-
-                        if (c.ID_Citta) {
-                            selectCitta.value = c.ID_Citta;
-                        } else {
-                            const roma = data.citta.find(x => x.NameLocalita.toLowerCase() === "roma");
-                            if (roma) selectCitta.value = roma.ID_BPCitta;
-                        }
+                        // Selezione automatica
+                        selectNazione.value = c.ID_Nazione || data.nazioni.find(n => n.NameNazione.toLowerCase() === "italia")?.ID_BPCittaDN;
+                        selectCitta.value = c.ID_Citta || data.citta.find(x => x.NameLocalita.toLowerCase() === "roma")?.ID_BPCitta;
                     });
 
                 // Blocca i campi se non ha permessi
@@ -583,26 +621,31 @@
                 if (!c.UtenteCorrenteHaPermessi) {
                     campi.prop('disabled', true);
                     $('#btnSalvaCliente').hide();
+
+                    // ❗ Disabilita upload documento
+                    $('#documentoCliente').prop('disabled', true);
+
                 } else {
                     campi.prop('disabled', false);
                     $('#btnSalvaCliente').show();
+
+                    // ✔ Riattiva upload
+                    $('#documentoCliente').prop('disabled', false);
                 }
 
                 document.getElementById("clienteModalLabel").innerText = "Modifica Cliente";
                 new bootstrap.Modal(document.getElementById("clienteModal")).show();
-                // 👤 Gestione assegnazione Owner a seconda del ruolo
+
+                // Gestione assegnazione owner
                 const wrapperAssegna = document.getElementById("wrapperAssegnaProfessionista");
                 if (typeof utenteLoggatoTipo !== "undefined") {
                     if (utenteLoggatoTipo === "Admin" || utenteLoggatoTipo === "Collaboratore") {
-                        // Admin e Collaboratore → mostrano la select
                         wrapperAssegna?.classList.remove("d-none");
-                        // ✅ Se già salvato, seleziona il valore
                         if (c.ID_Operatore) {
                             const select = wrapperAssegna.querySelector('select[name="ID_Operatore"]');
                             if (select) select.value = c.ID_Operatore;
                         }
                     } else if (utenteLoggatoTipo === "Professionista") {
-                        // Professionista → hidden precompilato + textbox readonly
                         wrapperAssegna?.classList.remove("d-none");
 
                         const hiddenInput = wrapperAssegna.querySelector('input[name="ID_Operatore"]');
@@ -618,29 +661,22 @@
                     }
                 }
 
-
-                // ✅ Aggancio evento toggle (una sola volta)
+                // Toggle versioni storiche
                 $("#toggleVersioni").off("change").on("change", function () {
                     if (this.checked) {
                         $.get("/Home/GetStoricoCliente", { idCliente: $("#idClienteHidden").val() }, function (res) {
                             if (res.success) {
-
-                                // Converte la data dal formato /Date(...)/ se serve
                                 let rawDate = res.storico.DataUltimaModifica;
                                 let dataFormattata = "";
-                                try {
-                                    if (rawDate) {
-                                        let match = /Date\((\d+)\)/.exec(rawDate);
-                                        if (match) {
-                                            let dt = new Date(parseInt(match[1]));
-                                            dataFormattata = dt.toLocaleString("it-IT");
-                                        }
-                                    }
-                                } catch (e) {
-                                    dataFormattata = rawDate;
-                                }
 
-                                // Popola i <small> sotto i campi (inclusi Nazione e Città)
+                                try {
+                                    let match = /Date\((\d+)\)/.exec(rawDate);
+                                    if (match) {
+                                        let dt = new Date(parseInt(match[1]));
+                                        dataFormattata = dt.toLocaleString("it-IT");
+                                    }
+                                } catch { dataFormattata = rawDate; }
+
                                 for (const key in res.storico.CampiSpecifici) {
                                     const valorePrec = res.storico.CampiSpecifici[key] || "";
                                     $(`[data-prev='${key}']`)
@@ -648,7 +684,6 @@
                                         .removeClass("d-none");
                                 }
 
-                                // Mostra info versione
                                 $("#infoStoricoCliente").remove();
                                 $(".modal-body .container-fluid").prepend(`
                                 <div id="infoStoricoCliente" class="alert alert-light border small mb-2">
@@ -666,6 +701,7 @@
                 });
             });
     }
+
 
     // submit
     $('#clienteForm').on('submit', function (e) {
@@ -693,6 +729,19 @@
             });
     });
 
+    // 🔽 Download documento cliente
+    $(document).on("click", "#btnScaricaDocumentoCliente", function () {
+
+        const idCliente = $("#idClienteHidden").val();
+
+        if (!idCliente) {
+            toastr.error("ID cliente non valido.");
+            return;
+        }
+
+        // Esegue il download
+        window.open(`/Utenti/ScaricaDocumentoCliente?id=${idCliente}`, "_blank");
+    });
 
     function confermaEliminazioneCliente(id) {
         idClienteDaEliminare = id;

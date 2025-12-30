@@ -15,147 +15,103 @@ namespace Sinergia.App_Helpers
         public static List<string> EseguiGenerazioneCosti()
         {
             DateTime oggi = DateTime.Today;
-            int idUtente = UserManager.GetIDUtenteCollegato();
+            int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
 
-            var logOutput = new List<string>();
+            var log = new List<string>();
             var righeDaSalvare = new List<GenerazioneCosti>();
-            var coppieTeamCostoElaborate = new HashSet<string>();
-            var coppieGeneraliUtente = new HashSet<string>();
+
+            // HashSet per evitare duplicati
+            var skipGenerali = new HashSet<string>();              // tipoCosto + "-" + utente
+            var skipProfessionista = new HashSet<string>();        // costoProf + "-" + prof
+            var skipTeamPerMembro = new HashSet<string>();         // team + "-" + costoTeam + "-" + membro
 
             using (var db = new SinergiaDB())
             {
-                var ricorrenzeBase = db.RicorrenzeCosti.Where(r => r.Attivo).ToList();
+                var ricBase = db.RicorrenzeCosti.Where(r => r.Attivo).ToList();
                 var ricorrenze = new List<RicorrenzeCosti>();
 
-                foreach (var ric in ricorrenzeBase)
+                // ======================================================================
+                // 1️⃣ PREPARAZIONE RICORRENZE (normalizzazione + clonazione team)
+                // ======================================================================
+                foreach (var ric in ricBase)
                 {
-                    string idCosto = ric.ID_CostoTeam?.ToString() ?? ric.ID_CostoProfessionista?.ToString() ?? ric.ID_TipoCostoGenerale?.ToString();
-                    string logTeam = ric.ID_Team.HasValue ? $"Team={ric.ID_Team}" : "Team=NULL";
-                    logOutput.Add($"📌 Analizzo: AnagraficaCosto={idCosto}, Categoria={ric.Categoria}, {logTeam}, Valore={ric.Valore:N2}");
-
-                    if (ric.Categoria == "Trattenuta Sinergia" || ric.Categoria == "Owner Fee")
+                    // --- FIX: Normalizza "Costo Fisso Resident" come Generale ---
+                    if (ric.Categoria != null &&
+                        ric.Categoria.Trim().ToLower() == "costo fisso resident")
                     {
-                        logOutput.Add($"ℹ️ Ricorrenza {ric.Categoria} ignorata (non gestita da GenerazioneCosti)");
-                        continue;
+                        ric.Categoria = CategorieCostiHelper.Generale;
+                        System.Diagnostics.Trace.WriteLine("NORMALIZZA → 'Costo Fisso Resident' → Generale");
                     }
 
-                    if (ric.Categoria == CategorieCostiHelper.Generale || ric.Categoria == CategorieCostiHelper.Professionista)
+                    // Skippa trattenute / owner fee
+                    if (ric.Categoria == "Trattenuta Sinergia" || ric.Categoria == "Owner Fee")
+                        continue;
+
+                    // GENERALE o PROFESSIONISTA → aggiungi direttamente
+                    if (ric.Categoria == CategorieCostiHelper.Generale ||
+                        ric.Categoria == CategorieCostiHelper.Professionista)
                     {
                         ricorrenze.Add(ric);
                         continue;
                     }
 
+                    // TEAM già assegnato
                     if (ric.Categoria == CategorieCostiHelper.Team && ric.ID_Team != null)
                     {
-                        string chiave = $"{ric.ID_Team}_{ric.ID_CostoTeam}";
-                        if (coppieTeamCostoElaborate.Contains(chiave))
-                        {
-                            logOutput.Add($"⛔ Ricorrenza TEAM già gestita per Team={ric.ID_Team}, Costo={ric.ID_CostoTeam}");
-                            continue;
-                        }
-
-                        coppieTeamCostoElaborate.Add(chiave);
                         ricorrenze.Add(ric);
-                        logOutput.Add($"✅ Ricorrenza diretta TEAM ID={ric.ID_Team} per CostoTeam ID={ric.ID_CostoTeam}");
                         continue;
                     }
 
+                    // TEAM → bisogna generare cloni per ogni team con percentuale
                     if (ric.Categoria == CategorieCostiHelper.Team && ric.ID_Team == null)
                     {
-                        var distribuzioni = db.DistribuzioneCostiTeam
+                        var dist = db.DistribuzioneCostiTeam
                             .Where(d => d.ID_AnagraficaCostoTeam == ric.ID_CostoTeam)
                             .ToList();
 
-                        if (!distribuzioni.Any())
+                        foreach (var d in dist)
                         {
-                            logOutput.Add($"⚠️ Nessuna distribuzione trovata per CostoTeam ID={ric.ID_CostoTeam}");
-                            continue;
-                        }
-
-                        foreach (var dist in distribuzioni)
-                        {
-                            string chiave = $"{dist.ID_Team}_{ric.ID_CostoTeam}";
-                            if (coppieTeamCostoElaborate.Contains(chiave))
-                            {
-                                logOutput.Add($"⛔ CLONE SKIPPATO → Ricorrenza TEAM già esistente per Team={dist.ID_Team}, Costo={ric.ID_CostoTeam}");
-                                continue;
-                            }
-
-                            coppieTeamCostoElaborate.Add(chiave);
-
-                            var ricClone = new RicorrenzeCosti
+                            ricorrenze.Add(new RicorrenzeCosti
                             {
                                 ID_CostoTeam = ric.ID_CostoTeam,
-                                ID_Team = dist.ID_Team,
-                                Categoria = ric.Categoria,
+                                ID_Team = d.ID_Team,
+                                Categoria = CategorieCostiHelper.Team,
                                 Periodicita = ric.Periodicita,
                                 Valore = ric.Valore,
                                 DataInizio = ric.DataInizio,
                                 DataFine = ric.DataFine,
-                                Attivo = ric.Attivo
-                            };
-
-                            ricorrenze.Add(ricClone);
-                            logOutput.Add($"🔁 CLONE TEAM → CostoTeam={ric.ID_CostoTeam}, Team={dist.ID_Team}");
+                                Attivo = true
+                            });
                         }
                     }
                 }
 
+                // ======================================================================
+                // 2️⃣ GENERAZIONE COSTI
+                // ======================================================================
                 foreach (var ric in ricorrenze)
                 {
+                    string categoria = ric.Categoria;
                     string descrizione = null;
-                    DateTime dataRegistrazione = (ric.DataInizio == ric.DataFine)
-                        ? ric.DataInizio.Value.Date
-                        : new DateTime(oggi.Year, oggi.Month, 1);
 
-                    // 🔍 Recupera eventuale eccezione attiva
-                    var eccezione = db.EccezioniRicorrenzeCosti.FirstOrDefault(e =>
-                        e.Categoria == ric.Categoria &&
-                        (
-                            (ric.Categoria == CategorieCostiHelper.Generale && e.ID_TipologiaCosto == ric.ID_TipoCostoGenerale) ||
-                            (ric.Categoria == CategorieCostiHelper.Team && e.ID_Team == ric.ID_Team) ||
-                            (ric.Categoria == CategorieCostiHelper.Professionista && e.ID_Professionista == ric.ID_Professionista)
-                        ) &&
-                        e.DataInizio <= dataRegistrazione &&
-                        (e.DataFine == null || e.DataFine >= dataRegistrazione)
-                    );
-
-                    if (eccezione != null && eccezione.SaltaCosto == true)
-                    {
-                        logOutput.Add($"⛔ BLOCCATO da eccezione → Ricorrenza {ric.Categoria} non generata (costo ID={ric.ID_CostoTeam ?? ric.ID_CostoProfessionista ?? ric.ID_TipoCostoGenerale})");
-                        continue;
-                    }
-
-                    // Usa l'importo personalizzato dell'eccezione se presente
-                    decimal importoDaUsare = eccezione?.NuovoImporto ?? ric.Valore;
-
-                    // --- Recupero descrizione ---
-                    if (ric.Categoria == CategorieCostiHelper.Team)
+                    // -----------------------------
+                    // Recupero descrizione
+                    // -----------------------------
+                    if (categoria == CategorieCostiHelper.Team)
                     {
                         descrizione = db.AnagraficaCostiTeam
                             .Where(a => a.ID_AnagraficaCostoTeam == ric.ID_CostoTeam)
                             .Select(a => a.Descrizione)
                             .FirstOrDefault();
-
-                        if (ric.ID_Team.HasValue)
-                        {
-                            var nomeTeam = db.TeamProfessionisti
-                                .Where(t => t.ID_Team == ric.ID_Team.Value)
-                                .Select(t => t.Nome)
-                                .FirstOrDefault();
-
-                            if (!string.IsNullOrWhiteSpace(nomeTeam))
-                                descrizione += $" per team {nomeTeam}";
-                        }
                     }
-                    else if (ric.Categoria == CategorieCostiHelper.Professionista)
+                    else if (categoria == CategorieCostiHelper.Professionista)
                     {
                         descrizione = db.AnagraficaCostiProfessionista
                             .Where(a => a.ID_AnagraficaCostoProfessionista == ric.ID_CostoProfessionista)
                             .Select(a => a.Descrizione)
                             .FirstOrDefault();
                     }
-                    else if (ric.Categoria == CategorieCostiHelper.Generale)
+                    else if (categoria == CategorieCostiHelper.Generale)
                     {
                         descrizione = db.TipologieCosti
                             .Where(a => a.ID_TipoCosto == ric.ID_TipoCostoGenerale)
@@ -165,262 +121,266 @@ namespace Sinergia.App_Helpers
 
                     if (string.IsNullOrWhiteSpace(descrizione))
                     {
-                        logOutput.Add($"⚠️ Descrizione mancante per ricorrenza ID_Costo={ric.ID_CostoTeam ?? ric.ID_CostoProfessionista ?? ric.ID_TipoCostoGenerale}");
+                        System.Diagnostics.Trace.WriteLine("⚠ Descrizione mancante per ricorrenza");
                         continue;
                     }
 
-                    // --- Inserimento a seconda della categoria ---
-                    if (ric.Categoria == CategorieCostiHelper.Professionista && ric.ID_Professionista != null)
-                    {
-                        bool giaPresente = db.GenerazioneCosti.Any(x =>
-                            x.ID_Utente == ric.ID_Professionista &&
-                            x.Categoria == ric.Categoria &&
-                            x.DataRegistrazione == dataRegistrazione &&
-                            x.Descrizione == descrizione);
+                    // -----------------------------
+                    // Calcolo Data Registrazione
+                    // -----------------------------
+                    bool unaTantum =
+                        ric.DataInizio.HasValue &&
+                        ric.DataFine.HasValue &&
+                        ric.DataInizio.Value.Date == ric.DataFine.Value.Date;
 
-                        if (giaPresente)
+                    DateTime dataReg =
+                        unaTantum ? ric.DataInizio.Value.Date :
+                        (!string.IsNullOrEmpty(ric.Periodicita)
+                            ? new DateTime(oggi.Year, oggi.Month, 1)
+                            : ric.DataInizio ?? oggi);
+
+                    // -----------------------------
+                    // Eccezioni
+                    // -----------------------------
+                    var ECC = db.EccezioniRicorrenzeCosti.FirstOrDefault(e =>
+                        e.Categoria == categoria &&
+                        (
+                            (categoria == CategorieCostiHelper.Generale && e.ID_TipologiaCosto == ric.ID_TipoCostoGenerale) ||
+                            (categoria == CategorieCostiHelper.Team && e.ID_Team == ric.ID_Team) ||
+                            (categoria == CategorieCostiHelper.Professionista && e.ID_Professionista == ric.ID_Professionista)
+                        ) &&
+                        e.DataInizio <= dataReg &&
+                        (e.DataFine == null || e.DataFine >= dataReg)
+                    );
+
+                    if (ECC?.SaltaCosto == true)
+                    {
+                        System.Diagnostics.Trace.WriteLine("⛔ Costo bloccato da eccezione → " + descrizione);
+                        continue;
+                    }
+
+                    decimal importo = ECC?.NuovoImporto ?? ric.Valore;
+
+                    // ==================================================================
+                    // 2.1️⃣ GENERALE
+                    // ==================================================================
+                    if (categoria == CategorieCostiHelper.Generale)
+                    {
+                        var assegnati = db.CostiGeneraliUtente
+                            .Where(c => c.ID_TipoCosto == ric.ID_TipoCostoGenerale)
+                            .Select(c => c.ID_Utente)
+                            .Distinct()
+                            .ToList();
+
+                        foreach (int idProf in assegnati)
                         {
-                            logOutput.Add($"⛔ SKIP PROFESSIONISTA {ric.ID_Professionista} → {descrizione} già presente");
-                            continue;
+                            string chiave = ric.ID_TipoCostoGenerale + "-" + idProf;
+
+                            if (skipGenerali.Contains(chiave))
+                                continue;
+
+                            skipGenerali.Add(chiave);
+
+                            if (db.GenerazioneCosti.Any(x =>
+                                x.ID_Utente == idProf &&
+                                x.Categoria == categoria &&
+                                x.Descrizione == descrizione &&
+                                x.DataRegistrazione == dataReg))
+                                continue;
+
+                            righeDaSalvare.Add(new GenerazioneCosti
+                            {
+                                ID_Utente = idProf,
+                                Categoria = categoria,
+                                Descrizione = descrizione,
+                                Importo = importo,
+                                Periodicita = ric.Periodicita,
+                                Origine = "Ricorrenza",
+                                Stato = "Previsionale",
+                                Approvato = false,
+                                DataRegistrazione = dataReg,
+                                ID_UtenteCreatore = idUtenteCorrente,
+                                DataCreazione = DateTime.Now,
+                                ID_UtenteUltimaModifica = idUtenteCorrente,
+                                DataUltimaModifica = DateTime.Now,
+                                ID_Riferimento = ric.ID_TipoCostoGenerale
+                            });
+
+                            System.Diagnostics.Trace.WriteLine($"GEN → GENERALE: {descrizione} → Utente {idProf}");
                         }
 
-                        righeDaSalvare.Add(new GenerazioneCosti
-                        {
-                            ID_Utente = ric.ID_Professionista,
-                            Categoria = ric.Categoria,
-                            Descrizione = descrizione,
-                            Importo = importoDaUsare,
-                            Periodicita = ric.Periodicita,
-                            Origine = "Ricorrenza",
-                            Stato = "Previsionale",
-                            Approvato = false,
-                            DataRegistrazione = dataRegistrazione,
-                            ID_UtenteCreatore = idUtente,
-                            DataCreazione = DateTime.Now,
-                            ID_UtenteUltimaModifica = idUtente,
-                            DataUltimaModifica = DateTime.Now,
-                            ID_Riferimento = ric.ID_CostoProfessionista
-                        });
-
-                        logOutput.Add($"✅ PROFESSIONISTA {ric.ID_Professionista} → {descrizione} | {importoDaUsare:N2}€");
+                        continue;
                     }
-                    else if (ric.Categoria == CategorieCostiHelper.Team && ric.ID_Team.HasValue)
+
+                    // ==================================================================
+                    // 2.2️⃣ PROFESSIONISTA
+                    // ==================================================================
+                    if (categoria == CategorieCostiHelper.Professionista && ric.ID_Professionista != null)
+                    {
+                        int idProf = ric.ID_Professionista.Value;
+                        string chiave = ric.ID_CostoProfessionista + "-" + idProf;
+
+                        if (skipProfessionista.Contains(chiave))
+                            continue;
+
+                        skipProfessionista.Add(chiave);
+
+                        if (!db.GenerazioneCosti.Any(x =>
+                            x.ID_Utente == idProf &&
+                            x.Categoria == categoria &&
+                            x.Descrizione == descrizione &&
+                            x.DataRegistrazione == dataReg))
+                        {
+                            righeDaSalvare.Add(new GenerazioneCosti
+                            {
+                                ID_Utente = idProf,
+                                Categoria = categoria,
+                                Descrizione = descrizione,
+                                Importo = importo,
+                                Periodicita = ric.Periodicita,
+                                Origine = "Ricorrenza",
+                                Stato = "Previsionale",
+                                Approvato = false,
+                                DataRegistrazione = dataReg,
+                                ID_UtenteCreatore = idUtenteCorrente,
+                                DataCreazione = DateTime.Now,
+                                ID_UtenteUltimaModifica = idUtenteCorrente,
+                                DataUltimaModifica = DateTime.Now,
+                                ID_Riferimento = ric.ID_CostoProfessionista
+                            });
+
+                            System.Diagnostics.Trace.WriteLine($"GEN → PROFESSIONISTA: {descrizione} → Utente {idProf}");
+                        }
+
+                        continue;
+                    }
+
+                    // ==================================================================
+                    // 2.3️⃣ TEAM
+                    // ==================================================================
+                    if (categoria == CategorieCostiHelper.Team && ric.ID_Team.HasValue)
                     {
                         int idTeam = ric.ID_Team.Value;
+
                         var dist = db.DistribuzioneCostiTeam
-                            .FirstOrDefault(d => d.ID_Team == idTeam && d.ID_AnagraficaCostoTeam == ric.ID_CostoTeam);
+                            .FirstOrDefault(d => d.ID_Team == idTeam &&
+                                                 d.ID_AnagraficaCostoTeam == ric.ID_CostoTeam);
 
                         if (dist == null || dist.Percentuale <= 0)
-                        {
-                            logOutput.Add($"⛔ NESSUNA DISTRIBUZIONE valida per Team={idTeam} e Costo={ric.ID_CostoTeam}");
                             continue;
-                        }
 
                         var membri = db.MembriTeam
                             .Where(m => m.ID_Team == idTeam)
                             .Select(m => m.ID_Professionista)
                             .ToList();
 
-                        if (!membri.Any())
-                        {
-                            logOutput.Add($"⛔ Nessun membro per Team {idTeam}");
-                            continue;
-                        }
+                        decimal quotaTeam = importo * (dist.Percentuale / 100m);
+                        decimal quota = membri.Count > 0 ? Math.Round(quotaTeam / membri.Count, 2) : 0;
 
-                        decimal importoTeam = importoDaUsare * (dist.Percentuale / 100M);
-                        decimal quota = membri.Count > 0 ? Math.Round(importoTeam / membri.Count, 2) : 0;
-
-                        foreach (var idMembro in membri)
+                        foreach (var membro in membri)
                         {
-                            bool giaPresente = db.GenerazioneCosti.Any(x =>
-                                x.ID_Utente == idMembro &&
+                            string chiave = idTeam + "-" + ric.ID_CostoTeam + "-" + membro;
+
+                            if (skipTeamPerMembro.Contains(chiave))
+                                continue;
+
+                            skipTeamPerMembro.Add(chiave);
+
+                            if (!db.GenerazioneCosti.Any(x =>
+                                x.ID_Utente == membro &&
                                 x.ID_Team == idTeam &&
-                                x.Categoria == ric.Categoria &&
+                                x.Categoria == categoria &&
                                 x.Descrizione == descrizione &&
-                                x.DataRegistrazione == dataRegistrazione &&
-                                Math.Abs((x.Importo ?? 0) - quota) < 0.01M);
-
-                            if (giaPresente)
+                                x.DataRegistrazione == dataReg))
                             {
-                                logOutput.Add($"⛔ SKIP TEAM → Membro {idMembro}, Team {idTeam} | {descrizione} già esiste");
-                                continue;
+                                righeDaSalvare.Add(new GenerazioneCosti
+                                {
+                                    ID_Utente = membro,
+                                    ID_Team = idTeam,
+                                    Categoria = categoria,
+                                    Descrizione = descrizione,
+                                    Importo = quota,
+                                    Periodicita = ric.Periodicita,
+                                    Origine = "Ricorrenza",
+                                    Stato = "Previsionale",
+                                    Approvato = false,
+                                    DataRegistrazione = dataReg,
+                                    ID_UtenteCreatore = idUtenteCorrente,
+                                    DataCreazione = DateTime.Now,
+                                    ID_UtenteUltimaModifica = idUtenteCorrente,
+                                    DataUltimaModifica = DateTime.Now,
+                                    ID_Riferimento = ric.ID_CostoTeam
+                                });
+
+                                System.Diagnostics.Trace.WriteLine($"GEN → TEAM: {descrizione} → Membro {membro}");
                             }
-
-                            righeDaSalvare.Add(new GenerazioneCosti
-                            {
-                                ID_Utente = idMembro,
-                                ID_Team = idTeam,
-                                Categoria = ric.Categoria,
-                                Descrizione = descrizione,
-                                Importo = quota,
-                                Periodicita = ric.Periodicita,
-                                Origine = "Ricorrenza",
-                                Stato = "Previsionale",
-                                Approvato = false,
-                                DataRegistrazione = dataRegistrazione,
-                                ID_UtenteCreatore = idUtente,
-                                DataCreazione = DateTime.Now,
-                                ID_UtenteUltimaModifica = idUtente,
-                                DataUltimaModifica = DateTime.Now,
-                                ID_Riferimento = ric.ID_CostoTeam
-                            });
-
-                            logOutput.Add($"✅ TEAM → Membro {idMembro}, Team {idTeam} | {descrizione} | {quota:N2}€");
-                        }
-                    }
-                    else if (ric.Categoria == CategorieCostiHelper.Generale)
-                    {
-                        if (ric.ID_TipoCostoGenerale == null)
-                        {
-                            logOutput.Add($"⚠️ Ricorrenza GENERALE senza ID_TipoCostoGenerale → salto");
-                            continue;
                         }
 
-                        var idTipoCosto = ric.ID_TipoCostoGenerale.Value;
-                        var assegnazioniGenerali = db.CostiGeneraliUtente
-                            .Where(c => c.ID_TipoCosto == idTipoCosto)
-                            .Select(c => c.ID_Utente)
-                            .Distinct()
-                            .ToList();
-
-                        foreach (var idProfessionista in assegnazioniGenerali)
-                        {
-                            string chiave = $"{idProfessionista}_{idTipoCosto}";
-
-                            if (coppieGeneraliUtente.Contains(chiave))
-                            {
-                                logOutput.Add($"⛔ SKIP GENERALE → {descrizione} per {idProfessionista} (già elaborato nel ciclo)");
-                                continue;
-                            }
-
-                            bool giaPresente = db.GenerazioneCosti.Any(x =>
-                                x.ID_Utente == idProfessionista &&
-                                x.ID_Team == null &&
-                                x.Categoria == ric.Categoria &&
-                                x.Descrizione == descrizione &&
-                                x.DataRegistrazione == dataRegistrazione);
-
-                            if (giaPresente)
-                            {
-                                logOutput.Add($"⛔ SKIP GENERALE → {descrizione} per {idProfessionista} già presente nel DB");
-                                continue;
-                            }
-
-                            coppieGeneraliUtente.Add(chiave);
-
-                            righeDaSalvare.Add(new GenerazioneCosti
-                            {
-                                ID_Utente = idProfessionista,
-                                Categoria = ric.Categoria,
-                                Descrizione = descrizione,
-                                Importo = importoDaUsare,
-                                Periodicita = ric.Periodicita,
-                                Origine = "Ricorrenza",
-                                Stato = "Previsionale",
-                                Approvato = false,
-                                DataRegistrazione = dataRegistrazione,
-                                ID_UtenteCreatore = idUtente,
-                                DataCreazione = DateTime.Now,
-                                ID_UtenteUltimaModifica = idUtente,
-                                DataUltimaModifica = DateTime.Now,
-                                ID_Riferimento = ric.ID_TipoCostoGenerale
-                            });
-
-                            logOutput.Add($"✅ GENERALE → {descrizione} per utente {idProfessionista} | {importoDaUsare:N2}€");
-                        }
+                        continue;
                     }
                 }
 
+                // ======================================================================
+                // 3️⃣ COSTI PROGETTO
+                // ======================================================================
+                var costiPratica = db.CostiPratica.Where(c => c.Stato != "Eliminato").ToList();
 
-                // Recupera i costi di progetto attivi (o con criteri)
-                var costiProgetto = db.CostiPratica
-                      .Where(c => c.Stato != "Eliminato")
-                      .ToList();
-
-                Debug.WriteLine($"DEBUG: Trovati {costiProgetto.Count} costi di progetto non eliminati.");
-
-                foreach (var costo in costiProgetto)
+                foreach (var c in costiPratica)
                 {
-                    Debug.WriteLine($"DEBUG: Elaboro costo progetto ID_CostoPratica={costo.ID_CostoPratica}, ID_Pratiche={costo.ID_Pratiche}");
+                    var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == c.ID_Pratiche);
+                    if (pratica == null) continue;
 
-                    var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == costo.ID_Pratiche);
-                    if (pratica == null)
-                    {
-                        Debug.WriteLine($"⚠️ Costo progetto ID={costo.ID_CostoPratica} con pratica non trovata.");
-                        continue;
-                    }
-
-                    var idProfessionista = pratica.ID_UtenteResponsabile;
-                    DateTime dataReg = costo.DataInserimento;
-
-                    // Prova a recuperare il nome da AnagraficaCostiPratica
-                    string nomeCostoProgetto = null;
-                    if (costo.ID_AnagraficaCosto.HasValue)
-                    {
-                        nomeCostoProgetto = db.AnagraficaCostiPratica
-                            .Where(a => a.ID_AnagraficaCosto == costo.ID_AnagraficaCosto.Value)
+                    string nomeCosto =
+                        c.ID_AnagraficaCosto.HasValue ?
+                        db.AnagraficaCostiPratica
+                            .Where(a => a.ID_AnagraficaCosto == c.ID_AnagraficaCosto)
                             .Select(a => a.Nome)
-                            .FirstOrDefault();
+                            .FirstOrDefault()
+                        : c.Descrizione;
 
-                        Debug.WriteLine($"DEBUG: Nome da anagrafica: '{nomeCostoProgetto}'");
-                    }
-
-                    if (string.IsNullOrWhiteSpace(nomeCostoProgetto))
-                    {
-                        nomeCostoProgetto = costo.Descrizione;
-                        Debug.WriteLine($"DEBUG: Uso descrizione diretta da costo: '{nomeCostoProgetto}'");
-                    }
-
-                    if (string.IsNullOrWhiteSpace(nomeCostoProgetto))
-                    {
-                        Debug.WriteLine($"⚠️ Nome mancante per costo ID_CostoPratica={costo.ID_CostoPratica}, salto voce");
-                        continue;
-                    }
-
-                    bool giaPresente = db.GenerazioneCosti.Any(x =>
-                        x.ID_Pratiche == costo.ID_Pratiche &&
+                    if (!db.GenerazioneCosti.Any(x =>
+                        x.ID_Pratiche == c.ID_Pratiche &&
                         x.Categoria == "Costo Progetto" &&
-                        x.Descrizione == nomeCostoProgetto &&
-                        x.DataRegistrazione == dataReg &&
-                        ((x.Importo ?? 0m) - (costo.Importo ?? 0m) < 0.01m &&
-                         (x.Importo ?? 0m) - (costo.Importo ?? 0m) > -0.01m)
-                    );
-
-                    if (giaPresente)
+                        x.Descrizione == nomeCosto &&
+                        x.DataRegistrazione == c.DataInserimento))
                     {
-                        Debug.WriteLine($"⛔ SKIP Costo Progetto per pratica {costo.ID_Pratiche} già presente");
-                        continue;
+                        righeDaSalvare.Add(new GenerazioneCosti
+                        {
+                            Categoria = "Costo Progetto",
+                            ID_Pratiche = c.ID_Pratiche,
+                            ID_Utente = pratica.ID_UtenteResponsabile,
+                            Descrizione = nomeCosto,
+                            Importo = c.Importo,
+                            Origine = "Costo Pratica",
+                            Stato = "Previsionale",
+                            Approvato = false,
+                            DataRegistrazione = c.DataInserimento,
+                            DataCreazione = DateTime.Now,
+                            DataUltimaModifica = DateTime.Now,
+                            ID_UtenteCreatore = idUtenteCorrente,
+                            ID_UtenteUltimaModifica = idUtenteCorrente,
+                            ID_Riferimento = c.ID_CostoPratica
+                        });
                     }
-
-                    righeDaSalvare.Add(new GenerazioneCosti
-                    {
-                        Categoria = "Costo Progetto",
-                        ID_Pratiche = costo.ID_Pratiche,
-                        ID_Utente = idProfessionista,
-                        Descrizione = nomeCostoProgetto,
-                        Importo = costo.Importo,
-                        DataRegistrazione = dataReg,
-                        Origine = "Costo Pratica",
-                        Stato = "Previsionale",
-                        Approvato = false,
-                        DataCreazione = DateTime.Now,
-                        DataUltimaModifica = DateTime.Now,
-                        ID_UtenteCreatore = idUtente,
-                        ID_UtenteUltimaModifica = idUtente,
-                        ID_Riferimento = costo.ID_CostoPratica,
-
-                    });
-
-                    Debug.WriteLine($"✅ Costo Progetto {nomeCostoProgetto} per pratica {costo.ID_Pratiche} | {costo.Importo:N2}€");
                 }
 
-
+                // ======================================================================
+                // 4️⃣ SALVATAGGIO
+                // ======================================================================
                 db.GenerazioneCosti.AddRange(righeDaSalvare);
                 db.SaveChanges();
 
-                return logOutput;
+                // ======================================================================
+                // LOG FINALE
+                // ======================================================================
+                System.Diagnostics.Trace.WriteLine("══════════ RIEPILOGO FINALE GENERAZIONE COSTI ══════════");
+                System.Diagnostics.Trace.WriteLine("Totale costi generati: " + righeDaSalvare.Count);
+
+                return log;
             }
         }
+
+
 
         //public static void VerificaPagamentiAutomaticiConPlafond()
         //{
@@ -635,7 +595,7 @@ namespace Sinergia.App_Helpers
                 var idUtentiValidi = new List<int> { prof.ID_Utente };
                 var idClienteCollegato = db.OperatoriSinergia
                     .Where(o => o.ID_UtenteCollegato == prof.ID_Utente && o.TipoCliente == "Professionista")
-                    .Select(o => (int?)o.ID_Cliente)
+                    .Select(o => (int?)o.ID_Operatore)
                     .FirstOrDefault();
 
                 if (idClienteCollegato.HasValue)

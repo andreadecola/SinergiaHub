@@ -20,6 +20,7 @@
 <script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+
 @if (tipoUtente == "Admin" || tipoUtente == "Collaboratore")
 {
     <div class="alert alert-warning d-flex align-items-center" role="alert">
@@ -48,10 +49,10 @@
             <i class="bi bi-file-earmark-excel"></i> Excel/CSV
         </button>
 
-        <button type="submit" formaction="@Url.Action("EsportaPratichePdf", "Pratiche")"
+        @*<button type="submit" formaction="@Url.Action("EsportaPratichePdf", "Pratiche")"
                 class="btn btn-outline-danger btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
             <i class="bi bi-file-earmark-pdf"></i> PDF
-        </button>
+        </button>*@
     </form>
 </div>
 
@@ -226,6 +227,7 @@
                             <select name="Stato" class="form-select form-select-sm" required>
                                 <option value="">-- Seleziona --</option>
                                 <option value="Contrattualizzazione">Contrattualizzazione</option>
+                                <option value="Inviata">Inviata</option>
                                 <option value="In lavorazione">In lavorazione</option>
                                 <option value="Conclusa">Conclusa</option>
                             </select>
@@ -239,6 +241,26 @@
                             <input type="date" name="DataFineAttivitaStimata" class="form-control form-control-sm" />
                         </div>
                     </div>
+
+                    <!-- 🔹 Categoria (Tipologia) e Oggetto -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Categoria *</label>
+                            <select class="form-select form-select-sm" name="Tipologia" id="tipologiaSelect" required>
+                                <option value="">-- Seleziona categoria --</option>
+                                <!-- Popolato via JS -->
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Oggetto della Pratica *</label>
+                            <select class="form-select form-select-sm" name="OggettoPratica" id="oggettoPraticaSelect" required>
+                                <option value="">-- Seleziona oggetto --</option>
+                                <!-- Popolato via JS -->
+                            </select>
+                        </div>
+                    </div>
+
 
                     <!-- 🔹 Budget e Note -->
                     <div class="row mb-2">
@@ -717,6 +739,10 @@
     let indiceCollaboratore = 0;
     let indiceCostoPratica = 0;
 
+    // ⭐ Archivio unico dei compensi in sessione pratica
+    window.CompensiCorrenti = [];
+
+
     function apriNuovaPratica() {
         $('#PraticaForm')[0].reset();
         $('#praticaModalLabel').text('Nuova Pratica');
@@ -735,58 +761,66 @@
         $('#nomeFileIncarico').text("");
         $('#hiddenFileAllegato').val("");
 
-        // 📊 Reset indici
         indiceCollaboratore = 0;
         indiceCostoPratica = 0;
 
-        // 🔄 Reset responsabile
+        // Reset responsabile
         $('#selectResponsabile').html('<option value="">-- Seleziona responsabile --</option>');
-
-        // ✅ Stato di default
         $('[name="Stato"]').val("Contrattualizzazione");
 
-        // 🔄 Carica clienti e seleziona primo cliente
+        // 🟦 1️⃣ CARICA CATEGORIE PRATICHE (Tipologia)
+        fetch("/Pratiche/GetCategoriePratiche")
+            .then(r => r.json())
+            .then(categorie => {
+                const ddl = document.getElementById("tipologiaSelect");
+                ddl.innerHTML = '<option value="">-- Seleziona tipologia --</option>';
+
+                categorie.forEach(cat => {
+                    ddl.innerHTML += `<option value="${cat.value}">${cat.text}</option>`;
+                });
+            })
+            .catch(() => console.error("Errore caricamento categorie pratiche"));
+
+
+        // 🟦 1B — CARICA OGGETTI DELLA PRATICA (lista fissa)
+        const ddlOggetto = document.getElementById("oggettoPraticaSelect");
+        ddlOggetto.innerHTML = '<option value="">-- Seleziona oggetto --</option>';
+
+        OGGETTI_PRATICA.forEach(o => {
+            ddlOggetto.innerHTML += `<option value="${o}">${o}</option>`;
+        });
+
+
+        // 🟦 2️⃣ CARICA CLIENTI
         caricaClienti().then(() => {
             const primoClienteID = $('#selectCliente').val();
 
-            // 1️⃣ carica responsabili cliente
             if (primoClienteID && parseInt(primoClienteID) > 0) {
                 caricaResponsabiliCliente(primoClienteID);
             }
 
-            // 2️⃣ carica collaboratori (sempre)
             caricaUtentiAssociabili(primoClienteID);
 
-            // 3️⃣ carica intestatari → se passo idCliente bene, se no GetUtentiAttivi esclude da solo l’owner
             fetch(`/Pratiche/GetUtentiAttivi${primoClienteID ? `?idCliente=${primoClienteID}` : ''}`)
-                .then(r => {
-                    if (!r.ok) throw new Error("Risposta non valida dal server");
-                    return r.json();
-                })
+                .then(r => r.json())
                 .then(data => {
-                    if (Array.isArray(data)) {
-                        window.intestatariGlobali = data;
-                        console.log("✅ Intestatari disponibili (nuova pratica):", window.intestatariGlobali);
-                    } else {
-                        window.intestatariGlobali = [];
-                        console.warn("⚠️ Nessun intestatario disponibile");
-                    }
+                    window.intestatariGlobali = Array.isArray(data) ? data : [];
                     aggiornaIntestatariDisponibili();
                 })
                 .catch(err => {
-                    console.error("❌ Errore caricamento intestatari nuova pratica:", err);
+                    console.error("❌ Errore intestatari nuova pratica:", err);
                     window.intestatariGlobali = [];
                     aggiornaIntestatariDisponibili();
                 });
         });
 
-        // ⚠️ Nuova pratica → compensi vuoti (idPratica ancora non esiste)
         $('#tabellaCompensi tbody').html('');
-        console.log("🆕 Nuova pratica → Compensi inizializzati vuoti");
 
-        // Mostra modale
+        // 🔥 Mostra modale SOLO dopo avere popolato tutto
         new bootstrap.Modal(document.getElementById('praticaModal')).show();
     }
+
+
 
 
      // Imposta la variabile JS globale da backend
@@ -808,35 +842,47 @@
                 return;
             }
 
-            // 2️⃣ Imposta la professione (per i costi practice)
+            // 🟦 1B — CARICA LE CATEGORIE (Tipologia)
+            await fetch("/Pratiche/GetCategoriePratiche")
+                .then(r => r.json())
+                .then(categorie => {
+                    const ddl = document.getElementById("tipologiaSelect");
+                    ddl.innerHTML = '<option value="">-- Seleziona tipologia --</option>';
+
+                    categorie.forEach(cat => {
+                        ddl.innerHTML += `<option value="${cat.value}">${cat.text}</option>`;
+                    });
+                });
+
+            // 🟦 1C — CARICA GLI OGGETTI PRATICA (lista fissa)
+            const ddlOggetto = document.getElementById("oggettoPraticaSelect");
+            ddlOggetto.innerHTML = '<option value="">-- Seleziona oggetto --</option>';
+
+            OGGETTI_PRATICA.forEach(o => {
+                ddlOggetto.innerHTML += `<option value="${o}">${o}</option>`;
+            });
+
+            // 2️⃣ Imposta professione per costi
             window.IDProfessioneCorrente = pratica.data.ID_Professione || pratica.data.ID_ProfessionistaOwner;
 
             // 3️⃣ Clienti
             await caricaClienti();
             $('[name="ID_Cliente"]').val(pratica.data.ID_Cliente);
 
-            // 4️⃣ OWNER (fisso dal cliente)
+            // 4️⃣ Owner (cliente → fisso)
             $('#inputOwnerProfessionista').val(pratica.nomeOwner || '');
             $('#hiddenOwnerProfessionista').val(pratica.data.ID_Owner || '');
 
-            // 5️⃣ RESPONSABILE (può essere diverso)
+            // 5️⃣ Responsabile pratica
             await caricaResponsabiliCliente(pratica.data.ID_Cliente);
             $('#selectResponsabile').val(pratica.data.ID_UtenteResponsabile || '');
-
-            if (pratica.data.ID_UtenteResponsabile) {
-                const selected = $('#selectResponsabile').val();
-                if (!selected || selected !== pratica.data.ID_UtenteResponsabile.toString()) {
-                    console.warn("⚠️ Responsabile non trovato:", pratica.data.ID_UtenteResponsabile);
-                    toastr.info("Il responsabile salvato non è presente tra quelli associati al cliente.");
-                }
-            }
 
             // 6️⃣ Campi base
             $('[name="ID_Pratiche"]').val(pratica.data.ID_Pratiche);
             $('[name="Titolo"]').val(pratica.data.Titolo);
             $('[name="Note"]').val(pratica.data.Note);
 
-            // ✅ Budget iniziale
+            // Budget
             if (pratica.data.Budget != null) {
                 let valoreBudget = pratica.data.Budget.toString().replace(',', '.');
                 valoreBudget = parseFloat(valoreBudget) || 0;
@@ -845,7 +891,7 @@
                 $('#BudgetInput').val("0,00");
             }
 
-            // ✅ Trattenuta personalizzata
+            // Trattenuta personalizzata
             const campoTrattenuta = document.querySelector('[name="TrattenutaPersonalizzata"]');
             if (campoTrattenuta) {
                 campoTrattenuta.value = pratica.data.TrattenutaPersonalizzata ?? '';
@@ -854,42 +900,48 @@
             $('[name="DataInizioAttivitaStimata"]').val(parseDotNetDate(pratica.data.DataInizioAttivitaStimata));
             $('[name="DataFineAttivitaStimata"]').val(parseDotNetDate(pratica.data.DataFineAttivitaStimata));
             $('[name="Stato"]').val(pratica.data.Stato);
-            $('#tipologiaSelect').val(pratica.data.Tipologia).trigger("change");
 
-            // 7️⃣ Compensi → chiamata dedicata a GetCompensiPratica
+            // Tipologia pratica
+            $('#tipologiaSelect').val(pratica.data.Tipologia || '').trigger("change");
+
+            // Oggetto pratica
+            $('#oggettoPraticaSelect').val(pratica.data.OggettoPratica || '').trigger("change");
+
+            // 7️⃣ COMPENSI — VERSIONE CORRETTA
             $('#hiddenCompensiContainer').html('');
             $('#riepilogoCompensiTable tbody').html('');
+
+            // Reset archivio compensi corrente
+            window.CompensiCorrenti = [];
 
             try {
                 const respCompensi = await fetch(`/Pratiche/GetCompensiPratica?idPratica=${id}`);
                 const jsonCompensi = await respCompensi.json();
 
                 if (jsonCompensi && jsonCompensi.success && Array.isArray(jsonCompensi.raw)) {
-                    console.log("📌 Compensi caricati:", jsonCompensi.raw);
 
+                    // 🔥 1) Copia TUTTO in memoria JS
+                    window.CompensiCorrenti = JSON.parse(JSON.stringify(jsonCompensi.raw));
+
+                    // 🔥 2) Rigenera hidden in maniera sicura
                     $('#hiddenCompensiContainer').html(
-                        `<input type="hidden" name="CompensiJSON" value='${JSON.stringify(jsonCompensi.raw)}'>`
+                        `<input type="hidden" name="CompensiJSON" value="${encodeURIComponent(JSON.stringify(window.CompensiCorrenti))}">`
                     );
 
-                    window.compensiOriginaliJSON = jsonCompensi.raw;
+                    // 🔥 3) Popola riepilogo
+                    popolaRiepilogoCompensi(window.CompensiCorrenti);
 
-                    popolaRiepilogoCompensi(jsonCompensi.raw);
-
-                    // 👉 aggiorna budget se non impostato
+                    // 🔥 4) Budget automatico
                     if (!pratica.data.Budget || parseFloat(pratica.data.Budget) === 0) {
                         try {
-                            aggiornaValoreStimato(jsonCompensi.raw);
-                        } catch (err) {
-                            console.warn("⚠️ Errore calcolo budget:", err);
-                        }
+                            aggiornaValoreStimato(window.CompensiCorrenti);
+                        } catch (err) { }
                     }
-                } else {
-                    window.compensiOriginaliJSON = [];
                 }
             } catch (err) {
                 console.error("❌ Errore caricamento compensi:", err);
-                toastr.error("Errore nel caricamento dei compensi.");
             }
+
 
             // 8️⃣ Collaboratori
             let idsCollaboratori = [];
@@ -909,14 +961,13 @@
 
             aggiornaIntestatariDisponibili();
 
-            // 9️⃣ Costi Pratica
+            // 9️⃣ Costi pratica
             const containerPratica = document.getElementById('costiPraticaContainer');
             containerPratica.innerHTML = "";
             costiPraticaCorrenti = [];
 
             if (Array.isArray(pratica.costi)) {
                 pratica.costi.forEach((costo, index) => {
-                    // Passiamo anche il fornitore
                     aggiungiCostoPratica(costo.ID_AnagraficaCosto, costo.Importo, costo.ID_Fornitore);
 
                     const riga = containerPratica.querySelectorAll('.riga-costo-pratica')[index];
@@ -924,64 +975,36 @@
                     const inputImporto = riga.querySelector('input[type="number"]');
                     const selectFornitore = riga.querySelector('.select-fornitore-pratica');
 
-                    // Se già caricata lista anagrafica (ottimizzazione)
-                    if (window.listaCostiPraticaOptions) {
-                        selectCosto.innerHTML = '<option value="">-- Seleziona voce --</option>' + window.listaCostiPraticaOptions;
-                    }
-
-                    // Se già caricata lista fornitori (ottimizzazione)
-                    if (window.listaFornitoriOptions) {
-                        selectFornitore.innerHTML = '<option value="">-- Fornitore (opzionale) --</option>' + window.listaFornitoriOptions;
-                    }
-
-                    // Imposta valori selezionati
                     setTimeout(() => {
                         selectCosto.value = costo.ID_AnagraficaCosto?.toString() || "";
-                        if (costo.ID_Fornitore) {
-                            selectFornitore.value = costo.ID_Fornitore.toString();
-                        }
+                        if (costo.ID_Fornitore) selectFornitore.value = costo.ID_Fornitore.toString();
                     }, 0);
 
-                    // Importo
                     inputImporto.value = costo.Importo;
 
-                    // 🔹 Recupero nome fornitore, se disponibile
-                    let nomeFornitore = "";
-                    if (costo.NomeFornitore) {
-                        nomeFornitore = costo.NomeFornitore;
-                    } else if (selectFornitore?.selectedOptions?.length > 0) {
-                        nomeFornitore = selectFornitore.selectedOptions[0].textContent.trim();
-                    }
-
-                    // 🔸 Salviamo nel buffer locale
                     costiPraticaCorrenti.push({
                         ID_AnagraficaCosto: costo.ID_AnagraficaCosto,
                         Descrizione: costo.Descrizione || "Voce senza nome",
                         Importo: costo.Importo,
                         ID_Fornitore: costo.ID_Fornitore || null,
-                        NomeFornitore: nomeFornitore
+                        NomeFornitore: costo.NomeFornitore || ""
                     });
                 });
             }
 
-            // 🔄 Rigenera hidden fields per il salvataggio
             rigeneraHiddenCostiPratica();
             aggiornaStatoCostiCaricati();
 
-
-            // 🔟 Incarico PDF
+            // 🔟 Incarico PDF / HTML
             if (pratica.incarico) {
                 $('#nomeFileIncarico').html(
-                    `📂 <a href="/Pratiche/DownloadDocumentoPratica?idDocumento=${pratica.incarico.ID_Documento}"
-        target="_blank">${pratica.incarico.NomeFile}</a>`
+                    `📂 <a href="/Pratiche/DownloadDocumentoPratica?idDocumento=${pratica.incarico.ID_Documento}" target="_blank">${pratica.incarico.NomeFile}</a>`
                 );
                 $('#hiddenFileAllegato').val(pratica.incarico.ID_Documento);
-                $('#inputFileIncarico').val("");
             } else {
                 $('#nomeFileIncarico').html('<span class="text-muted">Nessun file caricato</span>');
                 $('#hiddenFileAllegato').val('');
             }
-
 
             // 🔥 Mostra modale
             $('#praticaModalLabel').text('Modifica Pratica');
@@ -993,6 +1016,43 @@
         }
     }
 
+
+
+    const OGGETTI_PRATICA = [
+        "Diritti Reali",
+        "Amministrativo",
+        "Civile",
+        "Comunione e condominio",
+        "Contratti",
+        "Crisi d’impresa",
+        "Diritti della personalità",
+        "Donazioni",
+        "Famiglia",
+        "Lavoro",
+        "Locazioni",
+        "M&A",
+        "Compliance",
+        "Penale",
+        "RC Generale",
+        "RC Obbligatoria",
+        "RC Professionale",
+        "RC Sanitaria",
+        "Recupero crediti",
+        "Società",
+        "Successioni",
+        "Contenzioso Tributario",
+        "Contabilità e bilanci",
+        "Revisione dei conti",
+        "Paghe e contributi",
+        "Medicina Legale",
+        "Impianti",
+        "Asseverazioni Ingegneristiche",
+        "Pratiche Ingegneria",
+        "Previdenza e assistenza",
+        "Start Up",
+        "Business Plan",
+        "Proprietà intellettuale e industriale"
+    ];
 
 
     function aggiungiCollaboratore(idUtente = "", percentuale = "") {
@@ -1300,6 +1360,12 @@
             formData.set("Budget", valore);
             console.log("💰 Budget inviato normalizzato:", valore); // debug
         }
+
+        // 📌 7. Oggetto Pratica (nuovo campo)
+        const oggettoPraticaValue = document.querySelector('[name="OggettoPratica"]')?.value || "";
+        formData.set("OggettoPratica", oggettoPraticaValue);
+        console.log("📌 OggettoPratica inviato:", oggettoPraticaValue);
+
 
         // 🔎 Debug rapido
         console.log("📤 Dati inviati:", Array.from(formData.entries()));
@@ -2771,6 +2837,9 @@
 
     // 🔹 Variabile globale (accessibile ovunque)
     window.intestatariGlobali = [];
+    // mi serve quando creo nuova pratica che non ho dati nel db 
+    window.compensiTemp = [];
+
 
     // ============================================================
     // 🧩 Normalizza e ripulisce testi da accenti e apici tipografici
@@ -2787,7 +2856,7 @@
 
 
     function apriCompensoModal(idPratica) {
-        console.log("🚀 apriCompensoModal CHIAMATA con idPratica:", idPratica, "Stack:", new Error().stack);
+        console.log("🚀 apriCompensoModal CHIAMATA con idPratica:", idPratica);
 
         const metodo = document.getElementById('metodoCompensoSelect').value;
         const header = document.getElementById('tabellaCompensiHeader');
@@ -2799,16 +2868,9 @@
         tbody.innerHTML = '';
         campiAggiuntivi.innerHTML = '';
 
-        // 🔹 Gestione dinamica Budget
-        if (metodo === 'A ore') {
-            budgetInput.removeAttribute('readonly');
-            budgetInput.placeholder = "Inserisci budget stimato manualmente";
-        } else {
-            budgetInput.setAttribute('readonly', true);
-            budgetInput.placeholder = "";
-        }
-
-        // 🔹 Campi aggiuntivi dinamici
+        // ============================================================
+        // 🔧 GESTIONE CAMPI AGGIUNTIVI
+        // ============================================================
         if (metodo === 'Giudiziale') {
             campiAggiuntivi.innerHTML = `
             <a href="https://www.avvocatoandreani.it/servizi/calcolo-compenso-avvocati-parametri-civili-2014.php"
@@ -2820,16 +2882,25 @@
                    name="EstremiGiudizio"
                    placeholder="Estremi giudizio oggetto dell’incarico" />
         `;
-        } else if (metodo === 'A ore') {
+        }
+        else if (metodo === 'A ore') {
             campiAggiuntivi.innerHTML = `
             <input type="text" class="form-control form-control-sm"
                    id="OggettoIncarico"
                    name="OggettoIncarico"
                    placeholder="Oggetto dell’incarico" />
         `;
+            budgetInput.removeAttribute('readonly');
+            budgetInput.placeholder = "Inserisci budget stimato manualmente";
+        }
+        else {
+            budgetInput.setAttribute('readonly', true);
+            budgetInput.placeholder = "";
         }
 
-        // 🔹 Intestazioni tabella dinamiche
+        // ============================================================
+        // 🔧 TABELLA — INTESTAZIONI DINAMICHE
+        // ============================================================
         switch (metodo) {
             case 'Fisso':
                 header.innerHTML = `
@@ -2848,7 +2919,7 @@
                 <th>Fase Giudizio</th>
                 <th>Importo (€)</th>
                 <th>Intestatario</th>
-                <th class="text-center">Azioni</th>`;
+                <th>Azioni</th>`;
                 break;
 
             case 'A ore':
@@ -2857,120 +2928,98 @@
                 <th>Ruolo</th>
                 <th>Tariffa Oraria (€)</th>
                 <th>Intestatario</th>
-                <th class="text-center">Azioni</th>`;
+                <th>Azioni</th>`;
                 break;
         }
 
-        // ⚠️ NUOVA PRATICA → idPratica nullo o 0
-        if (!idPratica || idPratica === "0" || idPratica === 0) {
-            console.log("🆕 Nuova pratica → compensi inizializzati vuoti");
+        // ============================================================
+        // 🟦 CASO A — NUOVA PRATICA (idPratica = 0)
+        // ============================================================
+        if (!idPratica || idPratica == 0) {
 
+            console.log("🆕 NUOVA PRATICA → uso compensiTemp:", window.compensiTemp);
+
+            const tbody = document.querySelector('#tabellaCompensi tbody');
+            tbody.innerHTML = "";
+
+            // 🔄 Prima ricarico gli intestatari (normale)
             const idCliente = $('#selectCliente').val();
-            if (idCliente) {
-                fetch(`/Pratiche/GetIntestatariPratica?idCliente=${idCliente}`)
-                    .then(r => r.json())
-                    .then(json => {
-                        if (json.success) {
-                            window.intestatariGlobali = json.intestatari || [];
-                            console.log("✅ Intestatari caricati (nuova pratica):", window.intestatariGlobali);
-                        } else {
-                            console.warn("⚠️ Nessun intestatario disponibile:", json.message);
-                            window.intestatariGlobali = [];
+            fetch(`/Pratiche/GetIntestatariPratica?idCliente=${idCliente}`)
+                .then(r => r.json())
+                .then(json => {
+
+                    window.intestatariGlobali = json.intestatari || [];
+                    aggiornaIntestatariDisponibili();
+
+                    // 🔥 ECCO LA PARTE IMPORTANTE:
+                    // Se ho compensi già inseriti in questa nuova pratica → li ricarico
+                    if (window.compensiTemp.length > 0) {
+
+                        window.compensiTemp
+                            .filter(x => x.Metodo === metodo)
+                            .forEach(r => aggiungiRigaDaJSON(r, metodo));
+
+                    } else {
+
+                        // ⚖️ fallback giudiziale se nulla inserito
+                        if (metodo === 'Giudiziale') {
+                            ['Fase di Studio', 'Fase Introduttiva', 'Fase Istruttoria', 'Fase Decisionale']
+                                .forEach(f => aggiungiRigaCompenso(f, true));
                         }
-                        aggiornaIntestatariDisponibili();
-                    })
-                    .catch(err => {
-                        console.error("❌ Errore caricamento intestatari nuova pratica:", err);
-                        window.intestatariGlobali = [];
-                        aggiornaIntestatariDisponibili();
-                    });
-            } else {
-                console.warn("⚠️ Nessun cliente selezionato → intestatari vuoti");
-                window.intestatariGlobali = [];
-                aggiornaIntestatariDisponibili();
-            }
+                    }
 
-            tbody.innerHTML = '';
+                    new bootstrap.Modal('#compensoModal').show();
+                });
 
-            if (metodo === 'Giudiziale') {
-                ['Fase di Studio', 'Fase Introduttiva', 'Fase Istruttoria', 'Fase Decisionale']
-                    .forEach(fase => aggiungiRigaCompenso(fase, true));
-            }
-
-            new bootstrap.Modal('#compensoModal').show();
             return;
         }
 
-        // 🔄 Caso MODIFICA → fetch compensi dal backend
-        fetch(`/Pratiche/GetCompensiPratica?idPratica=${idPratica}`)
-            .then(r => r.json())
-            .then(json => {
-                console.log("📥 Risposta backend:", json);
 
-                if (!json.success) {
-                    toastr.error("Errore nel caricamento compensi.");
-                    return;
-                }
+        // ============================================================
+        // 🟨 CASO B — MODIFICA PRATICA
+        // ============================================================
+        console.log("✏️ MODIFICA pratica → carico compensi");
 
-                window.intestatariGlobali = json.intestatari || [];
-                console.log("✅ Intestatari ricevuti:", window.intestatariGlobali);
+        Promise.all([
+            fetch(`/Pratiche/GetIntestatariPratica?idPratica=${idPratica}`).then(r => r.json()),
+            fetch(`/Pratiche/GetCompensiPratica?idPratica=${idPratica}`).then(r => r.json())
+        ])
+            .then(([jsonInt, jsonComp]) => {
 
-                let cumulativo = [];
-                const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
+                // ---------------- INTESTATARI ----------------
+                window.intestatariGlobali = jsonInt.intestatari || [];
+                aggiornaIntestatariDisponibili();
 
-                // ✅ Lettura sicura
-                if (hidden && hidden.value) {
-                    try {
-                        const decoded = decodeURIComponent(hidden.value);
-                        cumulativo = JSON.parse(decoded);
-                    } catch {
-                        cumulativo = [];
-                    }
-                    console.log("📦 Cumulativo recuperato dall’hidden:", cumulativo);
-                } else {
-                    cumulativo = json.raw || [];
-                    document.getElementById('hiddenCompensiContainer').innerHTML =
-                        `<input type="hidden" name="CompensiJSON" value="${encodeURIComponent(JSON.stringify(cumulativo))}">`;
-                    console.log("🆕 Nessun cumulativo trovato, inizializzo con backend:", cumulativo);
-                }
+                // ---------------- COMPENSI ----------------
 
-                // 🔹 Filtra righe per metodo
-                let righeMetodo = cumulativo.filter(r => r.Metodo === metodo);
-                if (righeMetodo.length === 0 && json.raw) {
-                    righeMetodo = json.raw.filter(r => r.Metodo === metodo);
-                    console.log("📥 Uso dati backend perché cumulativo è vuoto:", righeMetodo);
-                }
+                // 1️⃣ Carico sempre i compensi dal server come base
+                let cumulativo = Array.isArray(jsonComp.raw) ? jsonComp.raw : [];
 
-                console.log("📌 Righe caricate (finali):", righeMetodo);
+                // 2️⃣ Salvo in memoria globale (fonte unica)
+                window.CompensiCorrenti = JSON.parse(JSON.stringify(cumulativo));
 
-                // 🔹 Crea righe nella tabella
-                if (righeMetodo.length > 0) {
-                    righeMetodo.forEach(riga => aggiungiRigaDaJSON(riga, metodo));
-                } else if (metodo === 'Giudiziale') {
+                // 3️⃣ Aggiorno l’hidden in modo sicuro
+                document.querySelector('#hiddenCompensiContainer').innerHTML =
+                    `<input type="hidden" name="CompensiJSON" value="${encodeURIComponent(JSON.stringify(window.CompensiCorrenti))}">`;
+
+                // 4️⃣ Filtra per metodo corrente (Fisso, A ore, Giudiziale)
+                let righeMetodo = window.CompensiCorrenti.filter(x => x.Metodo === metodo);
+
+                // ⚠️ Se non trovate righe → uso quelle grezze del server
+                if (righeMetodo.length === 0)
+                    righeMetodo = cumulativo.filter(x => x.Metodo === metodo);
+
+                // 5️⃣ Costruzione righe nella tabella
+                righeMetodo.forEach(r => aggiungiRigaDaJSON(r, metodo));
+
+                // 6️⃣ Fallback per giudiziale
+                if (metodo === "Giudiziale" && righeMetodo.length === 0) {
                     ['Fase di Studio', 'Fase Introduttiva', 'Fase Istruttoria', 'Fase Decisionale']
-                        .forEach(fase => aggiungiRigaCompenso(fase, true));
+                        .forEach(f => aggiungiRigaCompenso(f, true));
                 }
 
-                // ✅ Ripristina campi aggiuntivi
-                if (metodo === "A ore" && json.raw?.length > 0) {
-                    const oggetto = json.raw.find(c => c.OggettoIncarico)?.OggettoIncarico;
-                    if (oggetto && document.getElementById("OggettoIncarico")) {
-                        document.getElementById("OggettoIncarico").value = oggetto;
-                    }
-                }
-
-                if (metodo === "Giudiziale" && json.raw?.length > 0) {
-                    const estremi = json.raw.find(c => c.EstremiGiudizio)?.EstremiGiudizio;
-                    if (estremi && document.getElementById("EstremiGiudizio")) {
-                        document.getElementById("EstremiGiudizio").value = estremi;
-                    }
-                }
 
                 new bootstrap.Modal('#compensoModal').show();
-            })
-            .catch(err => {
-                console.error("❌ Errore caricamento compensi:", err);
-                toastr.error("Errore imprevisto nel caricamento compensi.");
             });
     }
 
@@ -3070,14 +3119,59 @@
             }
         }
 
-        // 👤 Intestatario (Owner/Responsabile/Collaboratori principali)
+
+        // 👤 Intestatario (Owner / Responsabile / Collaboratori principali)
         const selectIntestatario = lastRow.querySelector('.intestatario-select');
         if (selectIntestatario) {
-            popolaSelectIntestatari(selectIntestatario, riga.ID_ProfessionistaIntestatario);
-            if (riga.ID_ProfessionistaIntestatario) {
-                selectIntestatario.dataset.savedValue = riga.ID_ProfessionistaIntestatario;
+
+            console.log("🔥 [DEBUG] INIZIO gestione intestatario da JSON:", riga);
+
+            try {
+                // Popola la select
+                console.log("➡️ [DEBUG] Popolo select con intestatari globali...");
+                popolaSelectIntestatari(selectIntestatario);
+            } catch (err) {
+                console.error("💥 [ERRORE] durante popolaSelectIntestatari:", err);
             }
+
+            // Valore che arriva dal JSON
+            let idInt = riga.ID_ProfessionistaIntestatario;
+            console.log("🔍 [DEBUG] ID intestatario dal JSON:", idInt);
+
+            try {
+                if (idInt && idInt !== "null") {
+
+                    // applico valore
+                    selectIntestatario.value = idInt;
+                    selectIntestatario.dataset.savedValue = idInt;
+
+                    console.log("✔️ [DEBUG] Valore intestatario applicato:", idInt);
+
+                    // FIX APOSTROFO → sanifico SOLO il testo dell’opzione selezionata
+                    let opt = selectIntestatario.options[selectIntestatario.selectedIndex];
+                    if (opt) {
+                        let original = opt.text;
+                        let safe = original
+                            .replace(/'/g, "&#39;")
+                            .replace(/"/g, "&quot;");
+                        opt.innerHTML = safe;
+
+                        console.log(`✔️ [DEBUG] Testo opzione sanificato: "${original}" → "${safe}"`);
+                    }
+                }
+                else {
+                    console.log("⚠️ Nessun intestatario nel JSON, imposto vuoto.");
+                    selectIntestatario.value = "";
+                    delete selectIntestatario.dataset.savedValue;
+                }
+            } catch (err) {
+                console.error("💥 [ERRORE] durante assegnazione intestatario:", err);
+            }
+
+            console.log("🏁 [DEBUG] Fine gestione intestatario.");
         }
+
+
 
         // 👥 Collaboratori (se presenti nel JSON)
         if (riga.Collaboratori && Array.isArray(riga.Collaboratori)) {
@@ -3283,161 +3377,6 @@
         });
     }
 
-    // 🔹 Salvataggio compensi dal modal (versione con fix accenti/apostrofi)
-    function salvaCompensi() {
-        const metodo = document.getElementById('metodoCompensoSelect').value;
-        const budgetInput = document.getElementById('BudgetInput');
-        let righeMetodo = [];
-
-        document.querySelectorAll('#tabellaCompensi tbody tr').forEach(tr => {
-            let obj = { Metodo: metodo };
-
-            // Campi dinamici generali
-            tr.querySelectorAll('input, textarea, select').forEach(c => {
-                if (!c.disabled) {
-                    obj[c.name] = sanitizeText(c.value?.trim() || "");
-                }
-            });
-
-            // =====================================================
-            // 🔹 Normalizzazione per tipo metodo
-            // =====================================================
-            if (metodo === "A ore") {
-                obj["Tipologia"] = "A ore";
-
-                const oggettoInput = document.getElementById("OggettoIncarico");
-                if (oggettoInput)
-                    obj["OggettoIncarico"] = sanitizeText(oggettoInput.value?.trim() || "");
-
-                // ✅ Ruolo e tariffa (lettura con normalizzazione)
-                obj["Descrizione"] = sanitizeText(tr.querySelector('input[name^="Ruolo_"]')?.value || "");
-
-                const tariffaInput = tr.querySelector('input[name^="Tariffa_"]');
-                let tariffa = tariffaInput?.dataset.raw ?? tariffaInput?.value;
-                tariffa = parseFloat((tariffa || "0").toString().replace(',', '.')) || 0;
-                obj["Importo"] = tariffa;
-
-                // ✅ Budget manuale
-                if (budgetInput && budgetInput.value) {
-                    const val = parseFloat(budgetInput.value.replace('.', '').replace(',', '.'));
-                    obj["BudgetManuale"] = isNaN(val) ? 0 : val;
-                }
-            }
-
-            if (metodo === "Fisso") {
-                obj["Tipologia"] = tr.querySelector('select[name^="Tipologia_"]')?.value || "Fisso";
-                obj["Descrizione"] = sanitizeText(tr.querySelector('textarea[name^="Descrizione_"]')?.value || "");
-
-                const importoInput = tr.querySelector('input[name^="Importo_"]');
-                let importo = importoInput?.dataset.raw ?? importoInput?.value;
-                importo = parseFloat((importo || "0").toString().replace(',', '.')) || 0;
-                obj["Importo"] = importo;
-
-                const valStimato = tr.querySelector('input[name^="ValoreStimato_"]')?.value || 1;
-                obj["ValoreStimato"] = parseFloat(valStimato.toString().replace(',', '.')) || 1;
-            }
-
-            if (metodo === "Giudiziale") {
-                obj["Tipologia"] = "Giudiziale";
-
-                const estremiInput = document.getElementById("EstremiGiudizio");
-                if (estremiInput)
-                    obj["EstremiGiudizio"] = sanitizeText(estremiInput.value?.trim() || "");
-
-                obj["Descrizione"] = sanitizeText(tr.querySelector('input[name^="Fase_"]')?.value || "");
-
-                const importoInput = tr.querySelector('input[name^="Importo_"]');
-                let importo = importoInput?.dataset.raw ?? importoInput?.value;
-                importo = parseFloat((importo || "0").toString().replace(',', '.')) || 0;
-                obj["Importo"] = importo;
-            }
-
-            // =====================================================
-            // 👤 Intestatario
-            // =====================================================
-            const intestatarioSelect = tr.querySelector('select[name^="Intestatario_"]');
-            if (intestatarioSelect) {
-                obj["ID_ProfessionistaIntestatario"] = intestatarioSelect.value || "";
-                obj["IntestatarioNome"] = sanitizeText(
-                    intestatarioSelect.options[intestatarioSelect.selectedIndex]?.text || ""
-                );
-            }
-
-            // =====================================================
-            // 👥 Collaboratori
-            // =====================================================
-            let collaboratori = [];
-            tr.querySelectorAll('.collaboratori-riga .row-collaboratore').forEach(rowCol => {
-                const collabSelect = rowCol.querySelector('select[name="Collaboratore_temp"], select[name^="Collaboratore_"]');
-                const percInput = rowCol.querySelector('input[name="PercentualeCollaboratore_temp"], input[name^="PercentualeCollaboratore_"]');
-                if (collabSelect && percInput && collabSelect.value) {
-                    collaboratori.push({
-                        ID_Collaboratore: collabSelect.value,
-                        NomeCollaboratore: sanitizeText(collabSelect.options[collabSelect.selectedIndex]?.text || ""),
-                        Percentuale: parseFloat(percInput.value.replace(',', '.')) || 0
-                    });
-                }
-            });
-            if (collaboratori.length > 0) obj["Collaboratori"] = collaboratori;
-
-            righeMetodo.push(obj);
-        });
-
-        // =====================================================
-        // 🔄 Aggiorna JSON cumulativo
-        // =====================================================
-        let cumulativo = [];
-        const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
-
-        if (hidden && hidden.value) {
-            try {
-                cumulativo = JSON.parse(decodeURIComponent(hidden.value));
-            } catch (e) {
-                console.warn("⚠️ Errore nel parse del JSON esistente, resetto:", e);
-                cumulativo = [];
-            }
-        }
-
-        cumulativo = cumulativo.filter(r => r.Metodo !== metodo);
-        cumulativo = cumulativo.concat(righeMetodo);
-
-        // ✅ Scrittura sicura
-        const jsonString = JSON.stringify(cumulativo);
-        console.log("💾 JSON finale salvato:", jsonString);
-
-        const container = document.getElementById('hiddenCompensiContainer');
-        container.innerHTML = "";
-        const hiddenInput = document.createElement("input");
-        hiddenInput.type = "hidden";
-        hiddenInput.name = "CompensiJSON";
-        hiddenInput.value = encodeURIComponent(JSON.stringify(cumulativo));
-        container.appendChild(hiddenInput);
-
-
-        // =====================================================
-        // 🔁 Aggiornamento UI
-        // =====================================================
-        popolaRiepilogoCompensi(cumulativo);
-
-        if (metodo !== "A ore") {
-            aggiornaValoreStimato(cumulativo);
-        }
-
-        bootstrap.Modal.getInstance(document.getElementById('compensoModal')).hide();
-    }
-
-    document.addEventListener('blur', e => {
-        if (e.target.classList.contains('importo-input')) {
-            let val = e.target.value.trim().replace(/\./g, '').replace(',', '.');
-            const num = parseFloat(val);
-            if (!isNaN(num)) {
-                e.target.dataset.raw = num; // 🔹 valore pulito
-                e.target.value = num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            }
-        }
-    }, true);
-
-
 
 // 📌 Funzione calcolo Valore Stimato
     function aggiornaValoreStimato(compensi) {
@@ -3532,6 +3471,15 @@
             </td>`;
             tbody.appendChild(tr);
         });
+
+        // =====================================================
+        // 🟦 NUOVA PRATICA → aggiorno compensiTemp
+        // =====================================================
+        const idPratica = document.getElementById("ID_Pratiche")?.value || "0";
+        if (idPratica == "0" || idPratica === "") {
+            window.compensiTemp = JSON.parse(JSON.stringify(compensi));
+            console.log("🟦 [popolaRiepilogo] aggiorno compensiTemp:", window.compensiTemp);
+        }
     }
 
     // 🔹 Elimina una riga dal riepilogo
@@ -3592,24 +3540,254 @@
 
 
     function popolaSelectIntestatari(selectElement, valoreSelezionato = null) {
-        const utenti = window.intestatariGlobali || [];
-        console.log("🔄 Popolo intestatari da globale:", utenti);
+        console.log("🔥 [DEBUG] popolaSelectIntestatari — START");
 
-        selectElement.innerHTML = '<option value="">-- Seleziona intestatario --</option>';
-        utenti.forEach(u => {
-            const opt = document.createElement("option");
-            opt.value = u.ID;
-            opt.textContent = u.Nome;
-            selectElement.appendChild(opt);
+        const utenti = window.intestatariGlobali || [];
+        console.log("🔄 [DEBUG] Utenti disponibili:", utenti);
+
+        try {
+            selectElement.innerHTML = '<option value="">-- Seleziona intestatario --</option>';
+        } catch (err) {
+            console.error("💥 [ERRORE] Non riesco a impostare innerHTML della select:", err);
+        }
+
+        utenti.forEach((u, idx) => {
+            console.log(`🟦 [DEBUG] Inserisco option #${idx}:`, u);
+
+            try {
+                // Sanificazione nome
+                const nomeSafe = (u.Nome || "")
+                    .replace(/'/g, "&#39;")
+                    .replace(/"/g, "&quot;");
+
+                console.log(`➡️ [DEBUG] Nome originale: "${u.Nome}" → Nome safe: "${nomeSafe}"`);
+
+                const opt = document.createElement("option");
+                opt.value = u.ID;
+
+                // ⚠️ USIAMO innerHTML perché dobbiamo interpretare l’entità HTML
+                opt.innerHTML = nomeSafe;
+
+                selectElement.appendChild(opt);
+
+                console.log(`✔️ [DEBUG] Option aggiunta (ID=${u.ID})`);
+            }
+            catch (err) {
+                console.error("💥 [ERRORE] Durante creazione/append option:", err);
+            }
         });
 
-        // 👇 prova prima col parametro passato, altrimenti col dataset
-        const valore = valoreSelezionato || selectElement.dataset.savedValue;
-        if (valore) {
-            selectElement.value = valore;
+        // gestione valore selezionato
+        try {
+            const valore = valoreSelezionato || selectElement.dataset.savedValue;
+            console.log("🎯 [DEBUG] Valore selezionato richiesto:", valore);
+
+            if (valore) {
+                selectElement.value = valore;
+                console.log("✔️ [DEBUG] Valore selezionato applicato:", valore);
+            }
+        } catch (err) {
+            console.error("💥 [ERRORE] Impostando il valore selezionato:", err);
         }
+
+        console.log("🏁 [DEBUG] popolaSelectIntestatari — END");
     }
 
+
+    // 🔹 Salvataggio compensi dal modal (versione con fix accenti/apostrofi)
+    function salvaCompensi() {
+
+        const metodo = document.getElementById('metodoCompensoSelect').value;
+        const budgetInput = document.getElementById('BudgetInput');
+        const idPratica = document.getElementById("ID_Pratiche")?.value || "0";
+
+        let righeMetodo = [];
+
+        // =====================================================================================
+        // 🔍 RACCOLTA RIGHE DEL METODO CORRENTE
+        // =====================================================================================
+        document.querySelectorAll('#tabellaCompensi tbody tr').forEach(tr => {
+
+            let obj = { Metodo: metodo };
+
+            // Campi dinamici generali
+            tr.querySelectorAll('input, textarea, select').forEach(c => {
+                if (!c.disabled) {
+                    obj[c.name] = sanitizeText(c.value?.trim() || "");
+                }
+            });
+
+            // =====================================================================================
+            // 🔸 METODO "A ore"
+            // =====================================================================================
+            if (metodo === "A ore") {
+
+                obj["Tipologia"] = "A ore";
+
+                const oggettoInput = document.getElementById("OggettoIncarico");
+                if (oggettoInput)
+                    obj["OggettoIncarico"] = sanitizeText(oggettoInput.value?.trim() || "");
+
+                obj["Descrizione"] = sanitizeText(tr.querySelector('input[name^="Ruolo_"]')?.value || "");
+
+                const tariffaInput = tr.querySelector('input[name^="Tariffa_"]');
+                let tariffa = tariffaInput?.dataset.raw ?? tariffaInput?.value;
+                tariffa = parseFloat((tariffa || "0").replace(',', '.')) || 0;
+                obj["Importo"] = tariffa;
+
+                if (budgetInput && budgetInput.value) {
+                    const val = parseFloat(budgetInput.value.replace('.', '').replace(',', '.'));
+                    obj["BudgetManuale"] = isNaN(val) ? 0 : val;
+                }
+            }
+
+            // =====================================================================================
+            // 🔸 METODO "Fisso"
+            // =====================================================================================
+            if (metodo === "Fisso") {
+
+                obj["Tipologia"] = tr.querySelector('select[name^="Tipologia_"]')?.value || "Fisso";
+                obj["Descrizione"] = sanitizeText(tr.querySelector('textarea[name^="Descrizione_"]')?.value || "");
+
+                const importoInput = tr.querySelector('input[name^="Importo_"]');
+                let importo = importoInput?.dataset.raw ?? importoInput?.value;
+                importo = parseFloat((importo || "0").toString().replace(',', '.')) || 0;
+                obj["Importo"] = importo;
+
+                let valStimato = tr.querySelector('input[name^="ValoreStimato_"]')?.value;
+
+                // 🔥 FIX: forza sempre valStimato a stringa
+                if (valStimato === undefined || valStimato === null || valStimato === "") {
+                    valStimato = "1"; // default
+                } else {
+                    valStimato = valStimato.toString(); // <--- qui il fix fondamentale
+                }
+
+                obj["ValoreStimato"] = parseFloat(valStimato.replace(',', '.')) || 1;
+            }
+
+
+            // =====================================================================================
+            // 🔸 METODO "Giudiziale"
+            // =====================================================================================
+            if (metodo === "Giudiziale") {
+
+                obj["Tipologia"] = "Giudiziale";
+
+                const estremiInput = document.getElementById("EstremiGiudizio");
+                if (estremiInput)
+                    obj["EstremiGiudizio"] = sanitizeText(estremiInput.value?.trim() || "");
+
+                obj["Descrizione"] = sanitizeText(tr.querySelector('input[name^="Fase_"]')?.value || "");
+
+                const importoInput = tr.querySelector('input[name^="Importo_"]');
+                let importo = importoInput?.dataset.raw ?? importoInput?.value;
+                importo = parseFloat((importo || "0").replace(',', '.')) || 0;
+                obj["Importo"] = importo;
+            }
+
+            // =====================================================================================
+            // 👤 INTESTATARIO
+            // =====================================================================================
+            const intestatarioSelect = tr.querySelector('select[name^="Intestatario_"]');
+            if (intestatarioSelect) {
+                obj["ID_ProfessionistaIntestatario"] = intestatarioSelect.value || "";
+                obj["IntestatarioNome"] = sanitizeText(
+                    intestatarioSelect.options[intestatarioSelect.selectedIndex]?.text || ""
+                );
+            }
+
+            // =====================================================================================
+            // 👥 COLLABORATORI
+            // =====================================================================================
+            let collaboratori = [];
+            tr.querySelectorAll('.collaboratori-riga .row-collaboratore').forEach(rowCol => {
+
+                const collabSelect = rowCol.querySelector('select[name="Collaboratore_temp"], select[name^="Collaboratore_"]');
+                const percInput = rowCol.querySelector('input[name="PercentualeCollaboratore_temp"], input[name^="PercentualeCollaboratore_"]');
+
+                if (collabSelect && percInput && collabSelect.value) {
+                    collaboratori.push({
+                        ID_Collaboratore: collabSelect.value,
+                        NomeCollaboratore: sanitizeText(collabSelect.options[collabSelect.selectedIndex]?.text || ""),
+                        Percentuale: parseFloat(percInput.value.replace(',', '.')) || 0
+                    });
+                }
+            });
+
+            if (collaboratori.length > 0)
+                obj["Collaboratori"] = collaboratori;
+
+            righeMetodo.push(obj);
+        });
+
+        // =====================================================================================
+        // 🔁 RICOSTRUZIONE JSON CUMULATIVO (tutti i metodi)
+        // =====================================================================================
+        let cumulativo = [];
+
+        const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
+        let jsonHidden = hidden?.value || "";
+
+        if (jsonHidden.trim() !== "") {
+            try {
+                cumulativo = JSON.parse(decodeURIComponent(jsonHidden));
+            } catch {
+                console.warn("⚠️ Hidden JSON corrotto → uso variabile globale");
+                cumulativo = Array.isArray(window.compensiCorrenti)
+                    ? JSON.parse(JSON.stringify(window.compensiCorrenti))
+                    : [];
+            }
+        } else {
+            cumulativo = Array.isArray(window.compensiCorrenti)
+                ? JSON.parse(JSON.stringify(window.compensiCorrenti))
+                : [];
+        }
+
+        // 🔄 Sostituisco solo le righe del metodo corrente
+        cumulativo = cumulativo.filter(r => r.Metodo !== metodo);
+        cumulativo = cumulativo.concat(righeMetodo);
+
+        // =====================================================================================
+        // 💾 AGGIORNO HIDDEN JSON
+        // =====================================================================================
+        const container = document.getElementById('hiddenCompensiContainer');
+        container.innerHTML = `
+        <input type="hidden" name="CompensiJSON"
+               value="${encodeURIComponent(JSON.stringify(cumulativo))}">
+    `;
+
+        // =====================================================================================
+        // 🟦 SE È NUOVA PRATICA → aggiorno anche compensiTemp
+        // =====================================================================================
+        if (idPratica == "0" || idPratica === "") {
+            console.log("🟦 NUOVA PRATICA → aggiorno compensiTemp:", cumulativo);
+            window.compensiTemp = JSON.parse(JSON.stringify(cumulativo));
+        }
+
+        // =====================================================================================
+        // 🔁 AGGIORNAMENTO UI
+        // =====================================================================================
+        popolaRiepilogoCompensi(cumulativo);
+
+        if (metodo !== "A ore") {
+            aggiornaValoreStimato(cumulativo);
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('compensoModal')).hide();
+    }
+
+
+    document.addEventListener('blur', e => {
+        if (e.target.classList.contains('importo-input')) {
+            let val = e.target.value.trim().replace(/\./g, '').replace(',', '.');
+            const num = parseFloat(val);
+            if (!isNaN(num)) {
+                e.target.dataset.raw = num; // 🔹 valore pulito
+                e.target.value = num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+        }
+    }, true);
 
     function aggiornaIntestatariDisponibili() {
         const intestatari = getUtentiDisponibili();
@@ -3654,6 +3832,16 @@
 
         container.appendChild(div);
     }
+
+
+    // ⭐ Funzione unificata per generare l'hidden dei compensi
+    function aggiornaHiddenCompensi() {
+        const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
+        if (!hidden) return;
+
+        hidden.value = encodeURIComponent(JSON.stringify(window.CompensiCorrenti || []));
+    }
+
 
 
     // 🔄 Collego i change
@@ -3717,18 +3905,33 @@
         });
         selectPageSize.className = 'form-select form-select-sm w-auto';
 
-        // ⚙️ Stato pratiche (da elenco reale)
-        ['Tutte', 'Contrattualizzazione', 'In lavorazione', 'Conclusa'].forEach(stato => {
-            const option = document.createElement('option');
-            option.value = stato;
-            option.textContent = stato;
-            selectStato.appendChild(option);
-        });
+        ['Tutte', 'Contrattualizzazione', 'In lavorazione', 'Conclusa']
+            .forEach(stato => {
+                const option = document.createElement('option');
+                option.value = stato;
+                option.textContent = stato;
+                selectStato.appendChild(option);
+            });
+
         selectStato.className = 'form-select form-select-sm w-auto';
 
         // Aggiungi i controlli alla barra
         controlliContainer.appendChild(searchInput);
-        controlliContainer.appendChild(selectStato);
+        // 🏷️ Etichetta "Stato pratiche:" in formato piccolo
+        const labelStato = document.createElement('label');
+        labelStato.innerText = "Stato pratiche:";
+        labelStato.className = "me-1 fw-bold small align-self-center";
+
+        // Contenitore per etichetta + select
+        const statoWrapper = document.createElement('div');
+        statoWrapper.className = "d-flex align-items-center me-3";
+        statoWrapper.appendChild(labelStato);
+        statoWrapper.appendChild(selectStato);
+
+        // Aggiungi nella barra dei controlli
+        controlliContainer.appendChild(statoWrapper);
+
+
         controlliContainer.appendChild(selectPageSize);
 
         function renderTable() {

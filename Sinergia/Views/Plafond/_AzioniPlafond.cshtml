@@ -3,9 +3,19 @@
     var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
 
     bool isFinanziamento = Model.ID_Finanziamento > 0;
-    bool isCostoPersonale = Model.TipoPlafond == "Costo Personale";
-    bool isPagamentoCosti = Model.TipoPlafond != null && Model.TipoPlafond.StartsWith("Pagamento Costo");
-    bool isDaIncasso = Model.ID_Plafond.HasValue && Model.ID_Finanziamento == 0 && !isCostoPersonale && !isPagamentoCosti;
+
+    bool isCostoPersonale =
+        Model.TipoPlafond != null &&
+        Model.TipoPlafond.Equals("Costo Personale", StringComparison.OrdinalIgnoreCase);
+
+    bool isPagamentoCosti =
+        Model.TipoPlafond != null &&
+        Model.TipoPlafond.StartsWith("Pagamento Costo", StringComparison.OrdinalIgnoreCase);
+
+    // ✅ RICONOSCIMENTO CORRETTO DEL VERSAMENTO DA INCASSO
+    bool isDaIncasso =
+        Model.TipoPlafond != null &&
+        Model.TipoPlafond.Equals("Incasso", StringComparison.OrdinalIgnoreCase);
 }
 
 <div class="d-flex gap-1 justify-content-center align-items-center">
@@ -50,7 +60,7 @@
                 <i class="fa fa-trash-alt"></i>
             </button>
         }
-        @* Se in futuro si vuole gestire anche l'eliminazione dei pagamenti costi:
+        @* Se in futuro vuoi attivare la cancellazione dei pagamenti:
             else if (isPagamentoCosti)
             {
                 <button class="btn btn-outline-danger btn-sm btn-elimina"
@@ -63,4 +73,3 @@
         *@
     }
 </div>
-

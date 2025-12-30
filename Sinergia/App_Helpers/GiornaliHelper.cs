@@ -313,8 +313,8 @@ namespace Sinergia.App_Helpers
             // In alternativa, se lo tieni in sessione, sostituisci questa riga.
             // Esempio robusto: prova ID_UtenteCollegato, poi uguale all'utente.
             int idCliente = db.OperatoriSinergia
-                .Where(os => os.ID_UtenteCollegato == idProfessionista || os.ID_Cliente == idProfessionista)
-                .Select(os => os.ID_Cliente)
+                .Where(os => os.ID_UtenteCollegato == idProfessionista || os.ID_Operatore == idProfessionista)
+                .Select(os => os.ID_Operatore)
                 .FirstOrDefault();
 
             dal = dal.Date;

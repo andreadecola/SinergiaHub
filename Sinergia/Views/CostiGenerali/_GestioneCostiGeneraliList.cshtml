@@ -288,11 +288,9 @@
                                 <option value="Costo Generale">Costo Generale</option>
                                 <option value="Trattenuta Sinergia">Trattenuta Sinergia</option>
                                 <option value="Owner Fee">Owner Fee</option>
+                                <option value="Costo Fisso Resident">Costo Fisso Resident</option> <!-- ✅ MANCAVA -->
                             </select>
                         </div>
-
-
-
 
                         <div class="col-md-6">
                             <label class="form-label">Una Tantum</label>
@@ -623,6 +621,10 @@
 
 
     function apriModaleRicorrenza(idAnagraficaCosto) {
+
+        console.log("=== DEBUG apriModaleRicorrenza ===");
+        console.log("ID Anagrafica:", idAnagraficaCosto);
+
         const form = document.getElementById("ricorrenzaCostoForm");
         form.reset();
 
@@ -634,94 +636,122 @@
         fetch(`/Pratiche/GetRicorrenzaCostoGenerale?idAnagraficaCosto=${idAnagraficaCosto}`)
             .then(r => r.json())
             .then(res => {
-                if (res.success && res.ricorrenza) {
-                    const r = res.ricorrenza;
 
-                    form.querySelector('[name="ID_Ricorrenza"]').value = r.ID_Ricorrenza || "";
-                    form.querySelector('[name="Periodicita"]').value = r.Periodicita || "";
-                    form.querySelector('[name="TipoValore"]').value = r.TipoValore || "";
-                    form.querySelector('[name="Valore"]').value = r.Valore || "";
-                    form.querySelector('[name="Note"]').value = r.Note || "";
+                console.log("🔍 Risposta server:", res);
 
-                    if (r.DataInizio)
-                        form.querySelector('[name="DataInizio"]').value = new Date(r.DataInizio).toISOString().slice(0, 10);
-                    if (r.DataFine)
-                        form.querySelector('[name="DataFine"]').value = new Date(r.DataFine).toISOString().slice(0, 10);
+                // ====================================================
+                // 1️⃣ NESSUNA RICORRENZA → NUOVA
+                // ====================================================
+                if (!res.success) {
 
-                    // Imposta la categoria
-                    selectCategoria.value = r.Categoria || "";
+                    console.log("→ Nessuna ricorrenza trovata → nuova ricorrenza");
 
-                    // ✅ GESTIONE UNA TANTUM
-                    const checkUnaTantum = document.getElementById("checkUnaTantum");
-                    const dataInizio = r.DataInizio ? new Date(r.DataInizio).toISOString().slice(0, 10) : "";
-                    const dataFine = r.DataFine ? new Date(r.DataFine).toISOString().slice(0, 10) : "";
-                    checkUnaTantum.checked = dataInizio && dataFine && dataInizio === dataFine;
-                    aggiornaCampiUnaTantum();
+                    let categoria = res.categoria || "Costo Generale";
+                    console.log("Categoria default impostata:", categoria);
 
-                    // ===================================================
-                    // ⚙️ Casi speciali: Trattenuta Sinergia / Owner Fee
-                    // ===================================================
-                    const èSpeciale = r.Categoria === "Trattenuta Sinergia" || r.Categoria === "Owner Fee";
-                    const periodicitaField = form.querySelector('[name="Periodicita"]');
-                    const dataInizioField = form.querySelector('[name="DataInizio"]');
-                    const dataFineField = form.querySelector('[name="DataFine"]');
+                    selectCategoria.value = categoria;
 
-                    if (èSpeciale) {
-                        // Pulisce i campi e li disabilita
-                        periodicitaField.value = "";
-                        dataInizioField.value = "";
-                        dataFineField.value = "";
+                    // 🔥 FIX: aggiorna anche l'HIDDEN Categoria
+                    form.querySelector('[name="Categoria"]').value = categoria;
 
-                        periodicitaField.disabled = true;
-                        dataInizioField.disabled = true;
-                        dataFineField.disabled = true;
+                    // Nascondi statico, mostra select
+                    document.getElementById("categoriaWrapper").style.display = "none";
+                    selectCategoria.classList.remove("d-none");
 
-                        // Nasconde la checkbox “Una Tantum” (non applicabile)
-                        document.getElementById("checkUnaTantum").closest(".form-check").style.display = "none";
-
-                        toastr.info(`⚙️ "${r.Categoria}" non richiede periodicità né date.`);
-                    } else {
-                        // Riabilita i campi per le categorie normali
-                        periodicitaField.disabled = false;
-                        dataInizioField.disabled = false;
-                        dataFineField.disabled = false;
-                        document.getElementById("checkUnaTantum").closest(".form-check").style.display = "";
-                    }
-
-                } else {
-                    toastr.info("⏳ Nessuna ricorrenza trovata, puoi inserirne una nuova.");
-                    // Nuova ricorrenza → default categoria "Costo Generale"
-                    selectCategoria.value = "Costo Generale";
-
-                    // ✅ Reset checkbox
                     document.getElementById("checkUnaTantum").checked = false;
                     aggiornaCampiUnaTantum();
 
-                    // Riabilita tutti i campi per sicurezza
                     form.querySelector('[name="Periodicita"]').disabled = false;
                     form.querySelector('[name="DataInizio"]').disabled = false;
                     form.querySelector('[name="DataFine"]').disabled = false;
                     document.getElementById("checkUnaTantum").closest(".form-check").style.display = "";
+
+                    new bootstrap.Modal(document.getElementById("ricorrenzaCostoModal")).show();
+                    return;
                 }
 
-                // ===================================================
-                // 📋 Imposta correttamente categoria visiva
-                // ===================================================
-                const categoriaHidden = form.querySelector('[name="Categoria"]');
-                const staticText = document.getElementById("categoriaStatic");
-                const cat = selectCategoria.value;
-                categoriaHidden.value = cat;
-                staticText.textContent = cat;
+                // ====================================================
+                // 2️⃣ RICORRENZA ESISTENTE → MODIFICA
+                // ====================================================
+                console.log("→ Modalità editing ricorrenza esistente");
 
-                // Mostra blocco e nascondi select
+                const r = res.ricorrenza;
+
+                form.querySelector('[name="ID_Ricorrenza"]').value = r.ID_Ricorrenza || "";
+                form.querySelector('[name="Periodicita"]').value = r.Periodicita || "";
+                form.querySelector('[name="TipoValore"]').value = r.TipoValore || "";
+                form.querySelector('[name="Valore"]').value = r.Valore || "";
+                form.querySelector('[name="Note"]').value = r.Note || "";
+
+                if (r.DataInizio) form.querySelector('[name="DataInizio"]').value = r.DataInizio;
+                if (r.DataFine) form.querySelector('[name="DataFine"]').value = r.DataFine;
+
+                selectCategoria.value = r.Categoria;
+
+                // 🔥 FIX: aggiorna anche l’HIDDEN Categoria
+                form.querySelector('[name="Categoria"]').value = r.Categoria;
+
+                // Categoria statica
                 document.getElementById("categoriaWrapper").style.display = "block";
                 selectCategoria.classList.add("d-none");
-                staticText.classList.remove("d-none");
+                document.getElementById("categoriaStatic").textContent = r.Categoria;
 
-                // ===================================================
-                // 🧱 Mostra la modale
-                // ===================================================
+                // ====================================================
+                // UNA-TANTUM
+                // ====================================================
+                const checkUnaTantum = document.getElementById("checkUnaTantum");
+
+                // Se esiste periodicità (Mensile, Trimestrale, ecc.) → NON è una tantum
+                if (r.Periodicita && r.Periodicita !== "") {
+                    checkUnaTantum.checked = false;
+                } else {
+                    // se NON c’è periodicità → allora può essere una tantum
+                    if (r.DataInizio && r.DataFine && r.DataInizio === r.DataFine) {
+                        checkUnaTantum.checked = true;
+                    } else {
+                        checkUnaTantum.checked = false;
+                    }
+                }
+
+                aggiornaCampiUnaTantum();
+                // ====================================================
+                // COSTI SPECIALI
+                // ====================================================
+                const categoriaNorm = (r.Categoria || "").trim().toLowerCase();
+                const èSpeciale =
+                    categoriaNorm === "owner fee" ||
+                    categoriaNorm === "trattenuta sinergia";
+               
+                console.log("Categoria normalizzata:", categoriaNorm);
+                console.log("È un costo speciale?:", èSpeciale);
+
+                const periodicitaField = form.querySelector('[name="Periodicita"]');
+                const dataInizioField = form.querySelector('[name="DataInizio"]');
+                const dataFineField = form.querySelector('[name="DataFine"]');
+
+                if (èSpeciale) {
+                    console.log("→ Costo speciale: disabilito campi");
+
+                    periodicitaField.value = "";
+                    dataInizioField.value = "";
+                    dataFineField.value = "";
+
+                    periodicitaField.disabled = true;
+                    dataInizioField.disabled = true;
+                    dataFineField.disabled = true;
+
+                    document.getElementById("checkUnaTantum").closest(".form-check").style.display = "none";
+
+                    toastr.info(`⚙️ "${r.Categoria}" non richiede periodicità né date.`);
+                } else {
+                    periodicitaField.disabled = false;
+                    dataInizioField.disabled = false;
+                    dataFineField.disabled = false;
+                    document.getElementById("checkUnaTantum").closest(".form-check").style.display = "";
+                }
+
                 new bootstrap.Modal(document.getElementById("ricorrenzaCostoModal")).show();
+
             })
             .catch(err => {
                 console.error("Errore:", err);
@@ -730,22 +760,31 @@
     }
 
 
-
     function salvaRicorrenzaCosto() {
+
+        console.log("=== 🟦 DEBUG salvaRicorrenzaCosto ===");
+
         const form = document.getElementById("ricorrenzaCostoForm");
         const formData = new FormData(form);
 
         const categoria = formData.get("Categoria");
+        console.log("📌 Categoria letta dal form:", categoria);
 
-        // ✅ Imposta dinamicamente ID_Professionista e Professione
+        // =============================
+        // ID PROFESSIONISTA / PROFESSIONE
+        // =============================
         const idProfessionista = document.getElementById("hiddenOwnerProfessionista")?.value;
-        if (idProfessionista) formData.set("ID_Professionista", idProfessionista);
-
         const idProfessione = document.getElementById("hiddenProfessione")?.value;
+
+        console.log("ID Professionista:", idProfessionista);
+        console.log("ID Professione:", idProfessione);
+
+        if (idProfessionista) formData.set("ID_Professionista", idProfessionista);
         if (idProfessione) formData.set("ID_Professione", idProfessione);
 
-        // ✅ Recupera i campi disabilitati manualmente
-        const checkUnaTantum = document.getElementById("checkUnaTantum");
+        // =============================
+        // CAMPi MODALE
+        // =============================
         const periodicitaField = form.querySelector('[name="Periodicita"]');
         const dataInizioField = form.querySelector('[name="DataInizio"]');
         const dataFineField = form.querySelector('[name="DataFine"]');
@@ -754,57 +793,89 @@
         const dataInizioVal = dataInizioField.value;
         const dataFineVal = dataFineField.value;
 
-        // ✅ Se i campi sono disabilitati, aggiungili manualmente a FormData
+        console.log("Periodicità:", periodicitaVal);
+        console.log("Data Inizio:", dataInizioVal);
+        console.log("Data Fine:", dataFineVal);
+
+        // Scrive nel formData, anche se i campi sono disabilitati
         formData.set("Periodicita", periodicitaVal);
         formData.set("DataInizio", dataInizioVal);
         formData.set("DataFine", dataFineVal);
 
-        // =====================================================
-        // ⚙️ Gestione casi speciali: Owner Fee / Trattenuta Sinergia
-        // =====================================================
-        const èSpeciale = categoria === "Owner Fee" || categoria === "Trattenuta Sinergia";
+        // =============================
+        // COSTI SPECIALI
+        // =============================
+        const categoriaNorm = (categoria || "").trim().toLowerCase();
+
+        const èSpeciale =
+            categoriaNorm === "owner fee" ||
+            categoriaNorm === "trattenuta sinergia" ;
+
+        console.log("Categoria normalizzata:", categoriaNorm);
+        console.log("È un costo speciale?:", èSpeciale);
+
         if (èSpeciale) {
+            console.log("➡ Imposto periodicità e date a stringa vuota (speciale)");
+
             formData.set("Periodicita", "");
             formData.set("DataInizio", "");
             formData.set("DataFine", "");
 
-            // 🔒 Disabilita visivamente i campi nella modale
             periodicitaField.disabled = true;
             dataInizioField.disabled = true;
             dataFineField.disabled = true;
         }
 
-        // =====================================================
-        // 🔍 Validazione dinamica
-        // =====================================================
+        // =============================
+        // VALIDAZIONE BASE
+        // =============================
         const idTipoCosto = formData.get("ID_AnagraficaCosto");
         const tipoValore = formData.get("TipoValore");
         const valore = formData.get("Valore");
         const periodicita = formData.get("Periodicita");
 
-        // Campi obbligatori di base
+        console.log("ID Tipo Costo:", idTipoCosto);
+        console.log("Tipo Valore:", tipoValore);
+        console.log("Valore:", valore);
+        console.log("Periodicità (finale):", periodicita);
+
         if (!idTipoCosto || !tipoValore || !valore || !categoria) {
+            console.warn("⚠️ Validazione fallita: manca un campo obbligatorio.");
             toastr.warning("⚠️ Compilare tutti i campi obbligatori.");
             return;
         }
 
-        // Solo per i costi NON speciali → serve periodicità e data
         if (!èSpeciale) {
+            console.log("Validazione su periodicità perché NON è speciale...");
             if (!periodicita || !dataInizioVal) {
+                console.warn("⚠️ Manca Periodicità o DataInizio → blocco salvataggio.");
                 toastr.warning("⚠️ Compilare Periodicità e Data Inizio.");
                 return;
             }
+        } else {
+            console.log("✨ Nessuna validazione date/periodicità perché è un costo speciale.");
         }
 
-        // =====================================================
-        // 🚀 Invio al server
-        // =====================================================
+        // =============================
+        // DEBUG COMPLETO FORM DATA
+        // =============================
+        console.log("===== 📦 FORM DATA INVIATO AL SERVER =====");
+        for (let [key, val] of formData.entries()) {
+            console.log(key + ":", val);
+        }
+        console.log("===========================================");
+
+        // =============================
+        // INVIO AL SERVER
+        // =============================
         fetch('/Pratiche/SalvaRicorrenzaCostoGenerale', {
             method: 'POST',
             body: formData
         })
             .then(res => res.json())
             .then(res => {
+                console.log("📥 Risposta server:", res);
+
                 if (res.success) {
                     toastr.success("✅ Ricorrenza salvata correttamente.");
                     const modal = bootstrap.Modal.getInstance(document.getElementById("ricorrenzaCostoModal"));
@@ -814,10 +885,11 @@
                 }
             })
             .catch(err => {
-                console.error("Errore di rete:", err);
+                console.error("❌ ERRORE FETCH:", err);
                 toastr.error("❌ Errore di rete durante il salvataggio.");
             });
     }
+
 
 
     // ✅ Funzione GLOBALE, dichiarata fuori da DOMContentLoaded

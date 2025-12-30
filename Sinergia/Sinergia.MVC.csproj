@@ -249,6 +249,7 @@
     <Compile Include="Models\AvvisoParcellaViewModel.cs" />
     <Compile Include="Models\AziendaViewModel.cs" />
     <Compile Include="Models\CalcoloFatturaResult.cs" />
+    <Compile Include="Models\CategoriaPraticaViewModel.cs" />
     <Compile Include="Models\ClienteEsternoViewModel.cs" />
     <Compile Include="Models\ClienteViewModel.cs" />
     <Compile Include="Models\ClusterViewModel.cs" />
@@ -339,6 +340,7 @@
     <Content Include="Scripts\bootstrap.min.js" />
     <Content Include="App_Browsers\qt.browser" />
     <None Include="Scripts\jquery-3.7.0.intellisense.js" />
+    <Content Include="Scripts\datepicker-it.js" />
     <Content Include="Scripts\jquery-3.7.0.js" />
     <Content Include="Scripts\jquery-3.7.0.min.js" />
     <Content Include="Scripts\jquery-3.7.0.slim.js" />
@@ -451,6 +453,9 @@
     <Content Include="Views\GiornaleFinanziario\ReportOperazioniFinanziariePdf.cshtml" />
     <Content Include="Views\Fornitori\ReportFornitoriPdf.cshtml" />
     <Content Include="Views\GenerazioneCosti\ReportGenerazioneCostiPdf.cshtml" />
+    <Content Include="Views\GestioneCategoriePratiche\GestioneCategoriePratiche.cshtml" />
+    <Content Include="Views\GestioneCategoriePratiche\_GestioneCategoriePraticheList.cshtml" />
+    <Content Include="Views\GestioneCategoriePratiche\_AzioniCategoria.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Allegati\KnowledgeAziendale\" />

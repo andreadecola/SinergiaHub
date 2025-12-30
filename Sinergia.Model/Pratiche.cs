@@ -72,5 +72,8 @@ namespace Sinergia.Model
         public decimal? TrattenutaPersonalizzata { get; set; }
 
         public bool HaIncaricoGenerato { get; set; }
+
+        [StringLength(300)]
+        public string OggettoPratica { get; set; }
     }
 }

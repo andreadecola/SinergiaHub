@@ -12,6 +12,8 @@ namespace Sinergia.Model
         {
         }
 
+        public virtual DbSet<AnagraficaCategoriePratiche> AnagraficaCategoriePratiche { get; set; }
+        public virtual DbSet<AnagraficaCategoriePratiche_a> AnagraficaCategoriePratiche_a { get; set; }
         public virtual DbSet<AnagraficaCostiPratica> AnagraficaCostiPratica { get; set; }
         public virtual DbSet<AnagraficaCostiPratica_a> AnagraficaCostiPratica_a { get; set; }
         public virtual DbSet<AnagraficaCostiProfessionista> AnagraficaCostiProfessionista { get; set; }

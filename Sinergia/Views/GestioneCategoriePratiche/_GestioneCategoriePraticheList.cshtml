@@ -1,0 +1,357 @@
+﻿@model List<Sinergia.Models.CategoriaPraticaViewModel>
+
+@{
+    bool puoAggiungere = ViewBag.PuoAggiungere == true;
+    bool puoModificare = ViewBag.PuoModificare == true;
+    bool puoEliminare = ViewBag.PuoEliminare == true;
+
+    bool mostraAzioni = puoAggiungere || puoModificare || puoEliminare;
+}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+<!-- ======================================================= -->
+<!--                   FILTRI + NUOVO                       -->
+<!-- ======================================================= -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <div id="controlliCategorie" class="d-flex align-items-center gap-2"></div>
+
+    @if (puoAggiungere)
+    {
+        <button class="btn btn-outline-primary btn-sm" onclick="apriNuovaCategoria()">
+            Nuova Categoria
+        </button>
+    }
+</div>
+
+<!-- ======================================================= -->
+<!--                  TABELLA DESKTOP                        -->
+<!-- ======================================================= -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped" id="categorieTable">
+            <thead>
+                <tr>
+                    <th class="w-30">Categoria</th>
+                    <th class="w-40">Note</th>
+                    <th class="w-10">Stato</th>
+
+                    @if (mostraAzioni)
+                    {
+                        <th class="w-20 text-center">Azioni</th>
+                    }
+                </tr>
+            </thead>
+
+            <tbody>
+                @foreach (var cat in Model)
+                {
+                    <tr data-tipo="@cat.Tipo"
+                        data-note="@cat.Note"
+                        data-attivo="@cat.Attivo">
+
+                        <td>@cat.Tipo</td>
+                        <td>@cat.Note</td>
+                        <td>@(cat.Attivo ? "Attivo" : "Inattivo")</td>
+
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial("~/Views/GestioneCategoriePratiche/_AzioniCategoria.cshtml", cat)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ======================================================= -->
+<!--                  CARD MOBILE                            -->
+<!-- ======================================================= -->
+<div class="d-block d-md-none mt-3">
+    @foreach (var cat in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white categoria-card"
+             data-tipo="@cat.Tipo"
+             data-note="@cat.Note"
+             data-attivo="@cat.Attivo">
+
+            <h5 class="text-primary">@cat.Tipo</h5>
+
+            <div class="small text-muted">
+                <strong>Note:</strong> @cat.Note
+            </div>
+
+            <div class="small text-muted mb-2">
+                <strong>Stato:</strong> @(cat.Attivo ? "Attivo" : "Inattivo")
+            </div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex gap-2 justify-content-end">
+                    @Html.Partial("~/Views/GestioneCategoriePratiche/_AzioniCategoria.cshtml", cat)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- PAGINAZIONE -->
+<div id="paginazioneCategorie"
+     class="d-flex justify-content-end align-items-center gap-2 mt-2">
+</div>
+
+<!-- ======================================================= -->
+<!--                   MODALE CREA/MODIFICA                  -->
+<!-- ======================================================= -->
+<div class="modal fade" id="categoriaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form id="categoriaForm">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5 class="modal-title" id="categoriaModalLabel">Nuova Categoria</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <input type="hidden" name="ID_CategoriaPratica" />
+
+                    <div class="mb-2">
+                        <label>Categoria</label>
+                        <input type="text" name="Tipo"
+                               class="form-control form-control-sm" required />
+                    </div>
+
+                    <div class="mb-2">
+                        <label>Note</label>
+                        <input type="text" name="Note"
+                               class="form-control form-control-sm" />
+                    </div>
+
+                    <div class="mb-2">
+                        <label>Stato</label>
+                        <select name="Attivo" class="form-select form-select-sm">
+                            <option value="true">Attivo</option>
+                            <option value="false">Inattivo</option>
+                        </select>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                </div>
+
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ======================================================= -->
+<!--                 MODALE ELIMINAZIONE                     -->
+<!-- ======================================================= -->
+<div class="modal fade" id="eliminaCategoriaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Elimina Categoria</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questa categoria?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnConfermaElimina">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+
+    /* ========================================================
+        MODALI
+    ======================================================== */
+
+    function apriNuovaCategoria() {
+        const form = document.getElementById("categoriaForm");
+        form.reset();
+        form.querySelector("[name='ID_CategoriaPratica']").value = "0";
+        document.getElementById("categoriaModalLabel").textContent = "Nuova Categoria";
+        new bootstrap.Modal(document.getElementById("categoriaModal")).show();
+    }
+
+    function apriModificaCategoria(id) {
+        fetch(`/Utenti/GetCategoriaPratica?id=${id}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) return toastr.error("Errore nel caricamento.");
+
+                const f = res.data;
+                const form = document.getElementById("categoriaForm");
+
+                form.querySelector("[name='ID_CategoriaPratica']").value = f.ID_CategoriaPratica;
+                form.querySelector("[name='Tipo']").value = f.Tipo;
+                form.querySelector("[name='Note']").value = f.Note ?? "";
+                form.querySelector("[name='Attivo']").value = f.Attivo ? "true" : "false";
+
+                document.getElementById("categoriaModalLabel").textContent = "Modifica Categoria";
+
+                new bootstrap.Modal(document.getElementById("categoriaModal")).show();
+            });
+    }
+
+    /* ========================================================
+        SUBMIT FORM (CREATE/EDIT)
+    ======================================================== */
+    $("#categoriaForm").on("submit", function (e) {
+        e.preventDefault();
+
+        const fd = new FormData(this);
+        const id = fd.get("ID_CategoriaPratica");
+
+        const url = id != "0"
+            ? "/Utenti/ModificaCategoriaPratica"
+            : "/Utenti/CreaCategoriaPratica";
+
+        fetch(url, { method: "POST", body: fd })
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) return toastr.error(res.message);
+                toastr.success(res.message);
+                location.reload();
+            });
+    });
+
+    /* ========================================================
+        ELIMINAZIONE (FIX DEFINITIVO)
+======================================================== */
+
+    let idDaEliminare = 0;
+
+    function confermaEliminazioneCategoria(id) {
+        idDaEliminare = id;
+        const modal = new bootstrap.Modal(document.getElementById("eliminaCategoriaModal"));
+        modal.show();
+    }
+
+    // Delegation – intercetta il click SEMPRE
+    document.addEventListener("click", function (e) {
+
+        if (e.target && e.target.id === "btnConfermaElimina") {
+
+            console.log("🔥 CLICK RILEVATO SU CONFERMA ELIMINA");
+
+            fetch("/Utenti/EliminaCategoriaPratica", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `id=${idDaEliminare}`
+            })
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.success) {
+                        toastr.error(res.message);
+                        return;
+                    }
+
+                    toastr.success(res.message);
+
+                    const modal = bootstrap.Modal.getInstance(
+                        document.getElementById("eliminaCategoriaModal")
+                    );
+                    modal.hide();
+
+                    location.reload();
+                });
+        }
+    });
+
+
+    /* ========================================================
+        FILTRO + PAGINAZIONE (LOCALE, COME PROFESSIONI)
+    ======================================================== */
+
+    document.addEventListener("DOMContentLoaded", function () {
+
+        const table = document.getElementById("categorieTable");
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll("tbody tr"));
+        const controlli = document.getElementById("controlliCategorie");
+        const paginazione = document.getElementById("paginazioneCategorie");
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        const search = document.createElement("input");
+        search.type = "text";
+        search.placeholder = "Cerca...";
+        search.className = "form-control form-control-sm w-auto";
+
+        const select = document.createElement("select");
+        select.className = "form-select form-select-sm w-auto";
+        [10, 25, 50].forEach(n => {
+            const opt = document.createElement("option");
+            opt.value = n;
+            opt.textContent = n;
+            select.appendChild(opt);
+        });
+
+        controlli.appendChild(search);
+        controlli.appendChild(select);
+
+        function render() {
+
+            const keyword = search.value.trim().toLowerCase();
+
+            const filtered = rows.filter(r =>
+                (r.dataset.tipo || "").toLowerCase().includes(keyword) ||
+                (r.dataset.note || "").toLowerCase().includes(keyword)
+            );
+
+            const totalPages = Math.ceil(filtered.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            rows.forEach(r => r.style.display = "none");
+
+            const start = (currentPage - 1) * pageSize;
+            filtered.slice(start, start + pageSize).forEach(r => r.style.display = "");
+
+            paginazione.innerHTML = "";
+            paginazione.innerHTML = `<span class='me-2'>Pagina ${currentPage} di ${totalPages || 1}</span>`;
+
+            const prev = document.createElement("button");
+            prev.textContent = "←";
+            prev.className = "btn btn-sm btn-outline-primary me-1";
+            prev.disabled = currentPage === 1;
+            prev.onclick = () => { currentPage--; render(); };
+            paginazione.appendChild(prev);
+
+            const next = document.createElement("button");
+            next.textContent = "→";
+            next.className = "btn btn-sm btn-outline-primary";
+            next.disabled = currentPage === totalPages;
+            next.onclick = () => { currentPage++; render(); };
+            paginazione.appendChild(next);
+        }
+
+        search.addEventListener("input", () => { currentPage = 1; render(); });
+        select.addEventListener("change", () => {
+            pageSize = parseInt(select.value);
+            currentPage = 1;
+            render();
+        });
+
+        render();
+    });
+
+</script>

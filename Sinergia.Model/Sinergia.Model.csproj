@@ -178,6 +178,8 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AnagraficaCategoriePratiche.cs" />
+    <Compile Include="AnagraficaCategoriePratiche_a.cs" />
     <Compile Include="AnagraficaCostiPratica.cs" />
     <Compile Include="AnagraficaCostiPratica_a.cs" />
     <Compile Include="AnagraficaCostiProfessionista.cs" />

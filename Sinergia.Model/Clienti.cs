@@ -60,5 +60,10 @@ namespace Sinergia.Model
         public DateTime? DataUltimaModifica { get; set; }
 
         public int? ID_UtenteUltimaModifica { get; set; }
+
+        [StringLength(255)]
+        public string DocumentoCliente_Nome { get; set; }
+
+        public byte[] DocumentoCliente_File { get; set; }
     }
 }

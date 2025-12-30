@@ -43,7 +43,7 @@ namespace Sinergia.App_Helpers
                             DataInizioAttivitaStimata = p.DataInizioAttivitaStimata,
                             DataFineAttivitaStimata = p.DataFineAttivitaStimata,
                             ID_UtenteUltimaModifica = p.ID_UtenteUltimaModifica,
-                            TipoCliente = db.OperatoriSinergia.Where(c => c.ID_Cliente == p.ID_Cliente).Select(c => c.TipoCliente).FirstOrDefault()
+                            TipoCliente = db.OperatoriSinergia.Where(c => c.ID_Operatore == p.ID_Cliente).Select(c => c.TipoCliente).FirstOrDefault()
                         }).ToList();
                 }
                 else if (tipoUtente == "Collaboratore")
@@ -69,15 +69,15 @@ namespace Sinergia.App_Helpers
                             DataInizioAttivitaStimata = p.DataInizioAttivitaStimata,
                             DataFineAttivitaStimata = p.DataFineAttivitaStimata,
                             ID_UtenteUltimaModifica = p.ID_UtenteUltimaModifica,
-                            TipoCliente = db.OperatoriSinergia.Where(c => c.ID_Cliente == p.ID_Cliente).Select(c => c.TipoCliente).FirstOrDefault()
+                            TipoCliente = db.OperatoriSinergia.Where(c => c.ID_Operatore == p.ID_Cliente).Select(c => c.TipoCliente).FirstOrDefault()
                         }).ToList();
 
                     // ✅ Lista completa dei professionisti a cui è assegnato
                     professionistiSeguiti = db.OperatoriSinergia
-                        .Where(c => professionisti.Contains(c.ID_Cliente))
+                        .Where(c => professionisti.Contains(c.ID_Operatore))
                         .Select(c => new ProfessionistiViewModel
                         {
-                            ID_Professionista = c.ID_Cliente,
+                            ID_Professionista = c.ID_Operatore,
                             Nome = c.Nome,
                             Cognome = c.Cognome,
                             Email = c.MAIL1,
@@ -90,7 +90,7 @@ namespace Sinergia.App_Helpers
 
                 // ✅ Carica collaboratori se il cliente selezionato è un professionista (valido anche se utente è Admin)
                 var idUtenteProfessionista = db.OperatoriSinergia
-                    .Where(c => c.ID_Cliente == idCliente && c.TipoCliente == "Professionista")
+                    .Where(c => c.ID_Operatore == idCliente && c.TipoCliente == "Professionista")
                     .Select(c => c.ID_UtenteCollegato)
                     .FirstOrDefault();
 
@@ -164,7 +164,7 @@ namespace Sinergia.App_Helpers
                         .OrderBy(c => c.Nome)
                         .Select(c => new SelectListItem
                         {
-                            Value = "P_" + c.ID_Cliente.ToString(),
+                            Value = "P_" + c.ID_Operatore.ToString(),
                             Text = c.Nome + " " + (c.Cognome ?? "") + " | Professionista"
                         }).ToList();
 
@@ -181,7 +181,7 @@ namespace Sinergia.App_Helpers
                     {
                         lista.Add(new SelectListItem
                         {
-                            Value = "P_" + cliente.ID_Cliente.ToString(),
+                            Value = "P_" + cliente.ID_Operatore.ToString(),
                             Text = cliente.Nome + " " + (cliente.Cognome ?? "") + " | " + cliente.TipoCliente
                         });
                     }
@@ -191,7 +191,7 @@ namespace Sinergia.App_Helpers
                     var professionisti = (
                         from r in db.RelazioneUtenti
                         join o in db.OperatoriSinergia
-                            on r.ID_Utente equals o.ID_Cliente   // collegamento giusto
+                            on r.ID_Utente equals o.ID_Operatore   // collegamento giusto
                         where r.ID_UtenteAssociato == idUtente   // collaboratore corrente
                               && r.Stato == "Attivo"
                               && o.TipoCliente == "Professionista"
@@ -199,7 +199,7 @@ namespace Sinergia.App_Helpers
                         orderby o.Nome
                         select new SelectListItem
                         {
-                            Value = "P_" + o.ID_Cliente.ToString(),
+                            Value = "P_" + o.ID_Operatore.ToString(),
                             Text = o.Nome + " " + (o.Cognome ?? "") + " | Professionista"
                         }
                     ).ToList();
@@ -220,7 +220,7 @@ namespace Sinergia.App_Helpers
                 if (utenteCorrente == null)
                     return lista;
 
-                var cliente = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == idCliente && c.Stato == "Attivo");
+                var cliente = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Operatore == idCliente && c.Stato == "Attivo");
                 if (cliente == null || cliente.ID_Owner == null)
                     return lista;
 

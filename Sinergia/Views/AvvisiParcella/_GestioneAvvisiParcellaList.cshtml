@@ -140,11 +140,11 @@
             <i class="bi bi-file-earmark-excel"></i> Excel/CSV
         </button>
 
-        <button type="submit" formaction="@Url.Action("EsportaAvvisiParcellaPdf", "Pratiche")"
+        @*<button type="submit" formaction="@Url.Action("EsportaAvvisiParcellaPdf", "Pratiche")"
                 class="btn btn-outline-danger btn-sm"
                 style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
             <i class="bi bi-file-earmark-pdf"></i> PDF
-        </button>
+        </button>*@
     </form>
 </div>
 
@@ -1713,94 +1713,69 @@
     /* calcolo contributo integrativo e calcolo totale della parcella*/
 
     // ===================================================
-    // 💰 Calcola Contributo Integrativo (basato su Importo o Acconto)
+    // 💰 Calcola Contributo Integrativo (basato su Importo + Spese Generali)
     // ===================================================
     function calcolaContributoIntegrativo() {
         const form = document.getElementById("avvisoForm");
         if (!form) return;
 
-        const importoInput = form.querySelector('[name="Importo"]');
-        const accontoInput = form.querySelector('[name="ImportoAcconto"]');
-        const percentualeInput = form.querySelector('[name="ContributoIntegrativoPercentuale"]');
-        const contributoInput = form.querySelector('[name="ContributoIntegrativoImporto"]');
+        const importo = parseFloat((form.querySelector('[name="Importo"]').value || "0").replace(",", ".")) || 0;
+        const importoAcconto = parseFloat((form.querySelector('[name="ImportoAcconto"]').value || "0").replace(",", ".")) || 0;
+        const speseGenerali = parseFloat((form.querySelector('[name="ImportoRimborsoSpese"]').value || "0").replace(",", ".")) || 0;
+        const percentuale = parseFloat((form.querySelector('[name="ContributoIntegrativoPercentuale"]').value || "0").replace(",", ".")) || 0;
 
-        // 🔹 Leggi e normalizza importo / acconto
-        const importo = parseFloat((importoInput.value || "0").replace(",", ".")) || 0;
-        const importoAcconto = parseFloat((accontoInput.value || "0").replace(",", ".")) || 0;
-
-        // 🔹 Determina quale base usare
         const base = importoAcconto > 0 ? importoAcconto : importo;
+        const baseCI = base + speseGenerali;
 
-        // 🔹 Gestisci campo percentuale
-        let testoPercentuale = (percentualeInput.value || "").trim().replace(",", ".");
-        if (testoPercentuale === "") {
-            contributoInput.value = "";
-            calcolaTotaleAvvisoParcella();
-            return;
-        }
+        const contributo = +(baseCI * percentuale / 100).toFixed(2);
 
-        // 🔢 Parsing numerico
-        let percentuale = parseFloat(testoPercentuale);
-        if (isNaN(percentuale) || percentuale < 0) percentuale = 0;
-
-        // 💰 Calcolo contributo integrativo
-        const contributo = percentuale > 0 ? +(base * percentuale / 100).toFixed(2) : 0;
-
-        contributoInput.value = contributo > 0 ? contributo.toFixed(2) : "";
-        calcolaTotaleAvvisoParcella();
+        form.querySelector('[name="ContributoIntegrativoImporto"]').value =
+            contributo > 0 ? contributo.toFixed(2) : "";
     }
 
+
     // ===================================================
-    // 🧮 Calcola Totale Avviso Parcella (Importo o Acconto)
+    // 🧮 Calcola Totale Avviso Parcella (coerente col backend)
     // ===================================================
     function calcolaTotaleAvvisoParcella() {
         const form = document.getElementById("avvisoForm");
         if (!form) return;
 
-        // 🔹 Leggi valori
+        // 🔥 Prima ricalcolo CI altrimenti contributoIntegrativo è errato
+        calcolaContributoIntegrativo();
+
+        // 🔹 Input
         const importo = parseFloat((form.querySelector('[name="Importo"]').value || "0").replace(",", ".")) || 0;
         const importoAcconto = parseFloat((form.querySelector('[name="ImportoAcconto"]').value || "0").replace(",", ".")) || 0;
-        const contributo = parseFloat((form.querySelector('[name="ContributoIntegrativoImporto"]').value || "0").replace(",", ".")) || 0;
         const ivaPerc = parseFloat((form.querySelector('[name="AliquotaIVA"]').value || "0").replace(",", ".")) || 0;
         const rimborsoPerc = parseFloat((form.querySelector('[name="RimborsoSpesePercentuale"]').value || "0").replace(",", ".")) || 0;
 
-        // 🔁 Base effettiva per i calcoli
+        // 🔁 Base imponibile effettiva
         const base = importoAcconto > 0 ? importoAcconto : importo;
 
-        // 🔹 Calcoli
+        // 1️⃣ Rimborso spese (su imponibile)
         const importoRimborso = +(base * rimborsoPerc / 100).toFixed(2);
-        const baseConCI = base + contributo + importoRimborso;
-        const importoIva = +(baseConCI * ivaPerc / 100).toFixed(2);
-        const totale = +(baseConCI + importoIva).toFixed(2);
-
-        // 🔹 Aggiornamento campi
         form.querySelector('[name="ImportoRimborsoSpese"]').value = importoRimborso.toFixed(2);
+
+        // 2️⃣ CI aggiornato dopo fix
+        const contributoIntegrativo = parseFloat(
+            (form.querySelector('[name="ContributoIntegrativoImporto"]').value || "0").replace(",", ".")
+        ) || 0;
+
+        // 3️⃣ Base IVA
+        const imponibileIVA = base + importoRimborso + contributoIntegrativo;
+
+        // 4️⃣ IVA
+        const importoIva = +(imponibileIVA * ivaPerc / 100).toFixed(2);
         form.querySelector('[name="ImportoIVA"]').value = importoIva.toFixed(2);
+
+        // 5️⃣ Totale
+        const totale = +(imponibileIVA + importoIva).toFixed(2);
         form.querySelector('[name="TotaleAvvisoParcella"]').value = totale.toFixed(2);
 
-        // 🎨 Evidenzia campo attivo
-        const campoImporto = form.querySelector('[name="Importo"]');
-        const campoAcconto = form.querySelector('[name="ImportoAcconto"]');
-        if (importoAcconto > 0) {
-            campoImporto.classList.add("bg-light", "text-muted");
-            campoAcconto.classList.remove("bg-light", "text-muted");
-        } else {
-            campoAcconto.classList.add("bg-light", "text-muted");
-            campoImporto.classList.remove("bg-light", "text-muted");
-        }
-
-        console.log("📊 [DEBUG Totale Avviso]", {
-            baseUsata: base,
-            importo,
-            importoAcconto,
-            contributo,
-            rimborsoPerc,
-            ivaPerc,
-            importoRimborso,
-            importoIva,
-            totale
-        });
+        console.log("✔ Totale aggiornato", { totale });
     }
+
 
     // ===================================================
     // 🔁 Eventi di aggiornamento automatico live

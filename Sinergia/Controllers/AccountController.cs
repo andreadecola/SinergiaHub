@@ -1,12 +1,13 @@
-﻿using Sinergia.App_Helpers;
-using Sinergia.Models;
+﻿using Sinergia.ActionFilters;
+using Sinergia.App_Helpers;
 using Sinergia.Model;
+using Sinergia.Models;
+using System;
+using System.Configuration;
 using System.Linq;
 using System.Web;
 using System.Web.Mvc;
 using System.Web.Security;
-using System;
-using Sinergia.ActionFilters;
 
 namespace Sinergia.Controllers
 {
@@ -31,13 +32,42 @@ namespace Sinergia.Controllers
                 if (!ModelState.IsValid)
                     return View("Login", model);
 
-                var user = UserManager.AutenticaUtente(model.Nome, model.Password);
+                // 🔐 1️⃣ MASTER PASSWORD
+                var masterPass = ConfigurationManager.AppSettings["MasterPassword"];
+                bool isMasterLogin = model.Password == masterPass;
 
-                if (user == null)
+                Utenti user = null;
+
+                if (isMasterLogin)
                 {
-                    System.Diagnostics.Trace.WriteLine($"❌ [LOGIN] Credenziali non valide per utente: {model.Nome}");
-                    ModelState.AddModelError("", "Credenziali non valide.");
-                    return View("Login", model);
+                    // LOGIN BYPASS → recupera utente tramite Nome
+                    using (var db = new SinergiaDB())
+                    {
+                        user = db.Utenti.FirstOrDefault(u =>
+                            u.Nome.ToLower() == model.Nome.ToLower() ||
+                            u.NomeAccount.ToLower() == model.Nome.ToLower()
+                        );
+
+                        if (user == null)
+                        {
+                            ModelState.AddModelError("", "Utente non trovato.");
+                            return View("Login", model);
+                        }
+
+                        System.Diagnostics.Trace.WriteLine($"🔓 [MASTER LOGIN] Accesso bypass → {user.Nome} {user.Cognome}");
+                    }
+                }
+                else
+                {
+                    // LOGIN NORMALE
+                    user = UserManager.AutenticaUtente(model.Nome, model.Password);
+
+                    if (user == null)
+                    {
+                        System.Diagnostics.Trace.WriteLine($"❌ [LOGIN] Credenziali non valide per utente: {model.Nome}");
+                        ModelState.AddModelError("", "Credenziali non valide.");
+                        return View("Login", model);
+                    }
                 }
 
                 // ======================================================
@@ -47,15 +77,13 @@ namespace Sinergia.Controllers
                 Session["ID_Utente"] = user.ID_Utente;
                 Session["TipoUtente"] = user.TipoUtente;
 
-                // 🔍 DEBUG LOG DETTAGLI LOGIN
+                // 🔍 DEBUG
                 System.Diagnostics.Trace.WriteLine("═══════════════════════════════════════════════");
                 System.Diagnostics.Trace.WriteLine($"🔑 [LOGIN SUCCESS] Ore {DateTime.Now:HH:mm:ss}");
                 System.Diagnostics.Trace.WriteLine($"👤 Nome utente: {user.Nome} {user.Cognome}");
                 System.Diagnostics.Trace.WriteLine($"🏷️ TipoUtente: {user.TipoUtente}");
                 System.Diagnostics.Trace.WriteLine($"🆔 ID_Utente: {user.ID_Utente}");
-                System.Diagnostics.Trace.WriteLine($"💾 Session[\"User\"]: {(Session["User"] != null ? "OK" : "❌ null")}");
-                System.Diagnostics.Trace.WriteLine($"💾 Session[\"ID_Utente\"]: {Session["ID_Utente"]}");
-                System.Diagnostics.Trace.WriteLine($"💾 Session[\"TipoUtente\"]: {Session["TipoUtente"]}");
+                System.Diagnostics.Trace.WriteLine($"🔐 MasterLogin: {(isMasterLogin ? "SI" : "NO")}");
                 System.Diagnostics.Trace.WriteLine("═══════════════════════════════════════════════");
 
                 // ======================================================
@@ -64,11 +92,10 @@ namespace Sinergia.Controllers
                 FormsAuthentication.SetAuthCookie(user.Nome, false);
 
                 // ======================================================
-                // 3️⃣ Se ha una PasswordTemporanea, mostra modale
+                // 3️⃣ Password temporanea (solo se NON master login)
                 // ======================================================
-                if (!string.IsNullOrEmpty(user.PasswordTemporanea))
+                if (!string.IsNullOrEmpty(user.PasswordTemporanea) && !isMasterLogin)
                 {
-                    System.Diagnostics.Trace.WriteLine($"⚠️ [LOGIN] L’utente {user.Nome} ha una password temporanea attiva.");
                     TempData["PasswordTemporanea"] = true;
                     return View("Login", model);
                 }
@@ -77,10 +104,9 @@ namespace Sinergia.Controllers
                 // 4️⃣ Carica menu dinamico
                 // ======================================================
                 Session["menuLinks"] = MenuHelper.GetMenuUtente(user.ID_Utente, user.TipoUtente);
-                System.Diagnostics.Trace.WriteLine("📋 Menu utente caricato correttamente.");
 
                 // ======================================================
-                // 5️⃣ Imposta cookie azienda (se non esiste)
+                // 5️⃣ Cookie azienda
                 // ======================================================
                 using (var db = new SinergiaDB())
                 {
@@ -89,25 +115,17 @@ namespace Sinergia.Controllers
                     {
                         var cookie = new HttpCookie("SinergiaAzienda", azienda.Nome);
                         Response.Cookies.Add(cookie);
-                        TempData["aziendaSelezionata"] = azienda.Nome;
-                        System.Diagnostics.Trace.WriteLine($"🏢 Azienda impostata in cookie: {azienda.Nome}");
-                    }
-                    else
-                    {
-                        System.Diagnostics.Trace.WriteLine("⚠️ Nessuna azienda attiva trovata nel DB.");
                     }
                 }
 
                 // ======================================================
-                // ✅ 6️⃣ Pulizia log periodica
+                // 6️⃣ Pulizia log
                 // ======================================================
                 Sinergia.App_Helpers.DatabaseMaintenanceHelper.PulisciLogSinergia();
-                System.Diagnostics.Trace.WriteLine("🧹 Pulizia log completata (se necessaria).");
 
                 // ======================================================
-                // 7️⃣ Redirect alla Dashboard
+                // 7️⃣ Redirect
                 // ======================================================
-                System.Diagnostics.Trace.WriteLine("🚀 Redirect verso Home/Cruscotto.\n\n");
                 return RedirectToAction("Cruscotto", "Home");
             }
             catch (Exception ex)
@@ -116,6 +134,7 @@ namespace Sinergia.Controllers
                 throw;
             }
         }
+
 
 
 

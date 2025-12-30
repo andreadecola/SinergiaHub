@@ -39,10 +39,10 @@
             <i class="bi bi-file-earmark-excel"></i> Excel/CSV
         </button>
 
-        <button type="submit" formaction="@Url.Action("EsportaIncassiPdf", "Pratiche")"
+        @*<button type="submit" formaction="@Url.Action("EsportaIncassiPdf", "Pratiche")"
                 class="btn btn-outline-danger btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
             <i class="bi bi-file-earmark-pdf"></i> PDF
-        </button>
+        </button>*@
     </form>
 </div>
 
@@ -697,10 +697,11 @@
                 + ${safeNumber(avv.SpeseGeneraliImporto).toFixed(2)} € (Spese generali)
                 − ${contributo.toFixed(2)} € (Contributo integrativo)
                 − ${quotaOwner.toFixed(2)} € (Quota owner)
-                − ${trattenuta.toFixed(2)} € (Trattenuta Sinergia)
+                (${trattenuta.toFixed(2)} € Trattenuta Sinergia già sottratta)
                 − ${totaleCluster.toFixed(2)} € (Collaboratori Cluster)
                 − ${totaleDettaglio.toFixed(2)} € (Collaboratori Dettaglio)
                 <br>= <b class="text-success">${nettoFinale.toFixed(2)} €</b> (Netto professionista)`;
+
 
                 document.getElementById("riepilogoCalcolo").innerHTML = riepilogo;
 

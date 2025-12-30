@@ -9,9 +9,9 @@ namespace Sinergia.Model
     public partial class OperatoriSinergia_a
     {
         [Key]
-        public int ID_Cliente { get; set; }
+        public int ID_Operatore { get; set; }
 
-        public int? ID_ClienteOriginale { get; set; }
+        public int? ID_OperatoreOriginale { get; set; }
 
         [Required]
         [StringLength(20)]

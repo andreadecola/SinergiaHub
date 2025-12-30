@@ -641,7 +641,7 @@ namespace SinergiaMvc.Controllers
             // ✅ Nuovo controllo: se è collegato a un professionista con PuòGestirePermessi
             bool èUtenteProfessionistaGestibile = db.RelazioneUtenti
                 .Where(r => r.ID_UtenteAssociato == idUtente && r.Stato == "Attivo")
-                .Join(db.OperatoriSinergia, r => r.ID_Utente, o => o.ID_Cliente, (r, o) => o)
+                .Join(db.OperatoriSinergia, r => r.ID_Utente, o => o.ID_Operatore, (r, o) => o)
                 .Any(o => o.TipoCliente == "Professionista" && o.PuòGestirePermessi == true);
 
             // 🔄 Se non ha ancora permessi, inizializzali solo se Admin o gestibile da professionista
@@ -857,7 +857,7 @@ namespace SinergiaMvc.Controllers
             if (idUtente <= 0)
                 return Json(new { success = false, message = "Utente non autenticato." });
 
-            var prof = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == idProfessionista && c.TipoCliente == "Professionista");
+            var prof = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Operatore == idProfessionista && c.TipoCliente == "Professionista");
             if (prof == null)
                 return Json(new { success = false, message = "Professionista non trovato." });
 
@@ -1076,7 +1076,7 @@ namespace SinergiaMvc.Controllers
             // ======================================================
             // 4️⃣ Materialize query
             // ======================================================
-            var aziende = aziendeQuery.OrderBy(x => x.ID_Cliente).ToList();
+            var aziende = aziendeQuery.OrderBy(x => x.ID_Operatore).ToList();
 
             // ======================================================
             // 5️⃣ Proiezione su ViewModel + flag permessi riga
@@ -1084,13 +1084,13 @@ namespace SinergiaMvc.Controllers
             var viewModel = aziende.Select(a =>
             {
                 var conto = db.DatiBancari
-                              .Where(b => b.ID_Cliente == a.ID_Cliente && b.Stato == "Attivo")
+                              .Where(b => b.ID_Cliente == a.ID_Operatore && b.Stato == "Attivo")
                               .OrderByDescending(b => b.DataInserimento)
                               .FirstOrDefault();
 
                 var vm = new AziendaViewModel
                 {
-                    ID_Azienda = a.ID_Cliente,
+                    ID_Azienda = a.ID_Operatore,
                     Nome = a.Nome,
                     TipoRagioneSociale = a.TipoRagioneSociale,
                     PartitaIVA = a.PIVA,
@@ -1107,8 +1107,8 @@ namespace SinergiaMvc.Controllers
                     Note = a.Note,
                     DescrizioneAttivita = a.DescrizioneAttivita,
 
-                    UtentiAssociati = db.RelazioneUtenti.Count(r => r.ID_UtenteAssociato == a.ID_Cliente && r.Stato == "Attivo"),
-                    HaUtentiAssegnati = db.RelazioneUtenti.Any(r => r.ID_UtenteAssociato == a.ID_Cliente && r.Stato == "Attivo"),
+                    UtentiAssociati = db.RelazioneUtenti.Count(r => r.ID_UtenteAssociato == a.ID_Operatore && r.Stato == "Attivo"),
+                    HaUtentiAssegnati = db.RelazioneUtenti.Any(r => r.ID_UtenteAssociato == a.ID_Operatore && r.Stato == "Attivo"),
 
                     NomeBanca = conto?.NomeBanca,
                     IBAN = conto?.IBAN,
@@ -1186,7 +1186,7 @@ namespace SinergiaMvc.Controllers
                     var clienteProfessionista = db.OperatoriSinergia
                         .FirstOrDefault(c => c.ID_UtenteCollegato == utenteId && c.TipoCliente == "Professionista");
                     if (clienteProfessionista != null)
-                        idOwner = clienteProfessionista.ID_Cliente;
+                        idOwner = clienteProfessionista.ID_Operatore;
                 }
 
                 // =====================================================
@@ -1232,7 +1232,7 @@ namespace SinergiaMvc.Controllers
                 // =====================================================
                 var archivio = new OperatoriSinergia_a
                 {
-                    ID_ClienteOriginale = model.ID_Cliente,
+                    ID_OperatoreOriginale = model.ID_Operatore,
                     TipoCliente = model.TipoCliente,
                     Nome = model.Nome,
                     TipoRagioneSociale = model.TipoRagioneSociale,
@@ -1272,7 +1272,7 @@ namespace SinergiaMvc.Controllers
                 {
                     var datiBancari = new DatiBancari
                     {
-                        ID_Cliente = model.ID_Cliente,
+                        ID_Cliente = model.ID_Operatore,
                         Intestatario = Request.Form["Intestatario"],
                         IBAN = Request.Form["IBAN"],
                         NomeBanca = Request.Form["Banca"],
@@ -1296,7 +1296,7 @@ namespace SinergiaMvc.Controllers
                         {
                             var documento = new DocumentiAziende
                             {
-                                ID_Cliente = model.ID_Cliente,
+                                ID_Cliente = model.ID_Operatore,
                                 NomeDocumento = file.FileName,
                                 TipoMime = file.ContentType,
                                 DataCaricamento = DateTime.Now,
@@ -1347,7 +1347,7 @@ namespace SinergiaMvc.Controllers
                 if (idAzienda == 0)
                     return Json(new { success = false, message = "ID azienda non valido." });
 
-                var aziendaOriginale = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == idAzienda && c.TipoCliente == "Azienda");
+                var aziendaOriginale = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Operatore == idAzienda && c.TipoCliente == "Azienda");
                 if (aziendaOriginale == null)
                     return Json(new { success = false, message = "Azienda non trovata." });
 
@@ -1420,7 +1420,7 @@ namespace SinergiaMvc.Controllers
                 if (modifiche.Any())
                 {
                     int maxVersion = db.OperatoriSinergia_a
-                        .Where(a => a.ID_ClienteOriginale == aziendaOriginale.ID_Cliente)
+                        .Where(a => a.ID_OperatoreOriginale == aziendaOriginale.ID_Operatore)
                         .Select(a => (int?)a.NumeroVersione)
                         .Max() ?? 0;
 
@@ -1428,7 +1428,7 @@ namespace SinergiaMvc.Controllers
 
                     db.OperatoriSinergia_a.Add(new OperatoriSinergia_a
                     {
-                        ID_ClienteOriginale = aziendaOriginale.ID_Cliente,
+                        ID_OperatoreOriginale = aziendaOriginale.ID_Operatore,
                         TipoCliente = aziendaOriginale.TipoCliente,
                         Nome = aziendaOriginale.Nome,
                         TipoRagioneSociale = aziendaOriginale.TipoRagioneSociale,
@@ -1454,7 +1454,7 @@ namespace SinergiaMvc.Controllers
                         DataArchiviazione = DateTime.Now,
                         ID_UtenteArchiviazione = utenteId,
                         NumeroVersione = nuovaVersione,
-                        ModificheTestuali = $"Modifica su ID_Cliente = {aziendaOriginale.ID_Cliente} da utente = {utenteId} il {DateTime.Now:g}:\n- " + string.Join("\n- ", modifiche)
+                        ModificheTestuali = $"Modifica su ID_Cliente = {aziendaOriginale.ID_Operatore} da utente = {utenteId} il {DateTime.Now:g}:\n- " + string.Join("\n- ", modifiche)
                     });
                 }
 
@@ -1489,7 +1489,7 @@ namespace SinergiaMvc.Controllers
                 if (aziendaOriginale.Stato == "Inattivo")
                 {
                     var relazioniAttive = db.RelazioneUtenti
-                        .Where(r => r.ID_UtenteAssociato == aziendaOriginale.ID_Cliente && r.Stato == "Attivo")
+                        .Where(r => r.ID_UtenteAssociato == aziendaOriginale.ID_Operatore && r.Stato == "Attivo")
                         .ToList();
 
                     foreach (var relazione in relazioniAttive)
@@ -1520,7 +1520,7 @@ namespace SinergiaMvc.Controllers
             if (id == 0)
                 return Json(null, JsonRequestBehavior.AllowGet);
 
-            var azienda = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == id && c.TipoCliente == "Azienda");
+            var azienda = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Operatore == id && c.TipoCliente == "Azienda");
             if (azienda == null)
                 return Json(null, JsonRequestBehavior.AllowGet);
 
@@ -1565,7 +1565,7 @@ namespace SinergiaMvc.Controllers
             // =====================================================
             var viewModel = new
             {
-                ID_Azienda = azienda.ID_Cliente,
+                ID_Azienda = azienda.ID_Operatore,
                 Nome = azienda.Nome,
                 TipoRagioneSociale = azienda.TipoRagioneSociale,
                 PartitaIVA = azienda.PIVA,
@@ -1617,7 +1617,7 @@ namespace SinergiaMvc.Controllers
                     return Json(new { success = false, message = "Utente non autenticato." });
 
                 var aziendaOriginale = db.OperatoriSinergia
-                    .FirstOrDefault(c => c.ID_Cliente == id && c.TipoCliente == "Azienda");
+                    .FirstOrDefault(c => c.ID_Operatore == id && c.TipoCliente == "Azienda");
 
                 if (aziendaOriginale == null)
                     return Json(new { success = false, message = "Azienda non trovata." });
@@ -1634,7 +1634,7 @@ namespace SinergiaMvc.Controllers
                 // 🧾 Calcolo numero versione archivio
                 // ======================================================
                 int ultimaVersione = db.OperatoriSinergia_a
-                    .Where(a => a.ID_ClienteOriginale == aziendaOriginale.ID_Cliente)
+                    .Where(a => a.ID_OperatoreOriginale == aziendaOriginale.ID_Operatore)
                     .Select(a => (int?)a.NumeroVersione)
                     .Max() ?? 0;
 
@@ -1645,7 +1645,7 @@ namespace SinergiaMvc.Controllers
                 // ======================================================
                 var archivio = new OperatoriSinergia_a
                 {
-                    ID_ClienteOriginale = aziendaOriginale.ID_Cliente,
+                    ID_OperatoreOriginale = aziendaOriginale.ID_Operatore,
                     TipoCliente = aziendaOriginale.TipoCliente,
                     Nome = aziendaOriginale.Nome,
                     TipoRagioneSociale = aziendaOriginale.TipoRagioneSociale,
@@ -1691,7 +1691,7 @@ namespace SinergiaMvc.Controllers
                 // ❌ Disattiva relazioni attive
                 // ======================================================
                 var relazioniAttive = db.RelazioneUtenti
-                    .Where(r => r.ID_UtenteAssociato == aziendaOriginale.ID_Cliente && r.Stato == "Attivo")
+                    .Where(r => r.ID_UtenteAssociato == aziendaOriginale.ID_Operatore && r.Stato == "Attivo")
                     .ToList();
 
                 foreach (var relazione in relazioniAttive)
@@ -1705,7 +1705,7 @@ namespace SinergiaMvc.Controllers
                 // ❌ Disattiva dati bancari attivi
                 // ======================================================
                 var contoAttivo = db.DatiBancari
-                    .FirstOrDefault(b => b.ID_Cliente == aziendaOriginale.ID_Cliente && b.Stato == "Attivo");
+                    .FirstOrDefault(b => b.ID_Cliente == aziendaOriginale.ID_Operatore && b.Stato == "Attivo");
 
                 if (contoAttivo != null)
                 {
@@ -1841,7 +1841,7 @@ namespace SinergiaMvc.Controllers
         {
             try
             {
-                var azienda = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == id && c.TipoCliente == "Azienda");
+                var azienda = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Operatore == id && c.TipoCliente == "Azienda");
                 if (azienda == null)
                     return Json(new { success = false, message = "Azienda non trovata." });
 
@@ -1856,7 +1856,7 @@ namespace SinergiaMvc.Controllers
 
                 // 🔁 Riattiva il conto bancario più recente, se presente
                 var contoInattivo = db.DatiBancari
-                    .Where(b => b.ID_Cliente == azienda.ID_Cliente && b.Stato == "Inattivo")
+                    .Where(b => b.ID_Cliente == azienda.ID_Operatore && b.Stato == "Inattivo")
                     .OrderByDescending(b => b.DataInserimento)
                     .FirstOrDefault();
 
@@ -2179,7 +2179,7 @@ namespace SinergiaMvc.Controllers
 
             var fornitori = db.OperatoriSinergia
                 .Where(f => f.TipoCliente == "Azienda" && f.Stato != "Eliminato")
-                .OrderBy(f => f.ID_Cliente)
+                .OrderBy(f => f.ID_Operatore)
                 .ToList();
 
             var sb = new StringBuilder();
@@ -2188,7 +2188,7 @@ namespace SinergiaMvc.Controllers
             foreach (var f in fornitori)
             {
                 var conto = db.DatiBancari
-                              .Where(b => b.ID_Cliente == f.ID_Cliente && b.Stato == "Attivo")
+                              .Where(b => b.ID_Cliente == f.ID_Operatore && b.Stato == "Attivo")
                               .OrderByDescending(b => b.DataInserimento)
                               .FirstOrDefault();
 
@@ -2196,7 +2196,7 @@ namespace SinergiaMvc.Controllers
                 string nazione = f.ID_Nazione.HasValue ? db.Nazioni.FirstOrDefault(n => n.ID_BPCittaDN == f.ID_Nazione)?.NameNazione : "-";
                 string settore = f.ID_SettoreFornitore.HasValue ? db.SettoriFornitori.FirstOrDefault(s => s.ID_Settore == f.ID_SettoreFornitore)?.Nome : "-";
 
-                sb.AppendLine($"{f.ID_Cliente};" +
+                sb.AppendLine($"{f.ID_Operatore};" +
                               $"{(string.IsNullOrWhiteSpace(f.Nome) ? "-" : f.Nome)};" +
                               $"{(string.IsNullOrWhiteSpace(f.TipoRagioneSociale) ? "-" : f.TipoRagioneSociale)};" +
                               $"{(string.IsNullOrWhiteSpace(f.PIVA) ? "-" : f.PIVA)};" +
@@ -2235,18 +2235,18 @@ namespace SinergiaMvc.Controllers
 
             var fornitori = db.OperatoriSinergia
                 .Where(f => f.TipoCliente == "Azienda" && f.Stato != "Eliminato")
-                .OrderBy(f => f.ID_Cliente)
+                .OrderBy(f => f.ID_Operatore)
                 .ToList()
                 .Select(f =>
                 {
                     var conto = db.DatiBancari
-                                  .Where(b => b.ID_Cliente == f.ID_Cliente && b.Stato == "Attivo")
+                                  .Where(b => b.ID_Cliente == f.ID_Operatore && b.Stato == "Attivo")
                                   .OrderByDescending(b => b.DataInserimento)
                                   .FirstOrDefault();
 
                     return new AziendaViewModel
                     {
-                        ID_Azienda = f.ID_Cliente,
+                        ID_Azienda = f.ID_Operatore,
                         Nome = f.Nome,
                         TipoRagioneSociale = f.TipoRagioneSociale,
                         PartitaIVA = f.PIVA,
@@ -2313,7 +2313,7 @@ namespace SinergiaMvc.Controllers
             else if (utenteCorrente?.TipoUtente == "Collaboratore")
             {
                 professionistiQuery = from rel in db.RelazioneUtenti
-                                      join cli in db.OperatoriSinergia on rel.ID_Utente equals cli.ID_Cliente
+                                      join cli in db.OperatoriSinergia on rel.ID_Utente equals cli.ID_Operatore
                                       where rel.ID_UtenteAssociato == utenteCorrente.ID_Utente
                                             && cli.TipoCliente == "Professionista"
                                             && cli.Stato != "Eliminato"
@@ -2340,7 +2340,7 @@ namespace SinergiaMvc.Controllers
                 professionistiQuery = professionistiQuery.Where(x => x.Stato == "Inattivo");
             }
 
-            var professionisti = professionistiQuery.OrderBy(x => x.ID_Cliente).ToList();
+            var professionisti = professionistiQuery.OrderBy(x => x.ID_Operatore).ToList();
 
             // ✅ Carica i permessi
             PermessiViewModel permessiUtente = new PermessiViewModel
@@ -2390,7 +2390,7 @@ namespace SinergiaMvc.Controllers
                     .Select(r => r.ID_Utente)
                     .FirstOrDefault();
 
-                var prof = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == relazione && c.TipoCliente == "Professionista");
+                var prof = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Operatore == relazione && c.TipoCliente == "Professionista");
                 if (prof != null)
                     nomeProfessionistaAssegnato = prof.Nome + " " + prof.Cognome;
             }
@@ -2398,13 +2398,13 @@ namespace SinergiaMvc.Controllers
             var viewModel = professionisti.Select(p =>
             {
                 var conto = db.DatiBancari
-                              .Where(b => b.ID_Cliente == p.ID_Cliente && b.Stato == "Attivo")
+                              .Where(b => b.ID_Cliente == p.ID_Operatore && b.Stato == "Attivo")
                               .OrderByDescending(b => b.DataInserimento)
                               .FirstOrDefault();
 
                 return new ProfessionistiViewModel
                 {
-                    ID_Professionista = p.ID_Cliente,
+                    ID_Professionista = p.ID_Operatore,
                     Nome = p.Nome,
                     Cognome= p.Cognome,
                     TipoRagioneSociale = p.TipoRagioneSociale,
@@ -2420,8 +2420,8 @@ namespace SinergiaMvc.Controllers
                     Stato = p.Stato,
                     Note = p.Note,
                     DescrizioneAttivita = p.DescrizioneAttivita,
-                    UtentiAssociati = db.RelazioneUtenti.Count(r => r.ID_Utente == p.ID_Cliente && r.Stato == "Attivo"),
-                    HaUtentiAssegnati = db.RelazioneUtenti.Any(r => r.ID_Utente == p.ID_Cliente && r.Stato == "Attivo"),
+                    UtentiAssociati = db.RelazioneUtenti.Count(r => r.ID_Utente == p.ID_Operatore && r.Stato == "Attivo"),
+                    HaUtentiAssegnati = db.RelazioneUtenti.Any(r => r.ID_Utente == p.ID_Operatore && r.Stato == "Attivo"),
                     NomeBanca = conto?.NomeBanca,
                     IBAN = conto?.IBAN,
                     Intestatario = conto?.Intestatario,
@@ -2521,7 +2521,7 @@ namespace SinergiaMvc.Controllers
 
                 var archivio = new OperatoriSinergia_a
                 {
-                    ID_ClienteOriginale = model.ID_Cliente,
+                    ID_OperatoreOriginale = model.ID_Operatore,
                     TipoCliente = model.TipoCliente,
                     Nome = model.Nome,
                     Cognome = model.Cognome,
@@ -2598,7 +2598,7 @@ namespace SinergiaMvc.Controllers
                 {
                     var datiBancari = new DatiBancari
                     {
-                        ID_Cliente = model.ID_Cliente,
+                        ID_Cliente = model.ID_Operatore,
                         NomeBanca = Request.Form["NomeBanca"],
                         IBAN = Request.Form["IBAN"],
                         Intestatario = Request.Form["Intestatario"],
@@ -2626,7 +2626,7 @@ namespace SinergiaMvc.Controllers
                         {
                             var documento = new DocumentiProfessionisti
                             {
-                                ID_Professionista = model.ID_Cliente,
+                                ID_Professionista = model.ID_Operatore,
                                 NomeDocumento = file.FileName,
                                 TipoMime = file.ContentType,
                                 DataCaricamento = DateTime.Now,
@@ -2666,7 +2666,7 @@ namespace SinergiaMvc.Controllers
                     return Json(new { success = false, message = "ID professionista non valido." });
 
                 var originale = db.OperatoriSinergia
-                    .FirstOrDefault(c => c.ID_Cliente == idProfessionista && c.TipoCliente == "Professionista");
+                    .FirstOrDefault(c => c.ID_Operatore == idProfessionista && c.TipoCliente == "Professionista");
                 if (originale == null)
                     return Json(new { success = false, message = "Professionista non trovato." });
 
@@ -2721,7 +2721,7 @@ namespace SinergiaMvc.Controllers
                 {
                     int maxVersion = db.OperatoriSinergia_a
                         .AsNoTracking()
-                        .Where(a => a.ID_ClienteOriginale == originale.ID_Cliente)
+                        .Where(a => a.ID_OperatoreOriginale == originale.ID_Operatore)
                         .Select(a => (int?)a.NumeroVersione)
                         .Max() ?? 0;
 
@@ -2729,7 +2729,7 @@ namespace SinergiaMvc.Controllers
 
                     db.OperatoriSinergia_a.Add(new OperatoriSinergia_a
                     {
-                        ID_ClienteOriginale = originale.ID_Cliente,
+                        ID_OperatoreOriginale = originale.ID_Operatore,
                         TipoCliente = originale.TipoCliente,
                         Nome = originale.Nome,
                         Cognome = originale.Cognome,
@@ -2758,7 +2758,7 @@ namespace SinergiaMvc.Controllers
                         DataArchiviazione = DateTime.Now,
                         ID_UtenteArchiviazione = utenteId,
                         ModificheTestuali =
-                            $"Modifica effettuata su ID_Professionista = {originale.ID_Cliente} da ID_UtenteModificatore = {utenteId} il {DateTime.Now:g}.\nModifiche:\n- " +
+                            $"Modifica effettuata su ID_Professionista = {originale.ID_Operatore} da ID_UtenteModificatore = {utenteId} il {DateTime.Now:g}.\nModifiche:\n- " +
                             string.Join("\n- ", modifiche)
                     });
                 }
@@ -2804,7 +2804,7 @@ namespace SinergiaMvc.Controllers
                         {
                             var documento = new DocumentiProfessionisti
                             {
-                                ID_Professionista = originale.ID_Cliente,
+                                ID_Professionista = originale.ID_Operatore,
                                 NomeDocumento = file.FileName,
                                 TipoMime = file.ContentType,
                                 DataCaricamento = DateTime.Now,
@@ -2821,7 +2821,7 @@ namespace SinergiaMvc.Controllers
                             // 🔹 archivio documento
                             db.DocumentiProfessionisti_a.Add(new DocumentiProfessionisti_a
                             {
-                                ID_Professionista = originale.ID_Cliente,
+                                ID_Professionista = originale.ID_Operatore,
                                 NomeDocumento = documento.NomeDocumento,
                                 TipoMime = documento.TipoMime,
                                 FileContent = documento.FileContent,
@@ -2902,7 +2902,7 @@ namespace SinergiaMvc.Controllers
                 return Json(null, JsonRequestBehavior.AllowGet);
 
             var professionista = db.OperatoriSinergia
-                .FirstOrDefault(c => c.ID_Cliente == id && c.TipoCliente == "Professionista");
+                .FirstOrDefault(c => c.ID_Operatore == id && c.TipoCliente == "Professionista");
             if (professionista == null)
                 return Json(null, JsonRequestBehavior.AllowGet);
 
@@ -2932,7 +2932,7 @@ namespace SinergiaMvc.Controllers
 
             // ✅ Carico documenti dal DB mappandoli sul ViewModel
             var documenti = db.DocumentiProfessionisti
-                .Where(d => d.ID_Professionista == professionista.ID_Cliente)
+                .Where(d => d.ID_Professionista == professionista.ID_Operatore)
                 .Select(d => new DocumentoProfessionistaViewModel
                 {
                     ID_Documento = d.ID_Documento,
@@ -2948,7 +2948,7 @@ namespace SinergiaMvc.Controllers
 
             var viewModel = new ProfessionistiViewModel
             {
-                ID_Professionista = professionista.ID_Cliente,
+                ID_Professionista = professionista.ID_Operatore,
                 Nome = professionista.Nome,
                 Cognome = professionista.Cognome,
                 ID_Professione = professionista.ID_Professione ?? 0,
@@ -3006,7 +3006,7 @@ namespace SinergiaMvc.Controllers
             try
             {
                 var professionista = db.OperatoriSinergia
-                    .FirstOrDefault(c => c.ID_Cliente == id && c.TipoCliente == "Professionista");
+                    .FirstOrDefault(c => c.ID_Operatore == id && c.TipoCliente == "Professionista");
                 if (professionista == null)
                     return Json(new { success = false, message = "Professionista non trovato." });
 
@@ -3022,7 +3022,7 @@ namespace SinergiaMvc.Controllers
 
                 // 🔎 Verifica relazioni attive
                 var relazioniAttive = db.RelazioneUtenti
-                    .Where(r => r.ID_UtenteAssociato == professionista.ID_Cliente && r.Stato == "Attivo")
+                    .Where(r => r.ID_UtenteAssociato == professionista.ID_Operatore && r.Stato == "Attivo")
                     .ToList();
 
                 if (relazioniAttive.Any())
@@ -3036,7 +3036,7 @@ namespace SinergiaMvc.Controllers
 
                 // 🔢 Calcola numero versione archivio
                 int ultimaVersione = db.OperatoriSinergia_a
-                    .Where(a => a.ID_ClienteOriginale == professionista.ID_Cliente)
+                    .Where(a => a.ID_OperatoreOriginale == professionista.ID_Operatore)
                     .Select(a => a.NumeroVersione)
                     .DefaultIfEmpty(0)
                     .Max();
@@ -3044,7 +3044,7 @@ namespace SinergiaMvc.Controllers
                 // Archiviazione versione precedente
                 var archivio = new OperatoriSinergia_a
                 {
-                    ID_ClienteOriginale = professionista.ID_Cliente,
+                    ID_OperatoreOriginale = professionista.ID_Operatore,
                     TipoCliente = professionista.TipoCliente,
                     Nome = professionista.Nome,
                     Cognome = professionista.Cognome,
@@ -3079,7 +3079,7 @@ namespace SinergiaMvc.Controllers
 
                 // 🗂 Archivia anche i documenti associati
                 var documenti = db.DocumentiProfessionisti
-                    .Where(d => d.ID_Professionista == professionista.ID_Cliente)
+                    .Where(d => d.ID_Professionista == professionista.ID_Operatore)
                     .ToList();
 
                 foreach (var doc in documenti)
@@ -3101,7 +3101,7 @@ namespace SinergiaMvc.Controllers
                 }
 
                 // Disattiva anche conto bancario (soft delete)
-                var conto = db.DatiBancari.FirstOrDefault(c => c.ID_Cliente == professionista.ID_Cliente && c.Stato == "Attivo");
+                var conto = db.DatiBancari.FirstOrDefault(c => c.ID_Cliente == professionista.ID_Operatore && c.Stato == "Attivo");
                 if (conto != null)
                 {
                     conto.Stato = "Inattivo";
@@ -3185,7 +3185,7 @@ namespace SinergiaMvc.Controllers
         {
             try
             {
-                var professionista = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Cliente == id && c.TipoCliente == "Professionista");
+                var professionista = db.OperatoriSinergia.FirstOrDefault(c => c.ID_Operatore == id && c.TipoCliente == "Professionista");
                 if (professionista == null)
                     return Json(new { success = false, message = "Professionista non trovato." });
 
@@ -3197,7 +3197,7 @@ namespace SinergiaMvc.Controllers
                 professionista.ID_UtenteUltimaModifica = utenteId;
 
                 // Riattiva anche il conto bancario, se presente e disattivato
-                var conto = db.DatiBancari.FirstOrDefault(c => c.ID_Cliente == professionista.ID_Cliente && c.Stato == "Inattivo");
+                var conto = db.DatiBancari.FirstOrDefault(c => c.ID_Cliente == professionista.ID_Operatore && c.Stato == "Inattivo");
                 if (conto != null)
                 {
                     conto.Stato = "Attivo";
@@ -3496,7 +3496,7 @@ namespace SinergiaMvc.Controllers
 
             foreach (var p in professionisti)
             {
-                sb.AppendLine($"{p.ID_Cliente};" +
+                sb.AppendLine($"{p.ID_Operatore};" +
                               $"{p.Nome};" +
                               $"{(string.IsNullOrWhiteSpace(p.TipoRagioneSociale) ? "-" : p.TipoRagioneSociale)};" +
                               $"{p.PIVA};" +
@@ -3524,7 +3524,7 @@ namespace SinergiaMvc.Controllers
                 .OrderBy(p => p.Nome)
                 .Select(p => new ProfessionistiViewModel
                 {
-                    ID_Professionista = p.ID_Cliente,
+                    ID_Professionista = p.ID_Operatore,
                     Nome = p.Nome,
                     TipoRagioneSociale = p.TipoRagioneSociale,
                     PartitaIVA = p.PIVA,
@@ -3780,7 +3780,7 @@ namespace SinergiaMvc.Controllers
 
                 if (op != null)
                 {
-                    int idClienteProfessionista = op.ID_Cliente;
+                    int idClienteProfessionista = op.ID_Operatore;
 
                     // 1️⃣ Clienti dove è Owner
                     var clientiOwner = db.Clienti
@@ -3800,7 +3800,7 @@ namespace SinergiaMvc.Controllers
             {
                 new SelectListItem
                 {
-                    Value = op.ID_Cliente.ToString(),
+                    Value = op.ID_Operatore.ToString(),
                     Text = op.Nome + " " + op.Cognome
                 }
             };
@@ -3818,7 +3818,7 @@ namespace SinergiaMvc.Controllers
                     .Where(o => o.TipoCliente == "Professionista")
                     .Select(o => new SelectListItem
                     {
-                        Value = o.ID_Cliente.ToString(),
+                        Value = o.ID_Operatore.ToString(),
                         Text = o.Nome + " " + o.Cognome
                     }).ToList();
 
@@ -3830,7 +3830,7 @@ namespace SinergiaMvc.Controllers
             {
                 // 🔹 Recupero i professionisti collegati
                 var professionistiCollegati = (from r in db.RelazioneUtenti
-                                               join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Cliente
+                                               join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Operatore
                                                where r.ID_UtenteAssociato == idUtente
                                                      && r.Stato == "Attivo"
                                                      && o.TipoCliente == "Professionista"
@@ -3846,7 +3846,7 @@ namespace SinergiaMvc.Controllers
                 else
                 {
                     // 🔹 Lista di ID per evitare NotSupportedException
-                    var idProfessionistiCollegati = professionistiCollegati.Select(p => p.ID_Cliente).ToList();
+                    var idProfessionistiCollegati = professionistiCollegati.Select(p => p.ID_Operatore).ToList();
 
                     // 1️⃣ Clienti creati dai professionisti collegati
                     var clientiOwner = (from c in db.Clienti
@@ -3866,7 +3866,7 @@ namespace SinergiaMvc.Controllers
                     professionisti = professionistiCollegati
                         .Select(o => new SelectListItem
                         {
-                            Value = o.ID_Cliente.ToString(),
+                            Value = o.ID_Operatore.ToString(),
                             Text = o.Nome + " " + o.Cognome
                         }).ToList();
 
@@ -3887,13 +3887,13 @@ namespace SinergiaMvc.Controllers
             {
                 // Owner (legacy)
                 var owner = db.OperatoriSinergia.FirstOrDefault(o =>
-                    o.ID_Cliente == c.ID_Operatore && o.TipoCliente == c.TipoOperatore);
+                    o.ID_Operatore == c.ID_Operatore && o.TipoCliente == c.TipoOperatore);
 
                 string nomeOwner = owner != null ? $"{owner.Nome} {owner.Cognome}" : "-";
 
                 // Professionisti associati
                 var associati = (from cp in db.ClientiProfessionisti
-                                 join op in db.OperatoriSinergia on cp.ID_Professionista equals op.ID_Cliente
+                                 join op in db.OperatoriSinergia on cp.ID_Professionista equals op.ID_Operatore
                                  where cp.ID_Cliente == c.ID_Cliente
                                  select op.Nome + " " + op.Cognome).ToList();
 
@@ -3972,7 +3972,7 @@ namespace SinergiaMvc.Controllers
                         if (op == null)
                             return Json(new { success = false, message = "Professionista non trovato." });
 
-                        idOperatore = op.ID_Cliente;
+                        idOperatore = op.ID_Operatore;
                         tipoOperatore = "Professionista";
                     }
                     else if (utente.TipoUtente == "Collaboratore")
@@ -3985,17 +3985,17 @@ namespace SinergiaMvc.Controllers
 
                         // 🔒 Verifica che il collaboratore sia realmente collegato a quel professionista
                         var idUtenteProfessionista = db.OperatoriSinergia
-                            .Where(o => o.ID_Cliente == idOperatore && o.TipoCliente == "Professionista")
+                            .Where(o => o.ID_Operatore == idOperatore && o.TipoCliente == "Professionista")
                             .Select(o => o.ID_UtenteCollegato)
                             .FirstOrDefault();
                         // 🔒 Verifica che il collaboratore sia realmente collegato a quel professionista
                         bool collegato = (
                             from r in db.RelazioneUtenti
-                            join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Cliente
+                            join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Operatore
                             where r.ID_UtenteAssociato == idUtente    // collaboratore loggato
                                   && r.Stato == "Attivo"
                                   && o.TipoCliente == "Professionista"
-                                  && o.ID_Cliente == idOperatore      // professionista scelto
+                                  && o.ID_Operatore == idOperatore      // professionista scelto
                             select r
                         ).Any();
 
@@ -4006,6 +4006,22 @@ namespace SinergiaMvc.Controllers
                     else
                     {
                         return Json(new { success = false, message = "Tipo utente non autorizzato." });
+                    }
+
+                    // 🔍 CONTROLLO UNICITÀ CODICE FISCALE
+                    string nuovoCF = (Request.Form["CodiceFiscale"] ?? "").Trim();
+
+                    if (!string.IsNullOrWhiteSpace(nuovoCF))
+                    {
+                        bool esisteCF = db.Clienti
+                            .Any(c => c.CodiceFiscale == nuovoCF);
+
+                        if (esisteCF)
+                            return Json(new
+                            {
+                                success = false,
+                                message = "❌ Esiste già un cliente con questo Codice Fiscale."
+                            });
                     }
 
                     // === CREA CLIENTE ===
@@ -4032,6 +4048,28 @@ namespace SinergiaMvc.Controllers
 
                     db.Clienti.Add(cliente);
                     db.SaveChanges();
+
+                    // === UPLOAD DOCUMENTO PDF (VARBINARY) ===
+                    var file = Request.Files["DocumentoPDF"];
+                    if (file != null && file.ContentLength > 0)
+                    {
+                        const int MAX_SIZE = 8 * 1024 * 1024; // 8 MB
+
+                        if (!file.FileName.ToLower().EndsWith(".pdf"))
+                            return Json(new { success = false, message = "Il documento deve essere un file PDF." });
+
+                        if (file.ContentLength > MAX_SIZE)
+                            return Json(new { success = false, message = "Il PDF non può superare 8 MB." });
+
+                        using (var ms = new MemoryStream())
+                        {
+                            file.InputStream.CopyTo(ms);
+                            cliente.DocumentoCliente_File = ms.ToArray();
+                        }
+
+                        cliente.DocumentoCliente_Nome = Path.GetFileName(file.FileName);
+                    }
+
 
                     // === ASSOCIA PROFESSIONISTI EXTRA (se inviati dal form) ===
                     var professionistiExtra = Request.Form.GetValues("ProfessionistiAssociati[]");
@@ -4075,6 +4113,8 @@ namespace SinergiaMvc.Controllers
                         TipoOperatore = cliente.TipoOperatore,
                         NumeroVersione = 1,
                         DataArchiviazione = DateTime.Now,
+                        DocumentoCliente_Nome = cliente.DocumentoCliente_Nome,
+                        DocumentoCliente_File = cliente.DocumentoCliente_File,
                         ID_UtenteArchiviazione = idUtente,
                         ModificheTestuali = "Inserimento iniziale"
                     };
@@ -4119,10 +4159,27 @@ namespace SinergiaMvc.Controllers
                     if (originale == null)
                         return Json(new { success = false, message = "Cliente non trovato." });
 
+                    // 🔍 CONTROLLO UNICITÀ CODICE FISCALE
+                    string nuovoCF = (Request.Form["CodiceFiscale"] ?? "").Trim();
+
+                    if (!string.IsNullOrWhiteSpace(nuovoCF))
+                    {
+                        bool esisteCF = db.Clienti
+                            .Any(c => c.CodiceFiscale == nuovoCF && c.ID_Cliente != idCliente);
+
+                        if (esisteCF)
+                        {
+                            return Json(new
+                            {
+                                success = false,
+                                message = "❌ Questo Codice Fiscale è già associato a un altro cliente."
+                            });
+                        }
+                    }
                     // === Autorizzazioni base ===
                     if (utente.TipoUtente != "Admin")
                     {
-                        var operatore = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Cliente == originale.ID_Operatore);
+                        var operatore = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Operatore == originale.ID_Operatore);
                         if (operatore == null || (utente.TipoUtente == "Professionista" && operatore.ID_UtenteCollegato != idUtente))
                             return Json(new { success = false, message = "Non puoi modificare clienti di altri operatori." });
 
@@ -4130,11 +4187,11 @@ namespace SinergiaMvc.Controllers
                         {
                             bool collegato = (
                                 from r in db.RelazioneUtenti
-                                join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Cliente
+                                join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Operatore
                                 where r.ID_UtenteAssociato == idUtente
                                       && r.Stato == "Attivo"
                                       && o.TipoCliente == "Professionista"
-                                      && o.ID_Cliente == originale.ID_Operatore   // 👈 owner del cliente
+                                      && o.ID_Operatore== originale.ID_Operatore   // 👈 owner del cliente
                                 select r
                             ).Any();
 
@@ -4179,17 +4236,17 @@ namespace SinergiaMvc.Controllers
                         {
                             // 🔹 Recupera l'utente collegato al professionista
                             var idUtenteProfessionista = db.OperatoriSinergia
-                                .Where(o => o.ID_Cliente == nuovoOperatore && o.TipoCliente == "Professionista")
+                                .Where(o => o.ID_Operatore == nuovoOperatore && o.TipoCliente == "Professionista")
                                 .Select(o => o.ID_UtenteCollegato)
                                 .FirstOrDefault();
 
                             // 🔹 Verifica relazione usando ID_Cliente del professionista (non ID_Utente!)
                             bool collegato = (from r in db.RelazioneUtenti
-                                              join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Cliente
+                                              join o in db.OperatoriSinergia on r.ID_Utente equals o.ID_Operatore
                                               where r.ID_UtenteAssociato == idUtente
                                                     && r.Stato == "Attivo"
                                                     && o.TipoCliente == "Professionista"
-                                                    && o.ID_Cliente == nuovoOperatore
+                                                    && o.ID_Operatore == nuovoOperatore
                                               select r).Any();
 
                             if (!collegato)
@@ -4219,6 +4276,31 @@ namespace SinergiaMvc.Controllers
                     originale.DataUltimaModifica = DateTime.Now;
                     originale.ID_UtenteUltimaModifica = idUtente;
 
+                    // === UPLOAD NUOVO DOCUMENTO PDF (VARBINARY) ===
+                    var file = Request.Files["DocumentoPDF"];
+                    if (file != null && file.ContentLength > 0)
+                    {
+                        const int MAX_SIZE = 8 * 1024 * 1024; // 8 MB
+
+                        if (!file.FileName.ToLower().EndsWith(".pdf"))
+                            return Json(new { success = false, message = "Il documento deve essere un file PDF." });
+
+                        if (file.ContentLength > MAX_SIZE)
+                            return Json(new { success = false, message = "Il PDF non può superare 8 MB." });
+
+                        using (var ms = new MemoryStream())
+                        {
+                            file.InputStream.CopyTo(ms);
+                            originale.DocumentoCliente_File = ms.ToArray();
+                        }
+
+                        originale.DocumentoCliente_Nome = Path.GetFileName(file.FileName);
+
+                        // Tracciamo nelle modifiche che il documento è stato aggiornato
+                        modifiche.Add("DocumentoCliente: aggiornato");
+                    }
+
+
                     if (utente.TipoUtente == "Admin")
                     {
                         if (int.TryParse(Request.Form["ID_Operatore"], out int idOperatore))
@@ -4227,62 +4309,6 @@ namespace SinergiaMvc.Controllers
                     }
 
                     db.SaveChanges();
-
-                    // === Aggiornamento professionisti associati extra ===
-                    var professionistiExtra = Request.Form.GetValues("ProfessionistiAssociati[]");
-                    var relazioniEsistenti = db.ClientiProfessionisti.Where(r => r.ID_Cliente == idCliente).ToList();
-
-                    // Archivia ed elimina relazioni esistenti
-                    foreach (var rel in relazioniEsistenti)
-                    {
-                        db.ClientiProfessionisti_a.Add(new ClientiProfessionisti_a
-                        {
-                            ID_Originale = rel.ID_ClientiProfessionisti,
-                            ID_Cliente = rel.ID_Cliente,
-                            ID_Professionista = rel.ID_Professionista,
-                            Ruolo = rel.Ruolo,
-                            DataAssegnazione = rel.DataAssegnazione,
-                            NumeroVersione = 1,
-                            DataArchiviazione = DateTime.Now,
-                            ID_UtenteArchiviazione = idUtente,
-                            ModificheTestuali = "Relazione eliminata durante modifica cliente"
-                        });
-                    }
-                    db.ClientiProfessionisti.RemoveRange(relazioniEsistenti);
-                    db.SaveChanges();
-
-                    if (professionistiExtra != null)
-                    {
-                        foreach (var profIdStr in professionistiExtra)
-                        {
-                            if (int.TryParse(profIdStr, out int idProf))
-                            {
-                                var nuova = new ClientiProfessionisti
-                                {
-                                    ID_Cliente = idCliente,
-                                    ID_Professionista = idProf,
-                                    DataAssegnazione = DateTime.Now
-                                };
-                                db.ClientiProfessionisti.Add(nuova);
-                                db.SaveChanges();
-
-                                db.ClientiProfessionisti_a.Add(new ClientiProfessionisti_a
-                                {
-                                    ID_Originale = nuova.ID_ClientiProfessionisti,
-                                    ID_Cliente = nuova.ID_Cliente,
-                                    ID_Professionista = nuova.ID_Professionista,
-                                    Ruolo = nuova.Ruolo,
-                                    DataAssegnazione = nuova.DataAssegnazione,
-                                    NumeroVersione = 1,
-                                    DataArchiviazione = DateTime.Now,
-                                    ID_UtenteArchiviazione = idUtente,
-                                    ModificheTestuali = "Nuova relazione cliente-professionista"
-                                });
-                            }
-                        }
-                        db.SaveChanges();
-                        modifiche.Add("ProfessionistiAssociati aggiornati");
-                    }
 
                     // === Archiviazione cliente ===
                     if (modifiche.Any())
@@ -4313,6 +4339,8 @@ namespace SinergiaMvc.Controllers
                             ID_Operatore = originale.ID_Operatore,
                             TipoOperatore = originale.TipoOperatore,
                             DataArchiviazione = DateTime.Now,
+                            DocumentoCliente_Nome = originale.DocumentoCliente_Nome,
+                            DocumentoCliente_File = originale.DocumentoCliente_File,
                             ID_UtenteArchiviazione = idUtente,
                             NumeroVersione = nuovaVersione,
                             ModificheTestuali = $"Modifica effettuata da ID_Utente = {idUtente} il {DateTime.Now:g}:\n- {string.Join("\n- ", modifiche)}"
@@ -4375,6 +4403,8 @@ namespace SinergiaMvc.Controllers
                         ID_Operatore = cliente.ID_Operatore,
                         TipoOperatore = cliente.TipoOperatore,
                         DataArchiviazione = DateTime.Now,
+                        DocumentoCliente_Nome = cliente.DocumentoCliente_Nome,
+                        DocumentoCliente_File = cliente.DocumentoCliente_File,
                         ID_UtenteArchiviazione = idUtente,
                         NumeroVersione = versioneAttuale + 1,
                         ModificheTestuali = "Disattivazione cliente"
@@ -4408,7 +4438,7 @@ namespace SinergiaMvc.Controllers
                     if (utente.TipoUtente == "Professionista")
                     {
                         var operatore = db.OperatoriSinergia.FirstOrDefault(o =>
-                            o.ID_Cliente == cliente.ID_Operatore &&
+                            o.ID_Operatore == cliente.ID_Operatore &&
                             o.TipoCliente == cliente.TipoOperatore &&
                             o.ID_UtenteCollegato == idUtente);
 
@@ -4418,7 +4448,7 @@ namespace SinergiaMvc.Controllers
                     else if (utente.TipoUtente == "Collaboratore")
                     {
                         var operatore = db.OperatoriSinergia.FirstOrDefault(o =>
-                            o.ID_Cliente == cliente.ID_Operatore &&
+                            o.ID_Operatore == cliente.ID_Operatore &&
                             o.TipoCliente == cliente.TipoOperatore);
 
                         if (operatore == null)
@@ -4482,6 +4512,8 @@ namespace SinergiaMvc.Controllers
                     TipoCliente = Request.Form["TipoCliente"]?.Trim(),
                     Stato = "Attivo",
                     DataCreazione = DateTime.Now,
+                    DocumentoCliente_Nome = null,
+                    DocumentoCliente_File = null,
                     ID_Operatore = idOperatore,
                     TipoOperatore = tipoOperatore
                 };
@@ -4513,7 +4545,7 @@ namespace SinergiaMvc.Controllers
             else if (tipoUtente == "Professionista")
             {
                 var operatore = db.OperatoriSinergia
-                    .FirstOrDefault(o => o.ID_Cliente == cliente.ID_Operatore && o.TipoCliente == cliente.TipoOperatore);
+                    .FirstOrDefault(o => o.ID_Operatore == cliente.ID_Operatore && o.TipoCliente == cliente.TipoOperatore);
                 if (operatore != null && operatore.ID_UtenteCollegato == idUtente)
                     puòModificare = true;
             }
@@ -4553,7 +4585,10 @@ namespace SinergiaMvc.Controllers
                 TipoOperatore = cliente.TipoOperatore,
                 NomeCitta = cliente.ID_Citta.HasValue ? db.Citta.FirstOrDefault(ci => ci.ID_BPCitta == cliente.ID_Citta)?.NameLocalita : null,
                 NomeNazione = cliente.ID_Nazione.HasValue ? db.Nazioni.FirstOrDefault(n => n.ID_BPCittaDN == cliente.ID_Nazione)?.NameNazione : null,
-                UtenteCorrenteHaPermessi = puòModificare
+                UtenteCorrenteHaPermessi = puòModificare,
+                DocumentoCliente_Nome = cliente.DocumentoCliente_Nome,
+                HasDocumentoCliente = cliente.DocumentoCliente_File != null
+
             };
 
             return Json(vm, JsonRequestBehavior.AllowGet);
@@ -4577,7 +4612,7 @@ namespace SinergiaMvc.Controllers
                 if (operatore == null)
                     return (null, null, "Professionista non trovato.");
 
-                return (operatore.ID_Cliente, operatore.TipoCliente, null);
+                return (operatore.ID_Operatore, operatore.TipoCliente, null);
             }
 
             if (utente.TipoUtente == "Collaboratore")
@@ -4592,7 +4627,7 @@ namespace SinergiaMvc.Controllers
                 if (prof == null)
                     return (null, null, "Professionista collegato non trovato.");
 
-                return (prof.ID_Cliente, prof.TipoCliente, null);
+                return (prof.ID_Operatore, prof.TipoCliente, null);
             }
 
             return (null, null, null); // Admin: gestito separatamente da UI
@@ -4605,7 +4640,7 @@ namespace SinergiaMvc.Controllers
                 .Where(o => o.TipoCliente == "Professionista")
                 .Select(o => new
                 {
-                    o.ID_Cliente,
+                    o.ID_Operatore,
                     NomeCompleto = (o.Nome + " " + o.Cognome).Trim()
                 })
                 .OrderBy(o => o.NomeCompleto)
@@ -4640,7 +4675,7 @@ namespace SinergiaMvc.Controllers
                         if (idOperatore == idOwner) continue; // salto l’owner
 
                         var professionista = db.OperatoriSinergia
-                            .FirstOrDefault(o => o.ID_Cliente == idOperatore && o.TipoCliente == "Professionista");
+                            .FirstOrDefault(o => o.ID_Operatore == idOperatore && o.TipoCliente == "Professionista");
 
                         if (professionista != null)
                         {
@@ -4679,19 +4714,19 @@ namespace SinergiaMvc.Controllers
 
                 // 🔹 Owner
                 var owner = db.OperatoriSinergia
-                    .FirstOrDefault(o => o.ID_Cliente == cliente.ID_Operatore && o.TipoCliente == "Professionista");
+                    .FirstOrDefault(o => o.ID_Operatore == cliente.ID_Operatore && o.TipoCliente == "Professionista");
 
                 var ownerInfo = owner != null
-                    ? new { ID = owner.ID_Cliente, Nome = owner.Nome + " " + owner.Cognome }
+                    ? new { ID = owner.ID_Operatore, Nome = owner.Nome + " " + owner.Cognome }
                     : null;
 
                 // 🔹 Professionisti associati (extra, escluso owner)
                 var associati = (from cp in db.ClientiProfessionisti
-                                 join op in db.OperatoriSinergia on cp.ID_Professionista equals op.ID_Cliente
+                                 join op in db.OperatoriSinergia on cp.ID_Professionista equals op.ID_Operatore
                                  where cp.ID_Cliente == id
                                  select new
                                  {
-                                     ID = op.ID_Cliente,
+                                     ID = op.ID_Operatore,
                                      Nome = op.Nome + " " + op.Cognome
                                  }).ToList();
 
@@ -4700,7 +4735,7 @@ namespace SinergiaMvc.Controllers
                     .Where(o => o.TipoCliente == "Professionista")
                     .Select(o => new
                     {
-                        ID = o.ID_Cliente,
+                        ID = o.ID_Operatore,
                         Nome = o.Nome + " " + o.Cognome
                     })
                     .OrderBy(o => o.Nome)
@@ -4750,18 +4785,49 @@ namespace SinergiaMvc.Controllers
         [HttpGet]
         public ActionResult EsportaClientiCsv()
         {
-            int idUtente = UserManager.GetIDUtenteCollegato();
-            var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtente);
+            int idUtenteLoggato = UserManager.GetIDUtenteCollegato();
+            var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteLoggato);
 
-            if (utente == null)
+            if (utenteCorrente == null)
                 return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
 
-            var clienti = db.Clienti
-                .OrderBy(c => c.Nome)
-                .ToList();
+            bool isAdmin = utenteCorrente.TipoUtente == "Admin";
 
+            // ======================================================
+            // 🔥 PROFESSIONISTA SELEZIONATO (SOLO OWNER)
+            // ======================================================
+            int idProfessionistaFiltro = 0;
+
+            if (isAdmin)
+            {
+                idProfessionistaFiltro = Session["IDClienteProfessionistaCorrente"] != null
+                    ? Convert.ToInt32(Session["IDClienteProfessionistaCorrente"])
+                    : 0;
+            }
+            else
+            {
+                idProfessionistaFiltro = UserManager.GetOperatoreDaUtente(idUtenteLoggato);
+            }
+
+            System.Diagnostics.Trace.WriteLine("Filtro OWNER clienti = " + idProfessionistaFiltro);
+
+            // ======================================================
+            // 🔎 QUERY (SOLO OWNER)
+            // ======================================================
+            var query = db.Clienti.AsQueryable();
+
+            if (idProfessionistaFiltro > 0)
+            {
+                query = query.Where(c => c.ID_Operatore == idProfessionistaFiltro);
+            }
+
+            var clienti = query.OrderBy(c => c.Nome).ToList();
+
+            // ======================================================
+            // 🧾 CSV
+            // ======================================================
             var sb = new StringBuilder();
-            sb.AppendLine("ID Cliente;Nome;Cognome;Ragione Sociale;Codice Fiscale;P.IVA;Email;Telefono;Città;Nazione;Stato");
+            sb.AppendLine("ID Cliente;Nome;Cognome;Ragione Sociale;Codice Fiscale;P.IVA;Email;Telefono;Città;Nazione;Stato;Owner");
 
             foreach (var c in clienti)
             {
@@ -4773,24 +4839,36 @@ namespace SinergiaMvc.Controllers
                     ? db.Nazioni.FirstOrDefault(n => n.ID_BPCittaDN == c.ID_Nazione)?.NameNazione ?? "-"
                     : "-";
 
+                string owner = "-";
+                if (c.ID_Operatore > 0)
+                {
+                    owner = db.OperatoriSinergia
+                        .Where(o => o.ID_Operatore == c.ID_Operatore)
+                        .Select(o => o.Nome + " " + o.Cognome)
+                        .FirstOrDefault() ?? "-";
+                }
+
                 sb.AppendLine(
                     $"{c.ID_Cliente};" +
-                    $"{(string.IsNullOrWhiteSpace(c.Nome) ? "-" : c.Nome)};" +
-                    $"{(string.IsNullOrWhiteSpace(c.Cognome) ? "-" : c.Cognome)};" +
-                    $"{(string.IsNullOrWhiteSpace(c.RagioneSociale) ? "-" : c.RagioneSociale)};" +
-                    $"{(string.IsNullOrWhiteSpace(c.CodiceFiscale) ? "-" : c.CodiceFiscale)};" +
-                    $"{(string.IsNullOrWhiteSpace(c.PIVA) ? "-" : c.PIVA)};" +
-                    $"{(string.IsNullOrWhiteSpace(c.Email) ? "-" : c.Email)};" +
-                    $"{(string.IsNullOrWhiteSpace(c.Telefono) ? "-" : c.Telefono)};" +
+                    $"{(c.Nome ?? "-")};" +
+                    $"{(c.Cognome ?? "-")};" +
+                    $"{(c.RagioneSociale ?? "-")};" +
+                    $"{(c.CodiceFiscale ?? "-")};" +
+                    $"{(c.PIVA ?? "-")};" +
+                    $"{(c.Email ?? "-")};" +
+                    $"{(c.Telefono ?? "-")};" +
                     $"{nomeCitta};" +
                     $"{nomeNazione};" +
-                    $"{(string.IsNullOrWhiteSpace(c.Stato) ? "-" : c.Stato)}"
+                    $"{(c.Stato ?? "-")};" +
+                    $"{owner}"
                 );
             }
 
             byte[] buffer = Encoding.UTF8.GetBytes(sb.ToString());
             return File(buffer, "text/csv", $"Clienti_{DateTime.Today:yyyyMMdd}.csv");
         }
+
+
 
         [HttpGet]
         public ActionResult EsportaClientiPdf()
@@ -4827,6 +4905,37 @@ namespace SinergiaMvc.Controllers
                 PageOrientation = Rotativa.Options.Orientation.Landscape
             };
         }
+
+        [HttpGet]
+        public ActionResult ScaricaDocumentoCliente(int id)
+        {
+            try
+            {
+                var cliente = db.Clienti.FirstOrDefault(c => c.ID_Cliente == id);
+
+                if (cliente == null)
+                {
+                    return Content("Cliente non trovato.");
+                }
+
+                if (cliente.DocumentoCliente_File == null || cliente.DocumentoCliente_File.Length == 0)
+                {
+                    return Content("Nessun documento caricato per questo cliente.");
+                }
+
+                string nomeFile = cliente.DocumentoCliente_Nome;
+                byte[] fileBytes = cliente.DocumentoCliente_File;
+
+                // Forza il download del PDF
+                return File(fileBytes, "application/pdf", nomeFile);
+            }
+            catch (Exception ex)
+            {
+                return Content("Errore nel download: " + ex.Message);
+            }
+        }
+
+
 
         #endregion
 
@@ -4872,7 +4981,7 @@ namespace SinergiaMvc.Controllers
                     .Where(o => o.TipoCliente == "Professionista" && o.Stato == "Attivo")
                     .Select(o => new SelectListItem
                     {
-                        Value = o.ID_Cliente.ToString(),
+                        Value = o.ID_Operatore.ToString(),
                         Text = o.Nome + " " + o.Cognome
                     })
                     .ToList();
@@ -4886,7 +4995,7 @@ namespace SinergiaMvc.Controllers
                     .Where(o => o.TipoCliente == "Professionista")
                     .Select(o => new SelectListItem
                     {
-                        Value = o.ID_Cliente.ToString(),
+                        Value = o.ID_Operatore.ToString(),
                         Text = o.Nome + " " + o.Cognome
                     }).ToList();
             }
@@ -4907,7 +5016,7 @@ namespace SinergiaMvc.Controllers
             var professioniVM = professioniFiltrate.Select(p =>
             {
                 var professionista = db.OperatoriSinergia
-                    .FirstOrDefault(o => o.ID_Cliente == p.ID_ProfessionistaRiferimento && o.TipoCliente == "Professionista");
+                    .FirstOrDefault(o => o.ID_Operatore == p.ID_ProfessionistaRiferimento && o.TipoCliente == "Professionista");
 
                 return new ProfessioneViewModel
                 {
@@ -5267,7 +5376,7 @@ namespace SinergiaMvc.Controllers
                      var professione = db.Professioni.FirstOrDefault(p => p.ProfessioniID == o.ID_Professione);
                      return new SelectListItem
                      {
-                         Value = o.ID_Cliente.ToString(),
+                         Value = o.ID_Operatore.ToString(),
                          Text = o.Nome + " " + o.Cognome + (professione != null ? $" ({professione.Descrizione})" : "")
                      };
                  })
@@ -5517,10 +5626,10 @@ namespace SinergiaMvc.Controllers
                 .Join(
                     db.OperatoriSinergia.Where(o => o.TipoCliente == "Professionista"),
                     m => m.ID_Professionista,
-                    o => o.ID_Cliente,
+                    o => o.ID_Operatore,
                     (m, o) => new
                     {
-                        ID = o.ID_Cliente,
+                        ID = o.ID_Operatore,
                         Nome = o.Nome + " " + o.Cognome
                     })
                 .ToList();
@@ -6012,5 +6121,254 @@ namespace SinergiaMvc.Controllers
         }
 
         #endregion
+
+        #region GESTIONE CATEGORIE PRATICHE
+
+        
+        public ActionResult GestioneCategorie()
+        {
+            return View("~/Views/GestioneCategoriePratiche/GestioneCategoriePratiche.cshtml");
+        }
+
+ 
+        [HttpGet]
+        public ActionResult GestioneCategoriePraticheList(string filtro = "", string statoFiltro = "Tutti")
+        {
+            Trace.WriteLine("══════════════════════════════════════════════");
+            Trace.WriteLine("📌 [GestioneCategoriePraticheList] INIZIO");
+
+            int idUtente = UserManager.GetIDUtenteCollegato();
+            Trace.WriteLine($"👤 ID Utente collegato = {idUtente}");
+
+            var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtente);
+
+            if (utente == null)
+            {
+                Trace.WriteLine("❌ Utente NON trovato — ritorno lista vuota");
+                return PartialView("~/Views/GestioneCategoriePratiche/_GestioneCategoriePraticheList.cshtml",
+                    new List<CategoriaPraticaViewModel>());
+            }
+
+            Trace.WriteLine($"✔ Utente trovato: {utente.Nome} {utente.Cognome}, Tipo: {utente.TipoUtente}");
+
+            // =====================================================
+            // PERMESSI
+            // =====================================================
+            bool puoAggiungere = utente.TipoUtente == "Admin";
+            bool puoModificare = utente.TipoUtente == "Admin";
+            bool puoEliminare = utente.TipoUtente == "Admin";
+
+            Trace.WriteLine("🔐 PERMESSI:");
+            Trace.WriteLine($"   ➕ Aggiungi: {puoAggiungere}");
+            Trace.WriteLine($"   ✏ Modifica: {puoModificare}");
+            Trace.WriteLine($"   🗑 Elimina: {puoEliminare}");
+
+            ViewBag.PuoAggiungere = puoAggiungere;
+            ViewBag.PuoModificare = puoModificare;
+            ViewBag.PuoEliminare = puoEliminare;
+
+            // =====================================================
+            // QUERY BASE
+            // =====================================================
+            Trace.WriteLine("📌 Costruzione query...");
+
+            var query = db.AnagraficaCategoriePratiche.AsQueryable();
+            Trace.WriteLine("✔ Query iniziale caricata");
+
+            // FILTRO TESTO
+            if (!string.IsNullOrWhiteSpace(filtro))
+            {
+                Trace.WriteLine($"🔍 Filtro applicato: '{filtro}'");
+                query = query.Where(c => c.Tipo.Contains(filtro) || (c.Note ?? "").Contains(filtro));
+            }
+
+            // FILTRO STATO
+            Trace.WriteLine($"🔍 Stato filtro = {statoFiltro}");
+
+            if (statoFiltro == "Attivi")
+                query = query.Where(c => c.Attivo == true);
+            else if (statoFiltro == "Inattivi")
+                query = query.Where(c => c.Attivo == false);
+
+            // MATERIALIZZA LISTA DAL DB
+            var listaDb = query.OrderBy(c => c.Tipo).ToList();
+            Trace.WriteLine($"📌 Totale categorie DB = {listaDb.Count}");
+
+            // =====================================================
+            // COSTRUZIONE VIEWMODEL
+            // =====================================================
+            Trace.WriteLine("📌 Costruzione ViewModel...");
+
+            var lista = listaDb.Select(c => new CategoriaPraticaViewModel
+            {
+                ID_CategoriaPratica = c.ID_CategoriaPratica,
+                Tipo = c.Tipo,
+                Note = c.Note,
+                Attivo = c.Attivo,
+
+                PuoModificare = puoModificare,
+                PuoEliminare = puoEliminare,
+                UtenteCorrenteHaPermessi = (puoModificare || puoEliminare)
+            }).ToList();
+
+            Trace.WriteLine($"✔ ViewModel costruito correttamente. Totale = {lista.Count}");
+            Trace.WriteLine("══════════════════════════════════════════════");
+
+            return PartialView("~/Views/GestioneCategoriePratiche/_GestioneCategoriePraticheList.cshtml", lista);
+        }
+
+
+        [HttpGet]
+        public ActionResult GetCategoriaPratica(int id)
+        {
+            var c = db.AnagraficaCategoriePratiche.FirstOrDefault(x => x.ID_CategoriaPratica == id);
+
+            if (c == null)
+                return Json(new { success = false, message = "Categoria non trovata." },
+                    JsonRequestBehavior.AllowGet);
+
+            return Json(new
+            {
+                success = true,
+                data = new CategoriaPraticaViewModel
+                {
+                    ID_CategoriaPratica = c.ID_CategoriaPratica,
+                    Tipo = c.Tipo,
+                    Note = c.Note,
+                    Attivo = c.Attivo
+                }
+            }, JsonRequestBehavior.AllowGet);
+        }
+
+
+        [HttpPost]
+        public ActionResult CreaCategoriaPratica(
+            string Tipo,
+            string Note)
+        {
+            try
+            {
+                int idUtente = UserManager.GetIDUtenteCollegato();
+                if (idUtente <= 0)
+                    return Json(new { success = false, message = "Utente non autenticato." });
+
+                if (string.IsNullOrWhiteSpace(Tipo))
+                    return Json(new { success = false, message = "Il campo Categoria è obbligatorio." });
+
+                var cat = new AnagraficaCategoriePratiche
+                {
+                    Tipo = Tipo.Trim(),
+                    Note = string.IsNullOrWhiteSpace(Note) ? null : Note.Trim(),
+                    Materia = null,
+                    Attivo = true,
+
+                    ID_UtenteCreatore = idUtente,
+                    DataCreazione = DateTime.Now,
+                    ID_UtenteUltimaModifica = idUtente,
+                    DataUltimaModifica = DateTime.Now
+                };
+
+                db.AnagraficaCategoriePratiche.Add(cat);
+                db.SaveChanges();
+
+                AggiungiArchivio(cat, idUtente);
+
+                return Json(new { success = true, message = "Categoria creata correttamente." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
+        }
+
+
+
+
+        [HttpPost]
+        public ActionResult ModificaCategoriaPratica(
+      int ID_CategoriaPratica,
+      string Tipo,
+      string Note,
+      bool Attivo)
+        {
+            try
+            {
+                int idUtente = UserManager.GetIDUtenteCollegato();
+                if (idUtente <= 0)
+                    return Json(new { success = false, message = "Utente non autenticato." });
+
+                var cat = db.AnagraficaCategoriePratiche
+                            .FirstOrDefault(x => x.ID_CategoriaPratica == ID_CategoriaPratica);
+
+                if (cat == null)
+                    return Json(new { success = false, message = "Categoria non trovata." });
+
+                cat.Tipo = Tipo?.Trim();
+                cat.Note = string.IsNullOrWhiteSpace(Note) ? null : Note.Trim();
+                cat.Attivo = Attivo;
+                cat.ID_UtenteUltimaModifica = idUtente;
+                cat.DataUltimaModifica = DateTime.Now;
+
+                db.SaveChanges();
+
+                return Json(new { success = true, message = "Categoria modificata correttamente." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        public ActionResult EliminaCategoriaPratica(int id)
+        {
+            try
+            {
+                var cat = db.AnagraficaCategoriePratiche.FirstOrDefault(x => x.ID_CategoriaPratica == id);
+                if (cat == null)
+                    return Json(new { success = false, message = "Categoria non trovata." });
+
+                // 🔥 ELIMINAZIONE DEFINITIVA
+                db.AnagraficaCategoriePratiche.Remove(cat);
+                db.SaveChanges();
+
+                return Json(new { success = true, message = "Categoria eliminata definitivamente." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
+        }
+
+
+
+
+        // =============================================================
+        // 📦 FUNZIONE ARCHIVIO
+        // =============================================================
+        private void AggiungiArchivio(AnagraficaCategoriePratiche cat, int idUtente)
+        {
+            var arch = new AnagraficaCategoriePratiche_a
+            {
+                ID_CategoriaPratica = cat.ID_CategoriaPratica,
+                Tipo = cat.Tipo,
+                Note = cat.Note,
+                Materia = null,
+                Attivo = cat.Attivo,
+                ID_UtenteCreatore = cat.ID_UtenteCreatore,
+                DataCreazione = cat.DataCreazione,
+                ID_UtenteUltimaModifica = cat.ID_UtenteUltimaModifica,
+                DataUltimaModifica = cat.DataUltimaModifica,
+                ID_UtenteArchiviazione = idUtente,
+                DataArchiviazione = DateTime.Now
+            };
+
+            db.AnagraficaCategoriePratiche_a.Add(arch);
+            db.SaveChanges();
+        }
+
+
+        #endregion
+
     }
 }

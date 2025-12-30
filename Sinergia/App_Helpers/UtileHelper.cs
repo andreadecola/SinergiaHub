@@ -150,16 +150,49 @@ namespace Sinergia.App_Helpers
                     // 6️⃣ COLLABORATORI CLUSTER — su base dopo trattenuta
                     // ==========================================================
                     decimal totaleCluster = 0m;
-                    var cluster = db.Cluster.Where(c => c.ID_Pratiche == idPratica && c.TipoCluster == "Collaboratore").ToList();
+
+                    var cluster = db.Cluster
+                        .Where(c => c.ID_Pratiche == idPratica && c.TipoCluster == "Collaboratore")
+                        .ToList();
 
                     foreach (var c in cluster)
                     {
-                        decimal quota = Math.Round(baseDopoTrattenuta * (c.PercentualePrevisione / 100m), 2);
+                        // 🔄 NORMALIZZAZIONE CLUSTER → ID_UTENTE
+                        int idUtenteCollaboratore = 0;
+
+                        // 1️⃣ se è già un ID_UTENTE valido
+                        idUtenteCollaboratore = db.Utenti
+                            .Where(u => u.ID_Utente == c.ID_Utente)
+                            .Select(u => u.ID_Utente)
+                            .FirstOrDefault();
+
+                        // 2️⃣ altrimenti è un ID_OPERATORE → risali all’utente
+                        if (idUtenteCollaboratore == 0)
+                        {
+                            idUtenteCollaboratore = db.OperatoriSinergia
+                                .Where(o => o.ID_Operatore == c.ID_Utente)
+                                .Select(o => o.ID_UtenteCollegato.Value)
+                                .FirstOrDefault();
+                        }
+
+                        if (idUtenteCollaboratore <= 0)
+                        {
+                            System.Diagnostics.Trace.WriteLine(
+                                $"⚠️ [Cluster] ID non risolvibile: ClusterID={c.ID_Cluster}, Valore={c.ID_Utente}");
+                            continue;
+                        }
+
+                        // 💰 Calcolo quota
+                        decimal quota = Math.Round(
+                            baseDopoTrattenuta * (c.PercentualePrevisione / 100m),
+                            2);
+
                         totaleCluster += quota;
 
+                        // 💾 Bilancio → SEMPRE ID_UTENTE
                         voci.Add(new BilancioProfessionista
                         {
-                            ID_Professionista = c.ID_Utente,
+                            ID_Professionista = idUtenteCollaboratore,   // ✅ SEMPRE UTENTE
                             ID_Pratiche = idPratica,
                             ID_Incasso = idIncasso,
                             TipoVoce = "Ricavo",
@@ -175,10 +208,19 @@ namespace Sinergia.App_Helpers
                     }
 
                     // ==========================================================
-                    // 7️⃣ SPESE GENERALI e CONTRIBUTO INTEGRATIVO — su base dopo trattenuta
+                    // 7️⃣ SPESE GENERALI e CONTRIBUTO INTEGRATIVO — CORRETTO
                     // ==========================================================
-                    speseGenerali = Math.Round(baseDopoTrattenuta * (percSpeseGenerali / 100m), 2);
-                    contributoIntegrativo = Math.Round(baseDopoTrattenuta * (percContributoIntegrativo / 100m), 2);
+
+                    // ✔️ Calcolo corretto delle spese generali: solo imponibile
+                    speseGenerali = Math.Round(
+                        baseImponibile * (percSpeseGenerali / 100m),
+                    2);
+
+                    // ✔️ Contributo integrativo = (imponibile + spese generali)
+                    contributoIntegrativo = Math.Round(
+                        (baseImponibile + speseGenerali) * (percContributoIntegrativo / 100m),
+                    2);
+
 
                     // ==========================================================
                     // 8️⃣ COLLABORATORI DETTAGLIO — su base dopo trattenuta

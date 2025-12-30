@@ -57,7 +57,10 @@ namespace Sinergia.Models
         // ⏳ Tipologia e dettagli compenso
         // ================================
         [Required(ErrorMessage = "Il campo Tipologia è obbligatorio.")]
-        public string Tipologia { get; set; } // "Fisso", "A tempo", "Giudiziale"
+
+        public string OggettoPratica { get; set; }
+
+        public string Tipologia { get; set; } // Categoria pratica
 
         public decimal? ImportoFisso { get; set; }         // Se "Fisso"
         public string TerminiPagamento { get; set; }       // Se "Fisso" o "Giudiziale"
@@ -66,6 +69,7 @@ namespace Sinergia.Models
         public decimal? OreEffettive { get; set; }
         public string GradoGiudizio { get; set; }          // Se "Giudiziale"
         public decimal? AccontoGiudiziale { get; set; }    // Se "Giudiziale"
+        public decimal TotaleCompensi { get; set; }
 
         // ================================
         // 👤 Cliente e riferimenti

@@ -78,5 +78,8 @@ namespace Sinergia.Model
         public string ModificheTestuali { get; set; }
 
         public bool HaIncaricoGenerato { get; set; }
+
+        [StringLength(300)]
+        public string OggettoPratica { get; set; }
     }
 }

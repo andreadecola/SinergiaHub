@@ -65,5 +65,10 @@ namespace Sinergia.Model
         public int NumeroVersione { get; set; }
 
         public string ModificheTestuali { get; set; }
+
+        [StringLength(255)]
+        public string DocumentoCliente_Nome { get; set; }
+
+        public byte[] DocumentoCliente_File { get; set; }
     }
 }

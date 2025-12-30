@@ -110,7 +110,19 @@ namespace Sinergia.App_Helpers
                 var operatore = db.OperatoriSinergia
                     .FirstOrDefault(o => o.ID_UtenteCollegato == idUtente && o.TipoCliente == "Professionista");
 
-                return operatore?.ID_Cliente ?? 0;
+                return operatore?.ID_Operatore ?? 0;
+            }
+        }
+
+
+        public static int GetOperatoreDaUtente(int idUtente)
+        {
+            using (var db = new SinergiaDB())
+            {
+                return db.OperatoriSinergia
+                         .Where(o => o.ID_UtenteCollegato == idUtente)
+                         .Select(o => o.ID_Operatore)
+                         .FirstOrDefault();
             }
         }
 
