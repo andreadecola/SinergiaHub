@@ -324,8 +324,5 @@ namespace Sinergia.Controllers
                 return Json(new { success = true, passwordTemporanea = passwordTemporanea });
             }
         }
-
-
-
     }
 }

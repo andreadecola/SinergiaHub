@@ -6,18 +6,24 @@ namespace Sinergia.Model
     using System.ComponentModel.DataAnnotations.Schema;
     using System.Data.Entity.Spatial;
 
-    [Table("PlafondUtente")]
-    public partial class PlafondUtente
+    public partial class PlafondUtente_BACKUP_2026_01_21
     {
         [Key]
+        [Column(Order = 0)]
         public int ID_PlannedPlafond { get; set; }
 
+        [Key]
+        [Column(Order = 1)]
+        [DatabaseGenerated(DatabaseGeneratedOption.None)]
         public int ID_Utente { get; set; }
 
+        [Key]
+        [Column(Order = 2)]
         public decimal ImportoTotale { get; set; }
 
-        [Required]
-        [StringLength(50)]
+        [Key]
+        [Column(Order = 3)]
+        [StringLength(20)]
         public string TipoPlafond { get; set; }
 
         [Column(TypeName = "date")]
@@ -26,6 +32,9 @@ namespace Sinergia.Model
         [Column(TypeName = "date")]
         public DateTime? DataFine { get; set; }
 
+        [Key]
+        [Column(Order = 4)]
+        [DatabaseGenerated(DatabaseGeneratedOption.None)]
         public int ID_UtenteCreatore { get; set; }
 
         public int? ID_UtenteUltimaModifica { get; set; }
@@ -35,11 +44,16 @@ namespace Sinergia.Model
 
         public int? ID_Incasso { get; set; }
 
+        [Key]
+        [Column(Order = 5)]
         public decimal Importo { get; set; }
 
         [Column(TypeName = "date")]
         public DateTime? DataVersamento { get; set; }
 
+        [Key]
+        [Column(Order = 6)]
+        [DatabaseGenerated(DatabaseGeneratedOption.None)]
         public int ID_UtenteInserimento { get; set; }
 
         [Column(TypeName = "date")]
@@ -53,7 +67,7 @@ namespace Sinergia.Model
 
         public DateTime? DataCompetenzaFinanziaria { get; set; }
 
-        [StringLength(200)]
+        [StringLength(100)]
         public string Operazione { get; set; }
     }
 }

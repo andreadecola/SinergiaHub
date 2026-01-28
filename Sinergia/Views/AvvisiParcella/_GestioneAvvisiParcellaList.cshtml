@@ -341,10 +341,23 @@
                         <!-- Pratica -->
                         <div class="col-md-6">
                             <label class="form-label">Pratica</label>
-                            <select name="ID_Pratiche" class="form-select form-select-sm" required id="selectPraticaAvviso">
+                            <select name="ID_Pratiche"
+                                    class="form-select form-select-sm"
+                                    required
+                                    id="selectPraticaAvviso">
                                 <option value="">-- Seleziona una pratica --</option>
                             </select>
+
+                            <!-- 🔍 Ricerca pratica per Nome o ID -->
+                            <label class="form-label mt-1 small text-muted">
+                                Cerca pratica (nome o ID)
+                            </label>
+                            <input type="text"
+                                   id="cercaPraticaInput"
+                                   class="form-control form-control-sm"
+                                   placeholder="Es. 12 oppure Rossi c/ Bianchi" />
                         </div>
+
 
                         <!-- Responsabile pratica -->
                         <div class="col-md-6">
@@ -2052,6 +2065,39 @@
 
     // 🔍 Filtro e paginazione
     document.addEventListener("DOMContentLoaded", function () {
+        // ======================================================
+        // 🔍 RICERCA PRATICA PER ID O NOME → AGGIORNA IL SELECT
+        // ======================================================
+        const cercaPraticaInput = document.getElementById("cercaPraticaInput");
+        const selectPratica = document.getElementById("selectPraticaAvviso");
+
+        if (cercaPraticaInput && selectPratica) {
+            cercaPraticaInput.addEventListener("input", function () {
+                const testo = this.value.trim().toLowerCase();
+                if (!testo) return;
+
+                const opzioni = Array.from(selectPratica.options);
+
+                const trovata = opzioni.find(opt => {
+                    if (!opt.value) return false;
+
+                    const matchId = opt.value.toString() === testo;
+                    const matchTesto = opt.text.toLowerCase().includes(testo);
+
+                    return matchId || matchTesto;
+                });
+
+                if (trovata) {
+                    selectPratica.value = trovata.value;
+
+                    // 🔥 scatena tutta la logica già esistente
+                    selectPratica.dispatchEvent(new Event("change"));
+                }
+            });
+        }
+        // ======================================================
+        // ⬇️ DA QUI IN POI: IL TUO CODICE GIÀ ESISTENTE FILTRI
+        // ====================================================== 
         const table = document.getElementById('avvisiTable');
         const rows = Array.from(table.querySelectorAll('tbody tr'));
         const cards = document.querySelectorAll('.card-avviso');
@@ -2090,9 +2136,23 @@
         selectStato.className = 'form-select form-select-sm w-auto';
 
         // Aggiungi i controlli alla barra
+        // Aggiungi i controlli alla barra
         controlliContainer.appendChild(searchInput);
-        controlliContainer.appendChild(selectStato);
+
+        // 🔽 Wrapper con label "Filtro avvisi"
+        const statoWrapper = document.createElement('div');
+        statoWrapper.className = 'd-flex align-items-center gap-1';
+
+        const statoLabel = document.createElement('span');
+        statoLabel.textContent = 'Filtro avvisi';
+        statoLabel.className = 'text-muted small';
+
+        statoWrapper.appendChild(statoLabel);
+        statoWrapper.appendChild(selectStato);
+
+        controlliContainer.appendChild(statoWrapper);
         controlliContainer.appendChild(selectPageSize);
+
 
         function renderTable() {
             const keyword = searchInput.value.toLowerCase();

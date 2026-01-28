@@ -270,9 +270,15 @@ namespace Sinergia.App_Helpers
                             continue;
 
                         var membri = db.MembriTeam
-                            .Where(m => m.ID_Team == idTeam)
-                            .Select(m => m.ID_Professionista)
-                            .ToList();
+                                .Where(m => m.ID_Team == idTeam)
+                                .Join(db.OperatoriSinergia,
+                                      m => m.ID_Professionista,   // ID_Operatore
+                                      o => o.ID_Operatore,
+                                      (m, o) => o.ID_UtenteCollegato) // ✅ ID_Utente
+                                .Where(idUt => idUt != null)
+                                .Select(idUt => idUt.Value)
+                                .ToList();
+
 
                         decimal quotaTeam = importo * (dist.Percentuale / 100m);
                         decimal quota = membri.Count > 0 ? Math.Round(quotaTeam / membri.Count, 2) : 0;
@@ -568,24 +574,50 @@ namespace Sinergia.App_Helpers
                 }
 
                 // ==========================================================
-                // 💰 CALCOLO PLAFOND EFFETTIVO DAL MOVIMENTO REALE
+                // 💰 CALCOLO PLAFOND EFFETTIVO REALE (NUOVA LOGICA SINERGIA)
                 // ==========================================================
-                decimal totaleEntrate = db.PlafondUtente
-                    .Where(p => p.ID_Utente == prof.ID_Utente &&
-                                (p.TipoPlafond == "Finanziamento" || p.TipoPlafond == "Incasso"))
-                    .Sum(p => (decimal?)p.Importo) ?? 0m;
 
-                decimal totaleUscite = db.PlafondUtente
-                    .Where(p => p.ID_Utente == prof.ID_Utente &&
-                                p.TipoPlafond == "Pagamento Costi")
-                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+                // 1️⃣ Finanziamenti veri
+                decimal entrateFinanziamenti = db.FinanziamentiProfessionisti
+                    .Where(f => f.ID_Professionista == prof.ID_Utente)
+                    .Sum(f => (decimal?)f.Importo) ?? 0m;
 
-                decimal plafondDisponibile = totaleEntrate + totaleUscite; // Uscite già negative
+                // 2️⃣ Incassi netti + Owner fee (bilancio)
+                decimal entrateBilancio = db.BilancioProfessionista
+                    .Where(b =>
+                           b.ID_Professionista == prof.ID_Utente
+                           && b.Origine == "Incasso"
+                           && b.Stato == "Finanziario"
+                           && (
+                                b.Categoria == "Netto Effettivo Responsabile"
+                             || b.Categoria == "Owner Fee"
+                           ))
+                    .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                // 3️⃣ Totale entrate reali
+                decimal totaleEntrate = entrateFinanziamenti + entrateBilancio;
+
+                // 4️⃣ Costi personali
+                decimal usciteCostiPersonali = db.CostiPersonaliUtente
+                    .Where(c => c.ID_Utente == prof.ID_Utente)
+                    .Sum(c => (decimal?)c.Importo) ?? 0m;
+
+                // 5️⃣ Costi pagati da generazione costi
+                decimal uscitePagamentiCosti = db.GenerazioneCosti
+                    .Where(g =>
+                           g.ID_Utente == prof.ID_Utente
+                           && g.Stato == "Pagato")
+                    .Sum(g => (decimal?)g.Importo) ?? 0m;
+
+                // 6️⃣ Plafond effettivo reale
+                decimal plafondDisponibile =
+                    totaleEntrate - (usciteCostiPersonali + uscitePagamentiCosti);
+
 
                 System.Diagnostics.Trace.WriteLine("========== [DEBUG PLAFOND PROFESSIONISTA] ==========");
                 System.Diagnostics.Trace.WriteLine($"👤 Professionista: {prof.Nome} {prof.Cognome}");
                 System.Diagnostics.Trace.WriteLine($"💰 Entrate (Finanziamenti + Incassi): {totaleEntrate:N2}");
-                System.Diagnostics.Trace.WriteLine($"💸 Uscite (Pagamenti): {totaleUscite:N2}");
+                System.Diagnostics.Trace.WriteLine($"💸 Uscite (Pagamenti): {uscitePagamentiCosti:N2}");
                 System.Diagnostics.Trace.WriteLine($"📊 Plafond disponibile: {plafondDisponibile:N2}");
                 System.Diagnostics.Trace.WriteLine("===================================================");
 

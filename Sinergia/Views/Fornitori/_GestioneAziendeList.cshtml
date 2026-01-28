@@ -56,10 +56,10 @@
         </button>
 
         @*<button type="submit" formaction="@Url.Action("EsportaFornitoriPdf", "Utenti")"
-                class="btn btn-outline-danger btn-sm"
-                style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
-            <i class="bi bi-file-earmark-pdf"></i> PDF
-        </button>*@
+                    class="btn btn-outline-danger btn-sm"
+                    style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>*@
     </form>
 </div>
 
@@ -385,58 +385,93 @@
     </div>
 </div>-->
 @* Seconda modale (Nuova assegnazione) *@
-<div class="modal fade" id="aggiungiAssegnazioniModal" tabindex="-1" aria-labelledby="aggiungiAssegnazioniModalLabel" aria-hidden="true">
+@* Modale – Aggiungi Professionisti all’Azienda *@
+<div class="modal fade" id="assegnaProfessionistiModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-md">
-        <div class="modal-content">
+        <form id="assegnaProfessionistiForm">
+            <div class="modal-content">
 
-            <div class="modal-header">
-                <h5 class="modal-title" id="aggiungiAssegnazioniModalLabel">Nuova Assegnazione</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <!-- HEADER -->
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        Assegna Professionisti all’Azienda
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <!-- BODY -->
+                <div class="modal-body">
+
+                    <!-- Lista professionisti (righe dinamiche) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            Professionisti
+                        </label>
+
+                        <div id="listaProfessionistiAzienda">
+                            @* righe aggiunte via JS *@
+                        </div>
+
+                        <button type="button"
+                                id="btnAggiungiProfessionistaAzienda"
+                                class="btn btn-outline-primary btn-sm mt-2">
+                            <i class="fa fa-plus"></i> Aggiungi professionista
+                        </button>
+                    </div>
+
+                    <div id="listaTeamAzienda"></div>
+
+                    <button type="button"
+                            id="btnAggiungiTeamAzienda"
+                            class="btn btn-outline-primary btn-sm">
+                        <i class="fa fa-plus"></i> Aggiungi team
+                    </button>
+
+
+                    <!-- Stato relazione -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            Stato relazione
+                        </label>
+                        <select id="statoRelazione"
+                                class="form-select form-select-sm">
+                            <option value="Attivo">Attivo</option>
+                            <option value="Terminato">Terminato</option>
+                        </select>
+                    </div>
+
+                    <!-- Note -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            Note
+                        </label>
+                        <textarea id="noteRelazione"
+                                  class="form-control form-control-sm"
+                                  rows="2"
+                                  placeholder="Note opzionali sulla relazione"></textarea>
+                    </div>
+
+                </div>
+
+                <!-- FOOTER -->
+                <div class="modal-footer">
+                    <button type="button"
+                            class="btn btn-secondary btn-sm"
+                            data-bs-dismiss="modal">
+                        Annulla
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-success btn-sm">
+                        Salva
+                    </button>
+                </div>
+
             </div>
-
-            <div class="modal-body">
-                <!-- Professionisti -->
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Professionisti</label>
-                    <select id="ddlProfessionisti" class="form-select form-select-sm" multiple size="4">
-                        <option value="all">-- Tutti i professionisti --</option>
-                    </select>
-                    <div class="form-text">Puoi selezionare uno o più professionisti tramite il tasto CTRL.</div>
-                </div>
-
-                <!-- Team -->
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Team</label>
-                    <select id="ddlTeam" class="form-select form-select-sm" multiple size="3">
-                        <option value="all">-- Tutti i team --</option>
-                    </select>
-                    <div class="form-text">Puoi selezionare uno o più team tramite il tasto CTRL .</div>
-                </div>
-
-                <!-- Stato relazione -->
-                <div class="mb-3">
-                    <label for="statoRelazione" class="form-label">Stato della Relazione</label>
-                    <select id="statoRelazione" class="form-select form-select-sm">
-                        <option value="Attivo">Attivo</option>
-                        <option value="Terminato">Terminato</option>
-                    </select>
-                </div>
-
-                <!-- Note -->
-                <div class="mb-3">
-                    <label for="noteRelazione" class="form-label">Note</label>
-                    <textarea id="noteRelazione" class="form-control form-control-sm" rows="2"></textarea>
-                </div>
-            </div>
-
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="salvaAssegnazioni()">Salva</button>
-            </div>
-
-        </div>
+        </form>
     </div>
 </div>
+
 
 <!-- Modale Visualizza Utenti Assegnati -->
 <div class="modal fade" id="utentiAssegnatiModal" tabindex="-1" aria-labelledby="utentiAssegnatiModalLabel" aria-hidden="true">
@@ -548,8 +583,6 @@
 
         new bootstrap.Modal(document.getElementById('aziendaModal')).show();
     }
-
-
 
     function apriModificaAzienda(id) {
         fetch(`/Utenti/GetAzienda?id=${id}`)
@@ -710,7 +743,6 @@
     }
 
 
-
     function salvaAzienda() {
         const form = document.getElementById('AziendaForm');
         const formData = new FormData(form);
@@ -773,9 +805,6 @@
                 toastr.error("Errore durante il salvataggio.");
             });
     }
-
-
-
 
     function apriEliminaAzienda(id) {
         const btnConferma = document.getElementById('btnConfermaEliminazione');
@@ -1106,7 +1135,7 @@
     });
 
 
-
+    // gestione assegnazione fornitore a professionista 
     let aziendaSelezionataId = null;
 
     function apriGestioneAssegnati(idAzienda) {
@@ -1145,7 +1174,7 @@
                                 <td>${x.TipoRelazione}</td>
                                 <td>${x.Note || "-"}</td>
                                 <td>
-                                  <button class="btn btn-sm btn-danger" onclick="rimuoviRelazione(${x.ID_Relazione})">
+                                  <button class="btn btn-sm btn-danger" onclick="rimuoviUtenteDaAzienda(${x.ID_Relazione})">
                                     <i class="fa fa-trash"></i>
                                   </button>
                                 </td>
@@ -1166,48 +1195,210 @@
 
 
     function apriAggiungiAssegnazioni() {
-        // Chiudi la lista utenti assegnati
-        const listaModal = bootstrap.Modal.getInstance(document.getElementById("utentiAssegnatiModal"));
-        if (listaModal) listaModal.hide();
 
-        // Carica professionisti
+        // ======================================================
+        // 🔒 Chiude la modale di visualizzazione assegnati (se aperta)
+        // ======================================================
+        const listaModalEl = document.getElementById("utentiAssegnatiModal");
+        if (listaModalEl) {
+            const listaModal = bootstrap.Modal.getInstance(listaModalEl);
+            if (listaModal) listaModal.hide();
+        }
+
+        // ======================================================
+        // 🔄 Reset liste dinamiche
+        // ======================================================
+        const listaProf = document.getElementById("listaProfessionistiAzienda");
+        const listaTeam = document.getElementById("listaTeamAzienda");
+
+        if (!listaProf || !listaTeam) {
+            console.error("❌ listaProfessionistiAzienda o listaTeamAzienda non trovate nel DOM");
+            return;
+        }
+
+        listaProf.innerHTML = "";
+        listaTeam.innerHTML = "";
+
+        // ======================================================
+        // 🔁 CARICA PROFESSIONISTI DISPONIBILI
+        // ======================================================
         fetch(`/Utenti/GetUtentiDisponibili?idAzienda=${aziendaSelezionataId}`)
             .then(r => r.json())
-            .then(utenti => {
-                const ddl = document.getElementById("ddlProfessionisti");
-                ddl.innerHTML = '<option value="all">-- Tutti i professionisti --</option>';
-                utenti.forEach(u => {
-                    ddl.innerHTML += `<option value="${u.ID_Utente}">${u.NomeUtente}</option>`;
-                });
+            .then(res => {
+                if (!res || res.length === 0) {
+                    toastr.info("ℹ️ Nessun professionista disponibile.");
+                    window.professionistiDisponibili = [];
+                    return;
+                }
+
+                window.professionistiDisponibili = res;
+
+                // 👉 aggiunge una riga vuota iniziale
+                aggiungiProfessionistaAzienda();
+            })
+            .catch(err => {
+                console.error("❌ Errore GetUtentiDisponibili:", err);
+                toastr.error("Errore nel caricamento dei professionisti.");
             });
 
-        // Carica team
+        // ======================================================
+        // 🔁 CARICA TEAM DISPONIBILI
+        // ======================================================
         fetch(`/Utenti/GetTeamDisponibili?idAzienda=${aziendaSelezionataId}`)
             .then(r => r.json())
-            .then(team => {
-                const ddl = document.getElementById("ddlTeam");
-                ddl.innerHTML = '<option value="all">-- Tutti i team --</option>';
-                team.forEach(t => {
-                    ddl.innerHTML += `<option value="${t.ID_Team}">${t.NomeTeam}</option>`;
-                });
+            .then(res => {
+                if (!res || res.length === 0) {
+                    toastr.info("ℹ️ Nessun team disponibile.");
+                    window.teamDisponibili = [];
+                    return;
+                }
+
+                window.teamDisponibili = res;
+
+                // 👉 opzionale: aggiunge una riga team iniziale
+                aggiungiTeamAzienda();
+            })
+            .catch(err => {
+                console.error("❌ Errore GetTeamDisponibili:", err);
+                toastr.error("Errore nel caricamento dei team.");
             });
 
-        // 👇 Mostra la modale di aggiunta
-        bootstrap.Modal.getOrCreateInstance(document.getElementById("aggiungiAssegnazioniModal")).show();
+        // ======================================================
+        // 👇 APERTURA MODALE CORRETTA
+        // ======================================================
+        const modalEl = document.getElementById("assegnaProfessionistiModal");
+        if (!modalEl) {
+            console.error("❌ #assegnaProfessionistiModal non trovato nel DOM");
+            return;
+        }
+
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
 
+    function aggiungiProfessionistaAzienda(idPreselezionato = null) {
+
+        if (!window.professionistiDisponibili || window.professionistiDisponibili.length === 0) {
+            toastr.warning("⚠️ Nessun professionista disponibile.");
+            return;
+        }
+
+        const idx = Date.now();
+
+        const row = document.createElement("div");
+        row.className = "d-flex align-items-center mb-2";
+        row.id = `profRow_${idx}`;
+
+        row.innerHTML = `
+        <select class="form-select form-select-sm me-2">
+            <option value="">-- Seleziona professionista --</option>
+        </select>
+
+        <button type="button"
+                class="btn btn-sm btn-outline-danger"
+                onclick="document.getElementById('profRow_${idx}').remove()">
+            <i class="fa fa-times"></i>
+        </button>
+    `;
+
+        const select = row.querySelector("select");
+
+        window.professionistiDisponibili.forEach(p => {
+            const opt = document.createElement("option");
+            opt.value = p.ID_Utente;
+            opt.textContent = p.NomeUtente;
+            if (idPreselezionato && p.ID_Utente === idPreselezionato) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
+        });
+
+        document.getElementById("listaProfessionistiAzienda").appendChild(row);
+    }
+
+    function aggiungiTeamAzienda(idPreselezionato = null) {
+
+        if (!window.teamDisponibili || window.teamDisponibili.length === 0) {
+            toastr.warning("⚠️ Nessun team disponibile.");
+            return;
+        }
+
+        const idx = Date.now();
+
+        const row = document.createElement("div");
+        row.className = "d-flex align-items-center mb-2";
+        row.id = `teamRow_${idx}`;
+
+        row.innerHTML = `
+        <select class="form-select form-select-sm me-2">
+            <option value="">-- Seleziona team --</option>
+        </select>
+
+        <button type="button"
+                class="btn btn-sm btn-outline-danger"
+                onclick="document.getElementById('teamRow_${idx}').remove()">
+            <i class="fa fa-times"></i>
+        </button>
+    `;
+
+        const select = row.querySelector("select");
+
+        window.teamDisponibili.forEach(t => {
+            const opt = document.createElement("option");
+            opt.value = t.ID_Team;
+            opt.textContent = t.NomeTeam;
+            if (idPreselezionato && t.ID_Team === idPreselezionato) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
+        });
+
+        document.getElementById("listaTeamAzienda").appendChild(row);
+    }
+
+
+
     function salvaAssegnazioni() {
-        const idUtenti = Array.from(document.getElementById("ddlProfessionisti").selectedOptions).map(o => o.value);
-        const idTeam = Array.from(document.getElementById("ddlTeam").selectedOptions).map(o => o.value);
 
-        const statoRelazione = document.getElementById("statoRelazione").value;
-        const noteRelazione = document.getElementById("noteRelazione").value;
+        // ======================================================
+        // 1️⃣ PROFESSIONISTI (righe dinamiche)
+        // ======================================================
+        const idUtenti = [];
 
+        document
+            .querySelectorAll("#listaProfessionistiAzienda select")
+            .forEach(sel => {
+                if (sel.value) {
+                    idUtenti.push(parseInt(sel.value));
+                }
+            });
+
+        // ======================================================
+        // 2️⃣ TEAM (righe dinamiche)
+        // ======================================================
+        const idTeam = [];
+
+        document
+            .querySelectorAll("#listaTeamAzienda select")
+            .forEach(sel => {
+                if (sel.value) {
+                    idTeam.push(parseInt(sel.value));
+                }
+            });
+
+        const statoRelazione = document.getElementById("statoRelazione")?.value || "Attivo";
+        const noteRelazione = document.getElementById("noteRelazione")?.value || "";
+
+        // ======================================================
+        // 3️⃣ VALIDAZIONE
+        // ======================================================
         if (idUtenti.length === 0 && idTeam.length === 0) {
             toastr.warning("⚠️ Seleziona almeno un professionista o un team.");
             return;
         }
 
+        // ======================================================
+        // 4️⃣ CHIAMATA BACKEND
+        // ======================================================
         fetch('/Utenti/AssegnaEntitaAzienda', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1215,39 +1406,49 @@
                 idAzienda: aziendaSelezionataId,
                 idUtenti: idUtenti,
                 idTeam: idTeam,
-                tipoRelazione: "Fornitore", // oppure puoi renderlo dinamico se serve
+                tipoRelazione: "Fornitore",
                 statoRelazione: statoRelazione,
                 noteRelazione: noteRelazione
             })
         })
             .then(r => r.json())
             .then(res => {
-                if (res.success) {
-                    toastr.success(res.message);
 
-                    // ✅ Chiudi la modale "Aggiungi"
-                    const modalAggiungi = bootstrap.Modal.getInstance(document.getElementById("aggiungiAssegnazioniModal"));
-                    if (modalAggiungi) modalAggiungi.hide();
-
-                    // ✅ Reset campi
-                    document.getElementById("ddlProfessionisti").selectedIndex = -1;
-                    document.getElementById("ddlTeam").selectedIndex = -1;
-                    document.getElementById("noteRelazione").value = "";
-
-                    // ✅ Ricarica tabella nella modale principale
-                    setTimeout(() => {
-                        apriGestioneAssegnati(aziendaSelezionataId);
-                    }, 300);
-                } else {
-                    toastr.error(res.message);
+                if (!res.success) {
+                    toastr.error(res.message || "Errore durante il salvataggio.");
+                    return;
                 }
+
+                toastr.success(res.message);
+
+                // ======================================================
+                // 5️⃣ CHIUSURA MODALE
+                // ======================================================
+                const modalEl = document.getElementById("assegnaProfessionistiModal");
+                if (modalEl) {
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                }
+
+                // ======================================================
+                // 6️⃣ RESET UI
+                // ======================================================
+                document.getElementById("listaProfessionistiAzienda").innerHTML = "";
+                document.getElementById("listaTeamAzienda").innerHTML = "";
+                document.getElementById("noteRelazione").value = "";
+
+                // ======================================================
+                // 7️⃣ RICARICA LISTA ASSEGNATI
+                // ======================================================
+                setTimeout(() => {
+                    apriGestioneAssegnati(aziendaSelezionataId);
+                }, 300);
             })
             .catch(err => {
-                console.error("❌ Errore:", err);
+                console.error("❌ Errore salvaAssegnazioni:", err);
                 toastr.error("Errore durante il salvataggio.");
             });
     }
-
 
     function visualizzaUtentiAssegnati(idAzienda) {
         aziendaSelezionataId = idAzienda;
@@ -1305,10 +1506,6 @@
             });
     }
 
-
-
-
-
     function rimuoviUtenteDaAzienda(idRelazione) {
         Swal.fire({
             title: 'Conferma',
@@ -1356,40 +1553,89 @@
         });
     }
 
+    document.addEventListener("DOMContentLoaded", function () {
+
+        console.log("🔗 Aggancio eventi assegnazione azienda");
+
+        // ===============================
+        // ➕ Aggiungi PROFESSIONISTA
+        // ===============================
+        const btnProf = document.getElementById("btnAggiungiProfessionistaAzienda");
+        if (btnProf) {
+            btnProf.addEventListener("click", function () {
+                console.log("🟢 Click: Aggiungi professionista");
+                aggiungiProfessionistaAzienda();
+            });
+        } else {
+            console.warn("⚠️ btnAggiungiProfessionistaAzienda NON trovato");
+        }
+
+        // ===============================
+        // ➕ Aggiungi TEAM
+        // ===============================
+        const btnTeam = document.getElementById("btnAggiungiTeamAzienda");
+        if (btnTeam) {
+            btnTeam.addEventListener("click", function () {
+                console.log("🟢 Click: Aggiungi team");
+                aggiungiTeamAzienda();
+            });
+        } else {
+            console.warn("⚠️ btnAggiungiTeamAzienda NON trovato");
+        }
+
+        // ===============================
+        // 💾 SUBMIT FORM
+        // ===============================
+        const form = document.getElementById("assegnaProfessionistiForm");
+        if (form) {
+            form.addEventListener("submit", function (e) {
+                e.preventDefault();
+                console.log("🟢 Submit assegnaProfessionistiForm");
+                salvaAssegnazioni();
+            });
+        } else {
+            console.warn("⚠️ assegnaProfessionistiForm NON trovato");
+        }
+
+    });
+
+
 
     // Se l'utente seleziona "Tutti", seleziono automaticamente tutti gli altri
-    function abilitaSelezioneMultipla() {
-        const ddlProfessionisti = document.getElementById("ddlProfessionisti");
-        const ddlTeam = document.getElementById("ddlTeam");
+    //function abilitaSelezioneMultipla() {
+    //    const ddlProfessionisti = document.getElementById("ddlProfessionisti");
+    //    const ddlTeam = document.getElementById("ddlTeam");
 
-        ddlProfessionisti.addEventListener("change", function () {
-            if ([...this.selectedOptions].some(opt => opt.value === "all")) {
-                // seleziona tutti tranne "all"
-                for (let i = 0; i < this.options.length; i++) {
-                    if (this.options[i].value !== "all") {
-                        this.options[i].selected = true;
-                    }
-                }
-                // deseleziona "all"
-                this.options[0].selected = false;
-            }
-        });
+    //    ddlProfessionisti.addEventListener("change", function () {
+    //        if ([...this.selectedOptions].some(opt => opt.value === "all")) {
+    //            // seleziona tutti tranne "all"
+    //            for (let i = 0; i < this.options.length; i++) {
+    //                if (this.options[i].value !== "all") {
+    //                    this.options[i].selected = true;
+    //                }
+    //            }
+    //            // deseleziona "all"
+    //            this.options[0].selected = false;
+    //        }
+    //    });
 
-        ddlTeam.addEventListener("change", function () {
-            if ([...this.selectedOptions].some(opt => opt.value === "all")) {
-                for (let i = 0; i < this.options.length; i++) {
-                    if (this.options[i].value !== "all") {
-                        this.options[i].selected = true;
-                    }
-                }
-                this.options[0].selected = false;
-            }
-        });
-    }
+    //    ddlTeam.addEventListener("change", function () {
+    //        if ([...this.selectedOptions].some(opt => opt.value === "all")) {
+    //            for (let i = 0; i < this.options.length; i++) {
+    //                if (this.options[i].value !== "all") {
+    //                    this.options[i].selected = true;
+    //                }
+    //            }
+    //            this.options[0].selected = false;
+    //        }
+    //    });
+    //}
 
     // Attiva il comportamento quando la modale è aperta
-    document.getElementById("aggiungiAssegnazioniModal")
-        .addEventListener("shown.bs.modal", abilitaSelezioneMultipla);
+    //document.getElementById("aggiungiAssegnazioniModal")
+    //    .addEventListener("shown.bs.modal", abilitaSelezioneMultipla);
+
+// fine gestione assegnazione fornitore a professionista 
 
 
     function selezionaECaricaDocumenti(idAzienda) {

@@ -39,6 +39,16 @@ namespace Sinergia.Models
         public decimal CostiTotali { get; set; }
         public decimal UtileNetto => IncassiTotali - CostiTotali;
 
+
+        // 🧑‍💼 KPI PROFESSIONISTA (NUOVI)
+        public decimal FatturatoLordo { get; set; }          // Somma avvisi parcella emessi
+        public decimal UtileIncassato { get; set; }          // Incassi - Costi pagati
+        public decimal DisponibilitaFinanziaria { get; set; } // (Incassi + Finanziamenti) - (Costi personali + Costi pagati)
+        public decimal CreditoFatturabile { get; set; }      // Incassi - Costi totali - Trattenute
+        public decimal TrattenuteSinergia { get; set; }      // Trattenute nel periodo
+        public decimal FatturatoNetto { get; set; }          // Incassi - Costi totali - Trattenute
+
+
         // ==========================================================
         // 🏢 KPI AZIENDALI SINERGIA (visibili solo per Admin)
         // ==========================================================
@@ -46,6 +56,11 @@ namespace Sinergia.Models
         public decimal UsciteTotaliSinergia { get; set; }       // Somma dei costi previsionali / non pagati
         public decimal UtileAziendale { get; set; }             // Differenza tra entrate e uscite
         public decimal TrattenuteSinergiaTotali { get; set; }   // Somma delle trattenute Sinergia (da BilancioProfessionista, se disponibili)
+        public decimal CreditoTotaleProfessionisti { get; set; } // Somma crediti fatturabili di tutti i professionisti
+        public int AvvisiTotaliSinergia { get; set; }
+        public decimal FatturatoTotaleGenerato { get; set; }
+        public decimal DisponibilitaSinergia { get; set; }       // Entrate - Uscite
+
 
         // 📈 Serie temporale per grafico andamento utile mensile
         public List<string> MesiUtile { get; set; }             // Etichette mesi (es. ["Mag 2025", "Giu 2025", "Lug 2025", ...])
@@ -68,5 +83,7 @@ namespace Sinergia.Models
         public List<UtenteViewModel> CollaboratoriAssegnati { get; set; }
         public decimal? UtilePersonale { get; set; }
         public List<ProfessionistiViewModel> ProfessionistiSeguiti { get; set; }
+
+
     }
 }

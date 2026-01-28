@@ -36,10 +36,10 @@ namespace Sinergia.Controllers
                 // ==========================================================
                 // 🔔 Controlli periodici per notifiche automatiche
                 // ==========================================================
-                NotificheHelper.CreaNotificaPraticaFerma(30);           // Pratiche senza aggiornamenti da 30 giorni
-                NotificheHelper.CreaNotificaPraticaSenzaAvviso();       // Pratiche chiuse/completate senza avviso parcella
-                NotificheHelper.CreaNotificaPraticaScadenzaImminente(); // Pratiche con scadenza prossima
-                NotificheHelper.VerificaCostiNonPagati(1);              // Costi non pagati da oltre 1 mese
+                NotificheHelper.CreaNotificaPraticaFerma(30);
+                NotificheHelper.CreaNotificaPraticaSenzaAvviso();
+                NotificheHelper.CreaNotificaPraticaScadenzaImminente();
+                NotificheHelper.VerificaCostiNonPagati(1);
             }
 
             using (var db = new SinergiaDB())
@@ -75,7 +75,6 @@ namespace Sinergia.Controllers
                 // ==========================================================
                 // 📆 RANGE DI ANALISI PER TRIMESTRE
                 // ==========================================================
-                // 🩵 💡 👉 METTILO QUI SUBITO
                 if (!string.IsNullOrEmpty(filtroTrimestre) && filtroTrimestre.All(char.IsDigit))
                     filtroTrimestre = "auto";
 
@@ -84,45 +83,23 @@ namespace Sinergia.Controllers
                 DateTime inizio;
                 DateTime fine;
 
-               
                 if (string.IsNullOrEmpty(filtroTrimestre) || filtroTrimestre == "auto")
                 {
-                    if (oggi.Month >= 1 && oggi.Month <= 3)
-                        filtroTrimestre = "Q1";
-                    else if (oggi.Month >= 4 && oggi.Month <= 6)
-                        filtroTrimestre = "Q2";
-                    else if (oggi.Month >= 7 && oggi.Month <= 9)
-                        filtroTrimestre = "Q3";
-                    else
-                        filtroTrimestre = "Q4";
+                    if (oggi.Month <= 3) filtroTrimestre = "Q1";
+                    else if (oggi.Month <= 6) filtroTrimestre = "Q2";
+                    else if (oggi.Month <= 9) filtroTrimestre = "Q3";
+                    else filtroTrimestre = "Q4";
                 }
 
                 switch (filtroTrimestre)
                 {
-                    case "Q1":
-                        inizio = new DateTime(anno, 1, 1);
-                        fine = new DateTime(anno, 3, 31);
-                        break;
-                    case "Q2":
-                        inizio = new DateTime(anno, 4, 1);
-                        fine = new DateTime(anno, 6, 30);
-                        break;
-                    case "Q3":
-                        inizio = new DateTime(anno, 7, 1);
-                        fine = new DateTime(anno, 9, 30);
-                        break;
-                    case "Q4":
-                        inizio = new DateTime(anno, 10, 1);
-                        fine = new DateTime(anno, 12, 31);
-                        break;
-                    case "anno":
-                    default:
-                        inizio = new DateTime(anno, 1, 1);
-                        fine = new DateTime(anno, 12, 31);
-                        break;
+                    case "Q1": inizio = new DateTime(anno, 1, 1); fine = new DateTime(anno, 3, 31); break;
+                    case "Q2": inizio = new DateTime(anno, 4, 1); fine = new DateTime(anno, 6, 30); break;
+                    case "Q3": inizio = new DateTime(anno, 7, 1); fine = new DateTime(anno, 9, 30); break;
+                    case "Q4": inizio = new DateTime(anno, 10, 1); fine = new DateTime(anno, 12, 31); break;
+                    default: inizio = new DateTime(anno, 1, 1); fine = new DateTime(anno, 12, 31); break;
                 }
 
-                // 🔹 Gestione sottofiltri
                 if (sottoFiltro == "mese1") fine = inizio.AddMonths(1).AddDays(-1);
                 else if (sottoFiltro == "mese2") { inizio = inizio.AddMonths(1); fine = inizio.AddMonths(1).AddDays(-1); }
                 else if (sottoFiltro == "mese3") { inizio = inizio.AddMonths(2); fine = inizio.AddMonths(1).AddDays(-1); }
@@ -136,9 +113,8 @@ namespace Sinergia.Controllers
                     .FirstOrDefault();
 
                 var praticheCluster = db.Cluster
-                    .Where(c =>
-                        c.TipoCluster == "Collaboratore" &&
-                        (c.ID_Utente == idUtenteAttivo || c.ID_Utente == idUtenteCollegato))
+                    .Where(c => c.TipoCluster == "Collaboratore" &&
+                                (c.ID_Utente == idUtenteAttivo || c.ID_Utente == idUtenteCollegato))
                     .Select(c => c.ID_Pratiche)
                     .Distinct()
                     .ToList();
@@ -147,7 +123,7 @@ namespace Sinergia.Controllers
                 string idCollegatoJson = $"\"ID_Collaboratore\":{idUtenteCollegato}";
 
                 var praticheCompensi = db.CompensiPraticaDettaglio
-                    .Where(cd => (cd.Collaboratori.Contains(idUtenteJson) || cd.Collaboratori.Contains(idCollegatoJson)))
+                    .Where(cd => cd.Collaboratori.Contains(idUtenteJson) || cd.Collaboratori.Contains(idCollegatoJson))
                     .Select(cd => cd.ID_Pratiche)
                     .Distinct()
                     .ToList();
@@ -155,14 +131,10 @@ namespace Sinergia.Controllers
                 var idPraticheVisibili = praticheCluster.Union(praticheCompensi).Distinct().ToList();
 
                 var pratiche = db.Pratiche
-                    .Where(p =>
-                        p.Stato != "Eliminato" &&
-                        p.DataCreazione >= inizio && p.DataCreazione <= fine &&
-                        (
-                            p.ID_UtenteResponsabile == idUtenteAttivo ||
-                            p.ID_Owner == idClienteProfessionista ||
-                            idPraticheVisibili.Contains(p.ID_Pratiche)
-                        ))
+                    .Where(p => p.Stato != "Eliminato" &&
+                                (p.ID_UtenteResponsabile == idUtenteAttivo ||
+                                 p.ID_Owner == idClienteProfessionista ||
+                                 idPraticheVisibili.Contains(p.ID_Pratiche)))
                     .ToList();
 
                 var listaPratiche = pratiche.Select(p => new PraticaViewModel
@@ -186,7 +158,9 @@ namespace Sinergia.Controllers
                     join p in db.Pratiche on a.ID_Pratiche equals p.ID_Pratiche
                     where a.Stato != "Annullato"
                           && idPraticheVisibiliPerAvvisi.Contains(p.ID_Pratiche)
-                          && a.DataAvviso >= inizio && a.DataAvviso <= fine
+                          && a.DataAvviso.HasValue
+                          && a.DataAvviso.Value >= inizio
+                          && a.DataAvviso.Value <= fine
                     orderby a.DataAvviso descending
                     select new AvvisoParcellaViewModel
                     {
@@ -194,9 +168,11 @@ namespace Sinergia.Controllers
                         TitoloAvviso = !string.IsNullOrEmpty(a.TitoloAvviso)
                             ? a.TitoloAvviso
                             : (string.IsNullOrEmpty(p.Titolo) ? "(Senza titolo)" : p.Titolo),
-                        Importo = a.Importo,
-                        Stato = a.Stato
-                    }).Take(5).ToList();
+                        Importo = a.TotaleAvvisiParcella ?? a.Importo ?? 0,
+                        Stato = a.Stato,
+                        DataAvviso = a.DataAvviso
+                    }
+                ).Take(5).ToList();
 
                 // ==========================================================
                 // 🔔 NOTIFICHE
@@ -212,27 +188,147 @@ namespace Sinergia.Controllers
                     }).ToList();
 
                 // ==========================================================
-                // 💰 KPI PERSONALI: Incassi / Costi / Utile
+                // 🧑‍💼 KPI PROFESSIONISTA – BLOCCO STABILE (OK ANCHE DA ADMIN)
                 // ==========================================================
-                decimal incassiTotali = db.PlafondUtente
-                    .Where(p =>
-                        p.TipoPlafond == "Incasso" &&
-                        (p.ID_Utente == idClienteProfessionista || p.ID_Utente == idUtenteCollegato) &&
-                        p.DataVersamento >= inizio && p.DataVersamento <= fine)
-                    .Sum(p => (decimal?)p.ImportoTotale) ?? 0;
 
+                DateTime dalProf = inizio.Date;
+                DateTime alProf = fine.Date.AddDays(1);
+
+                // 1️⃣ AVVISI PARCELLA (resta così: visibilità larga)
+                var avvisiQuery = db.AvvisiParcella
+                    .Where(a => a.Stato != "Annullato"
+                             && a.DataAvviso >= dalProf
+                             && a.DataAvviso < alProf
+                             && a.ID_Pratiche != null
+                             && idPraticheVisibiliPerAvvisi.Contains((int)a.ID_Pratiche))
+                    .ToList();
+
+                int avvisiEmessi = avvisiQuery.Count;
+
+                // 2️⃣ FATTURATO LORDO (⚠️ QUERY DEDICATA, SOLO OWNER)
+                var fatturatoQuery = db.AvvisiParcella
+                    .Join(db.Pratiche,
+                          a => a.ID_Pratiche,
+                          p => p.ID_Pratiche,
+                          (a, p) => new { a, p })
+                    .Where(x =>
+                        x.a.Stato != "Annullato"
+                        && x.a.DataAvviso >= dalProf
+                        && x.a.DataAvviso < alProf
+                        && x.p.ID_Owner == idClienteProfessionista   // 🔑 SOLO OWNER
+                    );
+
+                decimal fatturatoLordo = fatturatoQuery
+                    .Sum(x => (decimal?)x.a.TotaleAvvisiParcella) ?? 0m;
+
+
+                // 3️⃣ INCASSI TOTALI
+                decimal incassiTotali = db.Incassi
+                 .Where(i => i.StatoIncasso == "Pagato"
+                          && i.DataIncasso >= dalProf
+                          && i.DataIncasso < alProf
+                          && (
+                                 i.ID_Responsabile == idUtenteCollegato
+                              || i.ID_OwnerCliente == idClienteProfessionista
+                 ))
+                     .Sum(i => (decimal?)i.ImportoTotale) ?? 0m;
+                // 4️⃣ COSTI TOTALI (prev + pagati)
                 decimal costiTotali = db.GenerazioneCosti
-                 .Where(c =>
-                     (c.ID_Utente == idClienteProfessionista || c.ID_Utente == idUtenteCollegato) &&
-                     (c.Stato == "Pagato" || c.Stato == "Previsionale") &&
-                     c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine)
-                 .Sum(c => (decimal?)c.Importo) ?? 0;
+                     .Where(c =>
+                            (
+                                c.ID_Utente == idClienteProfessionista
+                             || c.ID_Utente == idUtenteCollegato
+                            )
+                            && (c.Stato == "Pagato" || c.Stato == "Previsionale")
+                            && c.DataRegistrazione >= dalProf
+                            && c.DataRegistrazione < alProf)
+                     .Sum(c => (decimal?)c.Importo) ?? 0m;
 
+                // 5️⃣ COSTI PAGATI
+                decimal costiPagati = db.GenerazioneCosti
+                          .Where(c =>
+                                 (
+                                     c.ID_Utente == idClienteProfessionista
+                                  || c.ID_Utente == idUtenteCollegato
+                                 )
+                                 && c.Stato == "Pagato"
+                                 && c.DataRegistrazione >= dalProf
+                                 && c.DataRegistrazione < alProf)
+                          .Sum(c => (decimal?)c.Importo) ?? 0m;
 
-                decimal utileNetto = incassiTotali - costiTotali;
+                decimal trattenuteSinergia = db.BilancioProfessionista
+                  .Where(b =>
+                         b.Categoria == "Trattenuta Sinergia"
+                         && b.Origine == "Incasso"          // 🔑 SOLO REALI
+                         && b.Stato == "Finanziario"        // 🔑 SOLO REALI
+                         && b.Importo > 0                   // 🔑 NO ZERI
+                         && b.DataRegistrazione >= dalProf
+                         && b.DataRegistrazione < alProf
+                         && (
+                              b.ID_Professionista == idUtenteCollegato
+                           || b.ID_Professionista == idClienteProfessionista
+                         ))
+                  .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                // 7️⃣ UTILE INCASSATO (REALE)
+                decimal utileIncassato = incassiTotali - costiPagati - trattenuteSinergia;
+
+                // 8️⃣ DISPONIBILITÀ FINANZIARIA (COME PLAFOND)
+                decimal entrateFinanziamenti = db.FinanziamentiProfessionisti
+                        .Where(f => f.ID_Professionista == idUtenteCollegato)
+                        .Sum(f => (decimal?)f.Importo) ?? 0m;
+
+                decimal entrateBilancio = db.BilancioProfessionista
+                      .Where(b =>
+                             b.ID_Professionista == idClienteProfessionista
+                             && b.Origine == "Incasso"
+                             && b.Stato == "Finanziario"
+                             && (b.Categoria == "Netto Effettivo Responsabile"
+                              || b.Categoria == "Owner Fee"))
+                      .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                decimal entrateTotali = entrateFinanziamenti + entrateBilancio;
+
+                decimal usciteCostiPersonali = db.CostiPersonaliUtente
+                     .Where(c => c.ID_Utente == idUtenteCollegato)
+                     .Sum(c => (decimal?)c.Importo) ?? 0m;
+
+                decimal uscitePagamentiCosti = db.GenerazioneCosti
+                     .Where(g =>
+                            g.ID_Utente == idUtenteCollegato
+                            && g.Stato == "Pagato"
+                            && g.Approvato == true)
+                     .Sum(g => (decimal?)g.Importo) ?? 0m;
+
+                decimal disponibilitaFinanziaria =
+                    entrateTotali - (usciteCostiPersonali + uscitePagamentiCosti);
+
+                // 9️⃣ CREDITO FATTURABILE
+                decimal creditoFatturabile =
+                    incassiTotali - costiTotali - trattenuteSinergia;
+
+                // 🔟 FATTURATO NETTO
+                decimal fatturatoNetto =
+                    incassiTotali - costiTotali - trattenuteSinergia;
 
                 // ==========================================================
-                // 📦 COSTRUZIONE MODEL
+                // 🧾 LOG DI CONTROLLO
+                // ==========================================================
+                System.Diagnostics.Trace.WriteLine("========== [CRUSCOTTO PROFESSIONISTA - KPI] ==========");
+                System.Diagnostics.Trace.WriteLine($"📅 Periodo: {dalProf:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+                System.Diagnostics.Trace.WriteLine($"🧾 Avvisi emessi: {avvisiEmessi}");
+                System.Diagnostics.Trace.WriteLine($"💼 Fatturato lordo: {fatturatoLordo:N2} €");
+                System.Diagnostics.Trace.WriteLine($"💰 Incassi totali: {incassiTotali:N2} €");
+                System.Diagnostics.Trace.WriteLine($"💸 Costi totali: {costiTotali:N2} €");
+                System.Diagnostics.Trace.WriteLine($"💸 Costi pagati: {costiPagati:N2} €");
+                System.Diagnostics.Trace.WriteLine($"🏦 Trattenute Sinergia: {trattenuteSinergia:N2} €");
+                System.Diagnostics.Trace.WriteLine($"📈 Utile incassato: {utileIncassato:N2} €");
+                System.Diagnostics.Trace.WriteLine($"💳 Disponibilità finanziaria: {disponibilitaFinanziaria:N2} €");
+                System.Diagnostics.Trace.WriteLine($"🧾 Credito fatturabile: {creditoFatturabile:N2} €");
+                System.Diagnostics.Trace.WriteLine("======================================================");
+
+                // ==========================================================
+                // 📦 COSTRUZIONE MODEL (SOLO PARTE PROF)
                 // ==========================================================
                 var model = new DashboardViewModel
                 {
@@ -243,50 +339,87 @@ namespace Sinergia.Controllers
                     Pratiche = listaPratiche,
                     AvvisiParcella = avvisiParcella,
                     Notifiche = notifiche,
+
+                    AvvisiEmessi = avvisiEmessi,
+                    FatturatoLordo = fatturatoLordo,
                     IncassiTotali = incassiTotali,
                     CostiTotali = costiTotali,
-                    UtilePersonale = utileNetto,
+                    UtilePersonale = utileIncassato,
+                    DisponibilitaFinanziaria = disponibilitaFinanziaria,
+                    CreditoFatturabile = creditoFatturabile,
+                    TrattenuteSinergia = trattenuteSinergia,
+                    FatturatoNetto = fatturatoNetto,
+
                     FiltroTrimestre = filtroTrimestre,
                     SottoFiltro = sottoFiltro,
                     IsAdmin = IsAdminUser_Dashboard()
                 };
 
+             
                 // ==========================================================
-                // 📈 MINI-GRAFICO (ultimi 6 mesi)
+                // 📈 MINI-GRAFICO PROFESSIONISTA — COERENTE CON KPI
                 // ==========================================================
-                DateTime seiMesiFa = oggi.AddMonths(-5);
-                var serieIncassi = db.PlafondUtente
-                    .Where(p => p.TipoPlafond == "Incasso" &&
-                                (p.ID_Utente == idClienteProfessionista || p.ID_Utente == idUtenteCollegato) &&
-                                p.DataVersamento >= seiMesiFa)
-                    .GroupBy(p => new { Mese = p.DataVersamento.Value.Month, Anno = p.DataVersamento.Value.Year })
-                    .Select(g => new { g.Key.Mese, g.Key.Anno, Totale = g.Sum(x => x.ImportoTotale) })
-                    .OrderBy(g => g.Anno).ThenBy(g => g.Mese)
-                    .ToList();
 
-                var serieCosti = db.GenerazioneCosti
-                    .Where(c => (c.ID_Utente == idClienteProfessionista || c.ID_Utente == idUtenteCollegato) &&
+                var serieUtile = Enumerable.Range(0, 6)
+                    .Select(i =>
+                    {
+                        var mese = oggi.AddMonths(-5 + i);
+
+                        var dalMese = new DateTime(mese.Year, mese.Month, 1);
+                        var alMese = dalMese.AddMonths(1);
+
+                        // 💰 Incassi mese
+                        decimal incassiMese = db.Incassi
+                            .Where(x =>
+                                x.StatoIncasso == "Pagato" &&
+                                x.DataIncasso >= dalMese &&
+                                x.DataIncasso < alMese &&
+                                (x.ID_Responsabile == idUtenteCollegato ||
+                                 x.ID_OwnerCliente == idClienteProfessionista))
+                            .Sum(x => (decimal?)(x.ImportoTotale ?? x.Importo)) ?? 0m;
+
+                        // 💸 Costi pagati mese (coerente con KPI "Utile Incassato")
+                        decimal costiPagatiMese = db.GenerazioneCosti
+                            .Where(c =>
+                                (c.ID_Utente == idClienteProfessionista ||
+                                 c.ID_Utente == idUtenteCollegato) &&
                                 c.Stato == "Pagato" &&
-                                c.DataRegistrazione >= seiMesiFa)
-                    .GroupBy(c => new { Mese = c.DataRegistrazione.Value.Month, Anno = c.DataRegistrazione.Value.Year })
-                    .Select(g => new { g.Key.Mese, g.Key.Anno, Totale = g.Sum(x => x.Importo ?? 0) })
-                    .OrderBy(g => g.Anno).ThenBy(g => g.Mese)
+                                c.DataRegistrazione >= dalMese &&
+                                c.DataRegistrazione < alMese)
+                            .Sum(c => (decimal?)c.Importo) ?? 0m;
+
+                        // 🏦 Trattenute Sinergia mese
+                        decimal trattenuteMese = db.BilancioProfessionista
+                            .Where(b =>
+                                b.Categoria == "Trattenuta Sinergia" &&
+                                b.Stato == "Finanziario" &&
+                                b.ID_Professionista == idClienteProfessionista &&
+                                b.DataRegistrazione >= dalMese &&
+                                b.DataRegistrazione < alMese)
+                            .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                        // 📈 Utile reale mese (STESSA FORMULA KPI)
+                        decimal utileMese = incassiMese - costiPagatiMese - trattenuteMese;
+
+                        return new { Mese = mese, Utile = utileMese };
+                    })
                     .ToList();
 
-                var mesi = Enumerable.Range(0, 6).Select(i => oggi.AddMonths(-5 + i)).ToList();
+                // Etichette mesi
+                model.MesiGrafico = serieUtile
+                    .Select(x => x.Mese.ToString("MMM yyyy"))
+                    .ToList();
 
-                model.MesiGrafico = mesi.Select(m => m.ToString("MMM yyyy")).ToList();
-                model.AndamentoIncassi = mesi.Select(m =>
-                {
-                    var item = serieIncassi.FirstOrDefault(s => s.Mese == m.Month && s.Anno == m.Year);
-                    return item?.Totale ?? 0;
-                }).ToList();
+                // Riutilizzo campo esistente per compatibilità view
+                model.AndamentoIncassi = serieUtile
+                    .Select(x => x.Utile)
+                    .ToList();
 
-                model.AndamentoCosti = mesi.Select(m =>
-                {
-                    var item = serieCosti.FirstOrDefault(s => s.Mese == m.Month && s.Anno == m.Year);
-                    return item?.Totale ?? 0;
-                }).ToList();
+                // Campo svuotato (non più usato dal grafico)
+                model.AndamentoCosti = serieUtile
+                    .Select(x => 0m)
+                    .ToList();
+
 
                 // ==========================================================
                 // 🏢 KPI SINERGIA (solo per Admin)
@@ -297,97 +430,134 @@ namespace Sinergia.Controllers
 
                     try
                     {
-                        System.Diagnostics.Trace.WriteLine($"📅 Calcolo KPI Sinergia per periodo selezionato: {inizio:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+                        // ==========================================================
+                        // 🔧 NORMALIZZAZIONE DATE
+                        // ==========================================================
+                        // Usiamo "fine esclusiva" per includere tutto l'ultimo giorno
+                        var dal = inizio.Date;
+                        var alEsclusivo = fine.Date.AddDays(1);
 
-                        // ======================================================
-                        // 💰 1) ENTRATE — INCASSI REALI
-                        // ======================================================
-                        var entrateQuery = db.Incassi
-                            .Where(i =>
-                                i.DataIncasso >= inizio &&
-                                i.DataIncasso <= fine &&
-                                i.Importo > 0)
-                            .ToList();
+                        // ==========================================================
+                        // 1️⃣ AVVISI PARCELLA TOTALI
+                        // ==========================================================
+                        // KPI COMMERCIALE
+                        // Quanti avvisi parcella sono stati emessi nel periodo
+                        // (serve solo a misurare volume di lavoro, NON ricavi)
+                        int avvisiTotaliSinergia = db.AvvisiParcella
+                            .Count(a => a.Stato != "Annullato"
+                                     && a.DataAvviso >= dal
+                                     && a.DataAvviso < alEsclusivo);
 
-                        decimal entrateTotali = entrateQuery.Sum(i => i.Importo);
-                        System.Diagnostics.Trace.WriteLine($"💰 Entrate totali (Incassi): {entrateTotali:N2} € ({entrateQuery.Count} incassi)");
+                        // ==========================================================
+                        // 2️⃣ FATTURATO TOTALE GENERATO (DOCUMENTALE)
+                        // ==========================================================
+                        // KPI COMMERCIALE
+                        // Valore LORDO delle fatture cliente:
+                        // include IVA, spese, CPA, quota professionista
+                        // NON è ricavo aziendale
+                        decimal fatturatoTotaleGenerato = db.AvvisiParcella
+                            .Where(a => a.Stato != "Annullato"
+                                     && a.DataAvviso >= dal
+                                     && a.DataAvviso < alEsclusivo)
+                            .Sum(a => (decimal?)(a.TotaleAvvisiParcella ?? a.Importo)) ?? 0m;
 
-                        // ======================================================
-                        // 💸 2) USCITE — COSTI (GenerazioneCosti)
-                        // ======================================================
-                        var usciteQuery = db.GenerazioneCosti
-                            .Where(c =>
-                                c.DataRegistrazione.HasValue &&
-                                c.DataRegistrazione.Value >= inizio &&
-                                c.DataRegistrazione.Value <= fine &&
-                                (c.Stato == "Previsionale" || c.Stato == "Pagato") &&   // 👈 PREV + PAGATI
-                                (
-                                    c.Categoria == "Costo Generale" ||
-                                    c.Categoria == "Costo Team" ||
-                                    c.Categoria == "Costo Professionista" ||
-                                    c.Categoria == "Costo Pratica" ||
-                                    c.Categoria == "Costo Progetto"                     // 👈 AGGIUNTO
-                                ) &&
-                                !c.Descrizione.Contains("Owner Fee"))
-                            .ToList();
-
-                        decimal usciteTotali = usciteQuery.Sum(c => c.Importo ?? 0);
-                        System.Diagnostics.Trace.WriteLine($"💸 Uscite totali (Costi progetto + generali): {usciteTotali:N2} € ({usciteQuery.Count} costi)");
-
-
-                        // ======================================================
-                        // 🏦 3) TRATTENUTE SINERGIA (Finanziarie)
-                        // ======================================================
-                        decimal trattenuteSinergia = db.BilancioProfessionista
-                            .Where(b =>
-                                b.Categoria == "Trattenuta Sinergia" &&
-                                b.Stato == "Finanziario" &&
-                                b.DataRegistrazione >= inizio &&
-                                b.DataRegistrazione <= fine)
+                        // ==========================================================
+                        // 3️⃣ ENTRATE SINERGIA REALI (RICAVI VERI)
+                        // ==========================================================
+                        // KPI ECONOMICA
+                        // Unica vera entrata oggi tracciata per Sinergia:
+                        // = Trattenute percentuali sugli incassi
+                        // NON usiamo Incassi clienti (che non sono soldi "nostri")
+                        decimal entrateSinergia = db.BilancioProfessionista
+                            .Where(b => b.Categoria == "Trattenuta Sinergia"
+                                     && b.Stato == "Finanziario"
+                                     && b.DataRegistrazione >= dal
+                                     && b.DataRegistrazione < alEsclusivo)
                             .Sum(b => (decimal?)b.Importo) ?? 0m;
 
-                        System.Diagnostics.Trace.WriteLine($"🏦 Trattenute Sinergia: {trattenuteSinergia:N2} €");
+                        // ==========================================================
+                        // 4️⃣ USCITE SINERGIA REALI (COSTI AZIENDALI)
+                        // ==========================================================
+                        // KPI DI COSTO
+                        // Includiamo SOLO:
+                        // - Costo Generale (Resident, struttura)
+                        // - Costo Team (collaboratori condivisi)
+                        //
+                        // Escludiamo:
+                        // - Costo Professionista
+                        // - Costo Pratica
+                        // - Costo Progetto
+                        // - Owner Fee
+                        //
+                        // Perché NON sono costi aziendali veri
+                        decimal usciteSinergia = db.GenerazioneCosti
+                            .Where(c => c.DataRegistrazione.HasValue
+                                     && c.DataRegistrazione.Value >= dal
+                                     && c.DataRegistrazione.Value < alEsclusivo
+                                     && (c.Stato == "Previsionale" || c.Stato == "Pagato")
+                                     && (c.Categoria == "Costo Generale"
+                                         || c.Categoria == "Costo Team")
+                                     && !c.Descrizione.Contains("Owner Fee"))
+                            .Sum(c => (decimal?)c.Importo) ?? 0m;
 
-                        // ======================================================
-                        // 📈 4) UTILE AZIENDALE
-                        // ======================================================
-                        decimal utileAziendale = entrateTotali + trattenuteSinergia - usciteTotali;
-                        System.Diagnostics.Trace.WriteLine($"📈 Utile aziendale calcolato: {utileAziendale:N2} €");
+                        // ==========================================================
+                        // 5️⃣ UTILE AZIENDALE
+                        // ==========================================================
+                        // KPI ECONOMICA PURA
+                        // Formula corretta:
+                        // Utile = Entrate Sinergia − Uscite Sinergia
+                        //
+                        // NON:
+                        // - Incassi clienti
+                        // - Fatturato documentale
+                        decimal utileAziendale = entrateSinergia - usciteSinergia;
 
-                        // Assegno ai KPI del model
-                        model.EntrateTotaliSinergia = entrateTotali;
-                        model.UsciteTotaliSinergia = usciteTotali;
-                        model.TrattenuteSinergiaTotali = trattenuteSinergia;
+                        // ==========================================================
+                        // 6️⃣ FATTURATO PROFESSIONISTI NETTO
+                        // ==========================================================
+                        // KPI DI DEBITO
+                        // Quanto Sinergia deve ancora pagare ai professionisti
+                        // È il loro NETTO reale sugli incassi
+                        //
+                        // Fonte giusta:
+                        // BilancioProfessionista
+                        // Categoria = "Netto Effettivo Responsabile"
+                        decimal fatturatoProfessionistiNetto = db.BilancioProfessionista
+                            .Where(b => b.Categoria == "Netto Effettivo Responsabile"
+                                     && b.Stato == "Finanziario"
+                                     && b.DataRegistrazione >= dal
+                                     && b.DataRegistrazione < alEsclusivo)
+                            .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                        // 7️⃣ DISPONIBILITÀ SINERGIA (per scelta di business = GUADAGNO DEL PERIODO)
+                        // In questa dashboard "Disponibilità Sinergia" significa: quanto Sinergia ha guadagnato nel periodo.
+                        // Quindi è uguale all'utile (Trattenute - Costi aziendali).
+                        decimal disponibilitaSinergia = utileAziendale;
+
+                        // ==========================================================
+                        // 📦 ASSEGNA AL MODEL (SOLO CAMPI ESISTENTI)
+                        // ==========================================================
+                        model.AvvisiTotaliSinergia = avvisiTotaliSinergia;
+                        model.FatturatoTotaleGenerato = fatturatoTotaleGenerato;
+                        model.EntrateTotaliSinergia = entrateSinergia;
+                        model.UsciteTotaliSinergia = usciteSinergia;
+                        model.TrattenuteSinergiaTotali = entrateSinergia; // alias semantico
                         model.UtileAziendale = utileAziendale;
+                        model.DisponibilitaSinergia = disponibilitaSinergia;
+                        model.CreditoTotaleProfessionisti = fatturatoProfessionistiNetto;
 
-                        // ======================================================
-                        // 📊 5) ANDAMENTO MENSILE (Utile per mese)
-                        // ======================================================
-                        var andamentoMensile = Enumerable.Range(0, 3)
-                            .Select(i => new
-                            {
-                                Mese = inizio.AddMonths(i).ToString("MM/yyyy"),
-                                Entrate = entrateQuery
-                                    .Where(x => x.DataIncasso.Month == inizio.AddMonths(i).Month &&
-                                                x.DataIncasso.Year == inizio.AddMonths(i).Year)
-                                    .Sum(x => x.Importo),
+                        // ==========================================================
+                        // 🧾 LOG DI CONTROLLO (DEBUG CHIARO)
+                        // ==========================================================
+                        System.Diagnostics.Trace.WriteLine($"🧾 Avvisi Totali: {avvisiTotaliSinergia}");
+                        System.Diagnostics.Trace.WriteLine($"💼 Fatturato Totale (doc): {fatturatoTotaleGenerato:N2} €");
+                        System.Diagnostics.Trace.WriteLine($"💰 Entrate Sinergia (ricavi veri): {entrateSinergia:N2} €");
+                        System.Diagnostics.Trace.WriteLine($"💸 Uscite Sinergia (costi aziendali): {usciteSinergia:N2} €");
+                        System.Diagnostics.Trace.WriteLine($"📈 Utile Aziendale: {utileAziendale:N2} €");
+                        System.Diagnostics.Trace.WriteLine($"🧾 Fatturato Professionisti Netto (debito): {fatturatoProfessionistiNetto:N2} €");
+                        System.Diagnostics.Trace.WriteLine($"💳 Disponibilità Sinergia: {disponibilitaSinergia:N2} €");
 
-                                Uscite = usciteQuery
-                                    .Where(x => x.DataRegistrazione.Value.Month == inizio.AddMonths(i).Month &&
-                                                x.DataRegistrazione.Value.Year == inizio.AddMonths(i).Year)
-                                    .Sum(x => x.Importo ?? 0)
-                            })
-                            .Select(x => new
-                            {
-                                x.Mese,
-                                Utile = x.Entrate - x.Uscite
-                            })
-                            .ToList();
-
-                        model.MesiUtile = andamentoMensile.Select(x => x.Mese).ToList();
-                        model.UtileMensile = andamentoMensile.Select(x => x.Utile).ToList();
-
-                        System.Diagnostics.Trace.WriteLine("✅ [KPI Sinergia] Calcolo completato.");
+                        System.Diagnostics.Trace.WriteLine("========== [FINE KPI SINERGIA] ==========");
                     }
                     catch (Exception ex)
                     {
@@ -396,25 +566,13 @@ namespace Sinergia.Controllers
 
                         if (ex.InnerException != null)
                             System.Diagnostics.Trace.WriteLine(ex.InnerException.Message);
-
-                        // fallback vuoto
-                        model.MesiUtile = Enumerable.Range(0, 3)
-                            .Select(i => DateTime.Today.AddMonths(-2 + i).ToString("MM/yyyy"))
-                            .ToList();
-
-                        model.UtileMensile = Enumerable.Repeat(0m, model.MesiUtile.Count).ToList();
                     }
-
-                    System.Diagnostics.Trace.WriteLine("========== [FINE KPI SINERGIA] ==========");
                 }
 
 
-
                 return View("Cruscotto", model);
-
             }
         }
-
 
 
         [HttpGet]
@@ -425,11 +583,10 @@ namespace Sinergia.Controllers
                 // ==========================================================
                 // 🧩 Normalizza filtro e sottofiltro
                 // ==========================================================
-
-                // 🔒 Se arriva un numero tipo "3620", forza "auto"
                 if (!string.IsNullOrEmpty(filtroTrimestre) && filtroTrimestre.All(char.IsDigit))
                 {
-                    System.Diagnostics.Trace.WriteLine($"⚠️ [AggiornaGraficoSinergia] Ricevuto valore numerico anomalo: {filtroTrimestre}, imposto 'auto'");
+                    System.Diagnostics.Trace.WriteLine(
+                        $"⚠️ [AggiornaGraficoSinergia] Ricevuto valore numerico anomalo: {filtroTrimestre}, imposto 'auto'");
                     filtroTrimestre = "auto";
                 }
 
@@ -438,7 +595,9 @@ namespace Sinergia.Controllers
                 DateTime inizio;
                 DateTime fine;
 
-                // ✅ Determina trimestre
+                // ==========================================================
+                // 📅 Determina trimestre
+                // ==========================================================
                 if (string.IsNullOrEmpty(filtroTrimestre) || filtroTrimestre == "auto")
                 {
                     if (oggi.Month >= 1 && oggi.Month <= 3) filtroTrimestre = "Q1";
@@ -447,7 +606,6 @@ namespace Sinergia.Controllers
                     else filtroTrimestre = "Q4";
                 }
 
-                // ✅ Calcolo intervallo del trimestre
                 switch (filtroTrimestre)
                 {
                     case "Q1":
@@ -473,56 +631,81 @@ namespace Sinergia.Controllers
                         break;
                 }
 
-                // ✅ Applica sottofiltro (mese1, mese2, mese3)
-                if (sottoFiltro == "mese1") fine = inizio.AddMonths(1).AddDays(-1);
-                else if (sottoFiltro == "mese2") { inizio = inizio.AddMonths(1); fine = inizio.AddMonths(1).AddDays(-1); }
-                else if (sottoFiltro == "mese3") { inizio = inizio.AddMonths(2); fine = inizio.AddMonths(1).AddDays(-1); }
+                // ==========================================================
+                // 🧩 Applica sottofiltro (mese1, mese2, mese3)
+                // ==========================================================
+                if (sottoFiltro == "mese1")
+                    fine = inizio.AddMonths(1).AddDays(-1);
+                else if (sottoFiltro == "mese2")
+                {
+                    inizio = inizio.AddMonths(1);
+                    fine = inizio.AddMonths(1).AddDays(-1);
+                }
+                else if (sottoFiltro == "mese3")
+                {
+                    inizio = inizio.AddMonths(2);
+                    fine = inizio.AddMonths(1).AddDays(-1);
+                }
 
                 // ==========================================================
-                // 💰 Calcolo KPI Sinergia SOLO PER IL PERIODO
+                // 💰 KPI SINERGIA – SOLO PER IL PERIODO (NUOVO SCHEMA)
                 // ==========================================================
-                decimal entrate = db.GenerazioneCosti
-                    .Where(c =>
-                        (c.Origine == "Ricorrenza" || c.Origine == "Progetto") &&
-                        (c.Approvato == true || c.Stato == "Pagato") &&
-                        (c.Categoria == "Costo Generale" ||
-                         c.Categoria == "Costo Team" ||
-                         c.Categoria == "Costo Professionista" ||
-                         c.Categoria == "Costo Pratica") &&
-                        c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine)
-                    .Sum(c => (decimal?)c.Importo) ?? 0;
 
-                decimal uscite = db.GenerazioneCosti
-                    .Where(c =>
-                        (c.Origine == "Ricorrenza" || c.Origine == "Progetto") &&
-                        (c.Approvato == false || c.Stato == "Previsionale") &&
-                        (c.Categoria == "Costo Generale" ||
-                         c.Categoria == "Costo Team" ||
-                         c.Categoria == "Costo Professionista" ||
-                         c.Categoria == "Costo Pratica") &&
-                        c.DataRegistrazione >= inizio && c.DataRegistrazione <= fine)
-                    .Sum(c => (decimal?)c.Importo) ?? 0;
+                // 1️⃣ ENTRATE → Incassi reali
+                var incassiQuery = db.Incassi
+                    .Where(i =>
+                        i.StatoIncasso == "Pagato" &&
+                        i.DataIncasso >= inizio &&
+                        i.DataIncasso <= fine)
+                    .ToList();
 
+                decimal entrate = incassiQuery.Sum(i => (decimal?)(i.ImportoTotale ?? i.Importo) ?? 0m);
+
+                // 2️⃣ USCITE → Costi Sinergia (previsionali + pagati)
+                var usciteQuery = db.GenerazioneCosti
+                    .Where(c =>
+                        c.DataRegistrazione.HasValue &&
+                        c.DataRegistrazione.Value >= inizio &&
+                        c.DataRegistrazione.Value <= fine &&
+                        (c.Stato == "Previsionale" || c.Stato == "Pagato") &&
+                        (
+                            c.Categoria == "Costo Generale" ||
+                            c.Categoria == "Costo Team" ||
+                            c.Categoria == "Costo Professionista" ||
+                            c.Categoria == "Costo Pratica" ||
+                            c.Categoria == "Costo Progetto"
+                        ) &&
+                        !c.Descrizione.Contains("Owner Fee"))
+                    .ToList();
+
+                decimal uscite = usciteQuery.Sum(c => (decimal?)c.Importo) ?? 0m;
+
+                // 3️⃣ TRATTENUTE SINERGIA → solo finanziarie
                 decimal trattenute = db.BilancioProfessionista
                     .Where(b =>
-                        b.Categoria == "Trattenuta Sinergia" && b.Importo > 0 &&
-                        b.DataRegistrazione >= inizio && b.DataRegistrazione <= fine)
-                    .Sum(b => (decimal?)b.Importo) ?? 0;
+                        b.Categoria == "Trattenuta Sinergia" &&
+                        b.Stato == "Finanziario" &&
+                        b.DataRegistrazione >= inizio &&
+                        b.DataRegistrazione <= fine)
+                    .Sum(b => (decimal?)b.Importo) ?? 0m;
 
-                decimal utile = (entrate - uscite) + trattenute;
+                // 4️⃣ UTILE AZIENDALE
+                decimal utile = entrate + trattenute - uscite;
 
                 // ==========================================================
                 // 🧾 Log diagnostico
                 // ==========================================================
                 System.Diagnostics.Trace.WriteLine("========== [AggiornaGraficoSinergia] ==========");
                 System.Diagnostics.Trace.WriteLine($"📅 Periodo calcolato: {filtroTrimestre} | {inizio:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
-                System.Diagnostics.Trace.WriteLine($"💰 Entrate: {entrate:N2} €");
-                System.Diagnostics.Trace.WriteLine($"💸 Uscite: {uscite:N2} €");
-                System.Diagnostics.Trace.WriteLine($"🏦 Trattenute: {trattenute:N2} €");
-                System.Diagnostics.Trace.WriteLine($"📈 Utile: {utile:N2} €");
+                System.Diagnostics.Trace.WriteLine($"💰 Entrate (Incassi): {entrate:N2} €");
+                System.Diagnostics.Trace.WriteLine($"💸 Uscite (Costi): {uscite:N2} €");
+                System.Diagnostics.Trace.WriteLine($"🏦 Trattenute Sinergia: {trattenute:N2} €");
+                System.Diagnostics.Trace.WriteLine($"📈 Utile aziendale: {utile:N2} €");
                 System.Diagnostics.Trace.WriteLine("===============================================");
 
-                // ✅ Restituisce il JSON al grafico
+                // ==========================================================
+                // ✅ JSON restituito al grafico
+                // ==========================================================
                 return Json(new
                 {
                     entrate,
@@ -534,49 +717,593 @@ namespace Sinergia.Controllers
             }
         }
 
+        [HttpGet]
+        public ActionResult GetDettaglioKPISinergia(string tipo, int? anno, string trimestre, string sottoFiltro)
+        {
+            System.Diagnostics.Trace.WriteLine("========== [GetDettaglioKPISinergia] AVVIO ==========");
+            System.Diagnostics.Trace.WriteLine($"🟢 Tipo KPI richiesto: {tipo}");
 
-         [HttpGet]
-     public ActionResult GetDettaglioKPISinergia(string tipo)
+            try
             {
-                System.Diagnostics.Trace.WriteLine("========== [GetDettaglioKPISinergia] AVVIO ==========");
-                System.Diagnostics.Trace.WriteLine($"🟢 Tipo KPI richiesto: {tipo}");
-
-                try
+                using (var db = new SinergiaDB())
                 {
-                    using (var db = new SinergiaDB())
+                    tipo = (tipo ?? "").Trim().ToLower();
+
+                    // ======================================================
+                    // 📅 CALCOLO PERIODO (stessa logica dashboard)
+                    // ======================================================
+                    int annoUsato = anno ?? DateTime.Today.Year;
+                    trimestre = (trimestre ?? "Anno").ToUpper();
+                    sottoFiltro = (sottoFiltro ?? "completo").ToLower();
+
+                    DateTime inizio;
+                    DateTime fine;
+
+                    if (trimestre == "ANNO")
                     {
-                        tipo = (tipo ?? "").Trim().ToLower();
+                        inizio = new DateTime(annoUsato, 1, 1);
+                        fine = new DateTime(annoUsato, 12, 31);
+                    }
+                    else
+                    {
+                        int q = int.Parse(trimestre.Replace("Q", ""));
+                        inizio = new DateTime(annoUsato, (q - 1) * 3 + 1, 1);
+                        fine = inizio.AddMonths(3).AddDays(-1);
 
-                        // ======================================================
-                        // 📅 Calcolo periodo del trimestre corrente
-                        // (puoi poi sostituire con periodo scelto in dashboard)
-                        // ======================================================
-                        DateTime oggi = DateTime.Today;
-                        int trimestre = (oggi.Month - 1) / 3 + 1;
-                        DateTime inizio, fine;
-
-                        switch (trimestre)
+                        if (sottoFiltro != "completo")
                         {
-                            case 1: inizio = new DateTime(oggi.Year, 1, 1); fine = new DateTime(oggi.Year, 3, 31); break;
-                            case 2: inizio = new DateTime(oggi.Year, 4, 1); fine = new DateTime(oggi.Year, 6, 30); break;
-                            case 3: inizio = new DateTime(oggi.Year, 7, 1); fine = new DateTime(oggi.Year, 9, 30); break;
-                            default: inizio = new DateTime(oggi.Year, 10, 1); fine = new DateTime(oggi.Year, 12, 31); break;
+                            int offset = sottoFiltro == "mese1" ? 0 :
+                                         sottoFiltro == "mese2" ? 1 : 2;
+
+                            inizio = inizio.AddMonths(offset);
+                            fine = inizio.AddMonths(1).AddDays(-1);
+                        }
+                    }
+
+                    var dal = inizio.Date;
+                    var alEsclusivo = fine.Date.AddDays(1);
+
+                    System.Diagnostics.Trace.WriteLine($"📆 Periodo KPI: {dal:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+
+                    var dati = new List<dynamic>();
+
+                    // ======================================================
+                    // 1️⃣ AVVISI PARCELLA
+                    // ======================================================
+                    if (tipo == "avvisi")
+                    {
+                        dati = db.AvvisiParcella
+                            .Where(a => a.Stato != "Annullato"
+                                     && a.DataAvviso >= dal
+                                     && a.DataAvviso < alEsclusivo)
+                            .OrderByDescending(a => a.DataAvviso)
+                            .Take(300)
+                            .Select(a => new
+                            {
+                                Data = a.DataAvviso,
+                                Descrizione = a.TitoloAvviso ?? "Avviso Parcella",
+                                Categoria = "Avviso Parcella",
+                                Origine = "Emissione Avviso",
+                                Stato = a.Stato,
+                                Importo = (decimal?)(a.TotaleAvvisiParcella ?? a.Importo) ?? 0m,
+
+                                ID_Avviso = a.ID_AvvisoParcelle,
+                                ID_Pratiche = a.ID_Pratiche,
+                                ID_Incasso = (int?)null,
+                                NomePratica = db.Pratiche
+                                    .Where(p => p.ID_Pratiche == a.ID_Pratiche)
+                                    .Select(p => p.Titolo)
+                                    .FirstOrDefault(),
+                                NomeProfessionista = db.Utenti
+                                    .Where(u => u.ID_Utente == a.ID_ResponsabilePratica)
+                                    .Select(u => u.Nome + " " + u.Cognome)
+                                    .FirstOrDefault()
+                            })
+                            .ToList<dynamic>();
+                    }
+
+                    // ======================================================
+                    // 2️⃣ FATTURATO (documentale)
+                    // ======================================================
+                    else if (tipo == "fatturato")
+                    {
+                        dati = (
+                            from a in db.AvvisiParcella
+
+                                // LEFT JOIN Incassi
+                            join i in db.Incassi
+                                on a.ID_AvvisoParcelle equals i.ID_AvvisoParcella into incGroup
+                            from inc in incGroup.DefaultIfEmpty()
+
+                                // JOIN Pratiche
+                            join p in db.Pratiche
+                                on a.ID_Pratiche equals p.ID_Pratiche
+
+                            // JOIN Owner (ID_Operatore → OperatoriSinergia)
+                            join oOwner in db.OperatoriSinergia
+                                on p.ID_Owner equals oOwner.ID_Operatore
+
+                            // JOIN Responsabile UTENTE (ID_Utente → Utenti)
+                            join uResp in db.Utenti
+                                on p.ID_UtenteResponsabile equals uResp.ID_Utente into respUserGroup
+                            from uResp in respUserGroup.DefaultIfEmpty()
+
+                                // (OPZIONALE) risalgo all'operatore Sinergia del responsabile
+                            join oResp in db.OperatoriSinergia
+                                on uResp.ID_Utente equals oResp.ID_UtenteCollegato into respOpGroup
+                            from oResp in respOpGroup.DefaultIfEmpty()
+
+                            where a.Stato != "Annullato"
+                               && a.DataAvviso >= dal
+                               && a.DataAvviso < alEsclusivo
+
+                            orderby a.DataAvviso descending
+
+                            select new
+                            {
+                                Data = a.DataAvviso,
+
+                                Descrizione = string.IsNullOrEmpty(a.TitoloAvviso)
+                                    ? "Avviso Parcella"
+                                    : a.TitoloAvviso,
+
+                                Categoria = "Fatturato (documentale)",
+                                Origine = "AvvisiParcella",
+                                Stato = a.Stato,
+
+                                ID_Avviso = a.ID_AvvisoParcelle,
+                                ID_Incasso = inc != null ? inc.ID_Incasso : (int?)null,
+                                ID_Pratiche = a.ID_Pratiche,
+
+                                NomePratica = p.Titolo,
+
+                                // 🎯 LOGICA CORRETTA
+                                NomeProfessionista =
+                                        p.ID_Owner == (oResp != null ? oResp.ID_Operatore : 0)
+                                            ? (oOwner.Nome + " " + oOwner.Cognome)
+                                            : (oOwner.Nome + " " + oOwner.Cognome + " / " +
+                                               (oResp != null
+                                                    ? oResp.Nome + " " + oResp.Cognome
+                                                    : (uResp != null
+                                                          ? uResp.Nome + " " + uResp.Cognome
+                                                          : "Responsabile N/D"))),
+
+
+                                Importo = (decimal?)(a.TotaleAvvisiParcella ?? a.Importo) ?? 0m
+                            }
+                        )
+                        .Take(300)
+                        .ToList<dynamic>();
+
+                        System.Diagnostics.Trace.WriteLine($"💼 Righe fatturato trovate: {dati.Count}");
+                    }
+
+
+                    // ======================================================
+                    // 3️⃣ CREDITI PROFESSIONISTI (Netto da liquidare)
+                    // ======================================================
+                    else if (tipo == "crediti")
+                    {
+                        dati = db.BilancioProfessionista
+                            .Where(b => b.Categoria == "Netto Effettivo Responsabile"
+                                     && b.Stato == "Finanziario"
+                                     && b.DataRegistrazione >= dal
+                                     && b.DataRegistrazione < alEsclusivo)
+                            .OrderByDescending(b => b.DataRegistrazione)
+                            .Take(300)
+                            .Select(b => new
+                            {
+                                Data = b.DataRegistrazione,
+                                Descrizione = b.Descrizione ?? "Netto Effettivo Responsabile",
+                                Categoria = b.Categoria,
+                                Origine = "BilancioProfessionista",
+                                Stato = b.Stato,
+                                Importo = (decimal?)(b.Importo) ?? 0m,
+
+                                ID_Incasso = b.ID_Incasso,
+                                ID_Pratiche = b.ID_Pratiche,
+
+                                // 👇 ID Avviso recuperato da Incassi
+                                ID_Avviso = db.Incassi
+                                    .Where(i => i.ID_Incasso == b.ID_Incasso)
+                                    .Select(i => i.ID_AvvisoParcella)
+                                    .FirstOrDefault(),
+
+                                NomePratica = db.Pratiche
+                                    .Where(p => p.ID_Pratiche == b.ID_Pratiche)
+                                    .Select(p => p.Titolo)
+                                    .FirstOrDefault(),
+
+                                NomeProfessionista = db.Utenti
+                                    .Where(u => u.ID_Utente == b.ID_Professionista)
+                                    .Select(u => u.Nome + " " + u.Cognome)
+                                    .FirstOrDefault()
+                            })
+                            .ToList<dynamic>();
+                    }
+
+                    // ======================================================
+                    // 4️⃣ ENTRATE SINERGIA (Trattenute)
+                    // ======================================================
+                    else if (tipo == "entrate")
+                    {
+                        dati = db.BilancioProfessionista
+                            .Where(b => b.Categoria == "Trattenuta Sinergia"
+                                     && b.Stato == "Finanziario"
+                                     && b.DataRegistrazione >= dal
+                                     && b.DataRegistrazione < alEsclusivo)
+                            .OrderByDescending(b => b.DataRegistrazione)
+                            .Take(300)
+                            .Select(b => new
+                            {
+                                Data = b.DataRegistrazione,
+                                Descrizione = b.Descrizione ?? "Trattenuta Sinergia",
+                                Categoria = "Entrate (Trattenute)",
+                                Origine = "BilancioProfessionista",
+                                Stato = b.Stato,
+                                Importo = (decimal?)(b.Importo) ?? 0m,
+
+                                ID_Incasso = b.ID_Incasso,
+                                ID_Pratiche = b.ID_Pratiche,
+
+                                // 👇 FIX VERO
+                                ID_Avviso = db.Incassi
+                                    .Where(i => i.ID_Incasso == b.ID_Incasso)
+                                    .Select(i => i.ID_AvvisoParcella)
+                                    .FirstOrDefault(),
+
+                                NomePratica = db.Pratiche
+                                    .Where(p => p.ID_Pratiche == b.ID_Pratiche)
+                                    .Select(p => p.Titolo)
+                                    .FirstOrDefault(),
+
+                                NomeProfessionista = db.Utenti
+                                    .Where(u => u.ID_Utente == b.ID_Professionista)
+                                    .Select(u => u.Nome + " " + u.Cognome)
+                                    .FirstOrDefault()
+                            })
+                            .ToList<dynamic>();
+                    }
+
+
+                    // ======================================================
+                    // 5️⃣ USCITE SINERGIA (Costi Generali + Team)
+                    // ======================================================
+                    else if (tipo == "uscite")
+                    {
+                        dati = db.GenerazioneCosti
+                            .Where(c =>
+                                c.DataRegistrazione.HasValue &&
+                                c.DataRegistrazione.Value >= dal &&
+                                c.DataRegistrazione.Value < alEsclusivo &&
+                                (c.Stato == "Previsionale" || c.Stato == "Pagato") &&
+                                (c.Categoria == "Costo Generale" || c.Categoria == "Costo Team") &&
+                                !c.Descrizione.Contains("Owner Fee"))
+                            .OrderByDescending(c => c.DataRegistrazione)
+                            .Take(300)
+                            .Select(c => new
+                            {
+                                Data = c.DataRegistrazione.Value,
+                                Descrizione = c.Descrizione,
+                                Categoria = c.Categoria,
+                                Origine = c.Origine,
+                                Stato = c.Stato,
+                                Importo = (decimal?)(c.Importo) ?? 0m,
+
+                                ID_Incasso = (int?)null,
+                                ID_Pratiche = c.ID_Pratiche,
+                                ID_Avviso = (int?)null,   // 👈 qui NON esiste
+
+                                NomePratica = db.Pratiche
+                                    .Where(p => p.ID_Pratiche == c.ID_Pratiche)
+                                    .Select(p => p.Titolo)
+                                    .FirstOrDefault(),
+
+                                NomeProfessionista = db.Utenti
+                                    .Where(u => u.ID_Utente == c.ID_Utente)
+                                    .Select(u => u.Nome + " " + u.Cognome)
+                                    .FirstOrDefault()
+                            })
+                            .ToList<dynamic>();
+                    }
+
+                    // ======================================================
+                    // 6️⃣ DISPONIBILITÀ (riepilogo formula)
+                    // ======================================================
+                    else if (tipo == "disponibilita")
+                    {
+                        decimal entrate = db.BilancioProfessionista
+                            .Where(b => b.Categoria == "Trattenuta Sinergia"
+                                     && b.Stato == "Finanziario"
+                                     && b.DataRegistrazione >= dal
+                                     && b.DataRegistrazione < alEsclusivo)
+                            .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                        decimal uscite = db.GenerazioneCosti
+                            .Where(c => c.DataRegistrazione.HasValue
+                                     && c.DataRegistrazione.Value >= dal
+                                     && c.DataRegistrazione.Value < alEsclusivo
+                                     && (c.Stato == "Previsionale" || c.Stato == "Pagato")
+                                     && (c.Categoria == "Costo Generale" || c.Categoria == "Costo Team")
+                                     && !c.Descrizione.Contains("Owner Fee"))
+                            .Sum(c => (decimal?)c.Importo) ?? 0m;
+
+                        decimal disponibilita = entrate - uscite;
+
+                        var html =
+                            "<div class='alert alert-info mb-3'>" +
+                            "<b>Disponibilità Sinergia (Margine)</b><br/>" +
+                            $"Periodo: <b>{dal:dd/MM/yyyy}</b> - <b>{fine:dd/MM/yyyy}</b><br/>" +
+                            "Formula: <b>Entrate (Trattenute Sinergia) − Uscite (Costi Generali + Team)</b>" +
+                            "</div>" +
+                            "<table class='table table-sm table-bordered mb-0'>" +
+                            "<tbody>" +
+                            $"<tr><td class='fw-bold'>Entrate (Trattenute Sinergia)</td><td class='text-end'>{entrate:N2} €</td></tr>" +
+                            $"<tr><td class='fw-bold'>Uscite (Costi Generali + Team)</td><td class='text-end'>{uscite:N2} €</td></tr>" +
+                            $"<tr class='table-secondary'><td class='fw-bold'>Disponibilità (Margine)</td><td class='text-end fw-bold'>{disponibilita:N2} €</td></tr>" +
+                            "</tbody></table>";
+
+                        return Content(html, "text/html");
+                    }
+                    else
+                    {
+                        return Content($"<div class='alert alert-warning mb-0'>Tipo KPI non riconosciuto: {tipo}</div>");
+                    }
+
+                    // ======================================================
+                    // 🧱 TABELLA HTML RISULTATI
+                    // ======================================================
+                    if (!dati.Any())
+                        return Content("<div class='alert alert-light text-center mb-0'>Nessun dato disponibile per questo KPI.</div>");
+
+                    decimal totale = dati.Sum(x => (decimal)x.Importo);
+
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append("<div class='table-responsive'>");
+                    sb.Append("<table class='table table-sm table-striped align-middle mb-0'>");
+                    sb.Append("<thead class='table-primary'><tr>");
+                    sb.Append("<th>Data</th>");
+                    sb.Append("<th>Descrizione</th>");
+                    sb.Append("<th>Categoria</th>");
+                    sb.Append("<th>Origine</th>");
+                    sb.Append("<th>Stato</th>");
+                    sb.Append("<th>ID Avviso</th>");
+                    sb.Append("<th>ID Incasso</th>");
+                    sb.Append("<th>ID Pratica</th>");
+                    sb.Append("<th>Pratica</th>");
+                    sb.Append("<th>Professionista</th>");
+                    sb.Append("<th class='text-end'>Importo (€)</th>");
+                    sb.Append("</tr></thead><tbody>");
+
+                    foreach (var r in dati)
+                    {
+                        string importoColor = "text-secondary";
+                        switch (tipo)
+                        {
+                            case "entrate": importoColor = "text-success"; break;
+                            case "uscite": importoColor = "text-danger"; break;
+                            case "crediti": importoColor = "text-warning"; break;
+                            case "avvisi": importoColor = "text-primary"; break;
+                            case "fatturato": importoColor = "text-success"; break;
                         }
 
-                        System.Diagnostics.Trace.WriteLine($"📆 Periodo KPI Sinergia: {inizio:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+                        sb.Append("<tr>");
+                        sb.Append($"<td>{r.Data:dd/MM/yyyy}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode((string)r.Descrizione)}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode((string)r.Categoria)}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode((string)r.Origine)}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode((string)r.Stato)}</td>");
+                        sb.Append($"<td>{(r.ID_Avviso == null || (int?)r.ID_Avviso <= 0 ? "N/D" : r.ID_Avviso.ToString())}</td>");
+                        sb.Append($"<td>{(r.ID_Incasso == null || (int?)r.ID_Incasso <= 0 ? "N/D" : r.ID_Incasso.ToString())}</td>");
+                        sb.Append($"<td>{(r.ID_Pratiche == null || (int?)r.ID_Pratiche <= 0 ? "N/D" : r.ID_Pratiche.ToString())}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode((string)r.NomePratica)}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode((string)r.NomeProfessionista)}</td>");
+                        sb.Append($"<td class='text-end {importoColor}'><b>{((decimal)r.Importo):N2}</b></td>");
+                        sb.Append("</tr>");
+                    }
 
-                        var dati = new List<dynamic>();
+                    sb.Append($"<tr class='fw-bold table-secondary'><td colspan='10' class='text-end'>Totale</td><td class='text-end'>{totale:N2} €</td></tr>");
+                    sb.Append("</tbody></table></div>");
+
+                    System.Diagnostics.Trace.WriteLine($"✅ Totale {tipo}: {totale:N2} €");
+                    return Content(sb.ToString(), "text/html");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"❌ Errore generale GetDettaglioKPISinergia: {ex}");
+                return Content($"<div class='alert alert-danger mb-0'>Errore generale: {ex.Message}</div>");
+            }
+        }
+
+
+        [HttpGet]
+        public ActionResult GetDettaglioKPIProfessionista(
+        string tipo,
+        int? anno,
+        string trimestre,
+        string sottoFiltro)
+        {
+            System.Diagnostics.Trace.WriteLine("========== [GetDettaglioKPIProfessionista] AVVIO ==========");
+            System.Diagnostics.Trace.WriteLine($"🟢 Tipo KPI richiesto: {tipo}");
+
+            try
+            {
+                using (var db = new SinergiaDB())
+                {
+                    tipo = (tipo ?? "").Trim().ToLower();
+
+                    int idUtenteAttivo = UserManager.GetIDUtenteAttivo();
+
+                    int idClienteProfessionista = 0;
+
+                    // 1️⃣ Selezione admin
+                    if (Session["IDClienteProfessionistaCorrente"] != null)
+                    {
+                        idClienteProfessionista = (int)Session["IDClienteProfessionistaCorrente"];
+                    }
+                    else
+                    {
+                        // 2️⃣ Professionista loggato
+                        var operatore = db.OperatoriSinergia
+                            .FirstOrDefault(o => o.ID_UtenteCollegato == idUtenteAttivo);
+
+                        if (operatore != null)
+                            idClienteProfessionista = operatore.ID_Operatore;
+                    }
+
+                    if (idClienteProfessionista <= 0)
+                    {
+                        System.Diagnostics.Trace.WriteLine("❌ KPI: professionista non risolto");
+                        return Content("<div class='alert alert-warning mb-0'>Professionista non valido.</div>");
+                    }
+
+                    System.Diagnostics.Trace.WriteLine($"👤 KPI PROF → ID Operatore: {idClienteProfessionista}");
+
 
                     // ======================================================
-                    // 💰 ENTRATE SINERGIA (Incassi reali registrati)
+                    // 📅 CALCOLO PERIODO (STESSA LOGICA SINERGIA)
                     // ======================================================
-                    if (tipo == "entrate")
+                    int annoUsato = anno ?? DateTime.Today.Year;
+                    trimestre = (trimestre ?? "Anno").ToUpper();
+                    sottoFiltro = (sottoFiltro ?? "completo").ToLower();
+
+                    DateTime inizio;
+                    DateTime fine;
+
+                    if (trimestre == "ANNO")
+                    {
+                        inizio = new DateTime(annoUsato, 1, 1);
+                        fine = new DateTime(annoUsato, 12, 31);
+                    }
+                    else
+                    {
+                        int q = int.Parse(trimestre.Replace("Q", ""));
+                        inizio = new DateTime(annoUsato, (q - 1) * 3 + 1, 1);
+                        fine = inizio.AddMonths(3).AddDays(-1);
+
+                        if (sottoFiltro != "completo")
+                        {
+                            int offset =
+                                sottoFiltro == "mese1" ? 0 :
+                                sottoFiltro == "mese2" ? 1 : 2;
+
+                            inizio = inizio.AddMonths(offset);
+                            fine = inizio.AddMonths(1).AddDays(-1);
+                        }
+                    }
+
+                    var dal = inizio.Date;
+                    var alEsclusivo = fine.Date.AddDays(1);
+
+                    System.Diagnostics.Trace.WriteLine(
+                        $"📆 Periodo KPI PROF: {dal:dd/MM/yyyy} → {fine:dd/MM/yyyy}");
+
+                    var dati = new List<dynamic>();
+
+                    // ======================================================
+                    // 🧾 AVVISI PARCELLA
+                    // ======================================================
+                    if (tipo == "avvisi")
+                    {
+                        dati = (
+                            from a in db.AvvisiParcella
+                            join p in db.Pratiche on a.ID_Pratiche equals p.ID_Pratiche
+                            where a.Stato != "Annullato"
+                               && a.DataAvviso >= dal
+                               && a.DataAvviso < alEsclusivo
+                               && (p.ID_UtenteResponsabile == idUtenteAttivo
+                                || p.ID_Owner == idClienteProfessionista)
+                            orderby a.DataAvviso descending
+                            select new
+                            {
+                                Data = a.DataAvviso,
+                                Descrizione = !string.IsNullOrEmpty(a.TitoloAvviso)
+                                    ? a.TitoloAvviso
+                                    : "Avviso pratica " + p.Titolo,
+                                Categoria = "Avviso Parcella",
+                                Origine = "Documento",
+                                Stato = a.Stato,
+                                Importo = (decimal?)(a.TotaleAvvisiParcella ?? a.Importo) ?? 0m
+                            }
+                        ).Take(300).ToList<dynamic>();
+                    }
+
+                    // ======================================================
+                    // 📁 PRATICHE (importo reale = Budget)
+                    // ======================================================
+                    else if (tipo == "pratiche")
+                    {
+                        dati = db.Pratiche
+                            .Where(p =>
+                                   p.DataCreazione >= dal
+                                   && p.DataCreazione < alEsclusivo
+                                   && (
+                                        p.ID_Owner == idClienteProfessionista
+                                     || p.ID_UtenteResponsabile == idUtenteAttivo
+                                   ))
+                            .OrderByDescending(p => p.DataCreazione)
+                            .Take(300)
+                            .Select(p => new
+                            {
+                                Data = p.DataCreazione,
+                                Descrizione = p.Titolo,
+                                Categoria = "Pratica",
+                                Origine = "Sistema",
+                                Stato = p.Stato,
+
+                                // 💶 IMPORTO REALE DELLA PRATICA
+                                Importo = (decimal?)(p.Budget) ?? 0m
+                            })
+                            .ToList<dynamic>();
+                    }
+
+                    // ======================================================
+                    // 💼 FATTURATO LORDO (documentale)
+                    // ======================================================
+                    else if (tipo == "fatturato")
+                    {
+                        var query = db.AvvisiParcella
+                            .Join(db.Pratiche,
+                                  a => a.ID_Pratiche,
+                                  p => p.ID_Pratiche,
+                                  (a, p) => new { a, p })
+                            .Where(x =>
+                                x.a.Stato != "Annullato" &&
+                                x.a.DataAvviso >= dal &&
+                                x.a.DataAvviso < alEsclusivo &&
+                                x.p.ID_Owner == idClienteProfessionista   // 🔑 SOLO OWNER
+                            );
+
+                        dati = query
+                            .OrderByDescending(x => x.a.DataAvviso)
+                            .Take(300)
+                            .Select(x => new
+                            {
+                                Data = x.a.DataAvviso,
+                                Descrizione = !string.IsNullOrEmpty(x.a.TitoloAvviso)
+                                    ? x.a.TitoloAvviso
+                                    : "Avviso pratica " + x.p.Titolo,
+                                Categoria = "Fatturato",
+                                Origine = "AvvisiParcella",
+                                Stato = x.a.Stato,
+                                Importo = (decimal?)(x.a.TotaleAvvisiParcella ?? x.a.Importo) ?? 0m
+                            })
+                            .ToList<dynamic>();
+                    }
+
+                    // ======================================================
+                    // 💰 INCASSI REALI
+                    // ======================================================
+                    else if (tipo == "incassi")
                     {
                         dati = db.Incassi
                             .Where(i =>
-                                i.DataIncasso >= inizio &&
-                                i.DataIncasso <= fine &&
-                                i.Importo > 0)
+                                i.StatoIncasso == "Pagato" &&
+                                i.DataIncasso >= dal &&
+                                i.DataIncasso < alEsclusivo &&
+                                (i.ID_Responsabile == idUtenteAttivo ||
+                                 i.ID_OwnerCliente == idClienteProfessionista))
                             .OrderByDescending(i => i.DataIncasso)
                             .Take(300)
                             .Select(i => new
@@ -586,30 +1313,23 @@ namespace Sinergia.Controllers
                                 Categoria = "Incasso",
                                 Origine = "Pagamento Cliente",
                                 Stato = "Incassato",
-                                Importo = i.Importo
+                                Importo = (decimal?)(i.ImportoTotale ?? i.Importo) ?? 0m
                             })
                             .ToList<dynamic>();
-
-                        System.Diagnostics.Trace.WriteLine($"📗 Entrate (Incassi) trovate: {dati.Count}");
                     }
 
-
                     // ======================================================
-                    // 💸 USCITE SINERGIA (ancora previsionali)
+                    // 💸 COSTI (pagati + previsionali)
                     // ======================================================
-                    else if (tipo == "uscite")
+                    else if (tipo == "costi")
                     {
                         dati = db.GenerazioneCosti
                             .Where(c =>
-                                c.DataRegistrazione >= inizio &&
-                                c.DataRegistrazione <= fine &&
-                                (c.Stato == "Previsionale" || c.Stato == "Pagato") &&   // 👈 ORA PRENDE TUTTI
-                                (c.Categoria == "Costo Generale" ||
-                                 c.Categoria == "Costo Team" ||
-                                 c.Categoria == "Costo Professionista" ||
-                                 c.Categoria == "Costo Pratica" ||
-                                 c.Categoria == "Costo Progetto") &&
-                                !c.Descrizione.Contains("Owner Fee"))
+                                (c.ID_Utente == idClienteProfessionista ||
+                                 c.ID_Utente == idUtenteAttivo) &&
+                                (c.Stato == "Pagato" || c.Stato == "Previsionale") &&
+                                c.DataRegistrazione >= dal &&
+                                c.DataRegistrazione < alEsclusivo)
                             .OrderByDescending(c => c.DataRegistrazione)
                             .Take(300)
                             .Select(c => new
@@ -619,111 +1339,137 @@ namespace Sinergia.Controllers
                                 c.Categoria,
                                 c.Origine,
                                 Stato = c.Stato,
-                                Importo = c.Importo ?? 0
+                                Importo = (decimal?)(c.Importo) ?? 0m
                             })
                             .ToList<dynamic>();
-
-                        System.Diagnostics.Trace.WriteLine($"📕 Uscite trovate (Previsionali + Pagate): {dati.Count}");
                     }
 
-
                     // ======================================================
-                    // 🏦 TRATTENUTE SINERGIA (solo finanziarie)
+                    // 🏦 TRATTENUTE SINERGIA
                     // ======================================================
                     else if (tipo == "trattenute")
-                        {
-                            dati = db.BilancioProfessionista
-                                .Where(b =>
-                                    b.Categoria == "Trattenuta Sinergia" &&
-                                    b.Stato == "Finanziario" &&
-                                    b.DataRegistrazione >= inizio && b.DataRegistrazione <= fine)
-                                .OrderByDescending(b => b.DataRegistrazione)
-                                .Take(300)
-                                .Select(b => new
-                                {
-                                    Data = b.DataRegistrazione,
-                                    b.Descrizione,
-                                    b.Categoria,
-                                    b.Origine,
-                                    Stato = b.Stato,
-                                    Importo = b.Importo
-                                })
-                                .ToList<dynamic>();
-
-                            System.Diagnostics.Trace.WriteLine($"🏦 Trattenute Finanziarie trovate: {dati.Count}");
-                        }
-
-                        // ======================================================
-                        // 📈 UTILE (spiegazione)
-                        // ======================================================
-                        else if (tipo == "utile")
-                        {
-                            return Content(
-                                "<div class='alert alert-info mb-0'>" +
-                                "L'utile aziendale è calcolato come <b>(Entrate + Trattenute) − Uscite</b>.<br>" +
-                                "Non esistono record diretti in tabella.</div>"
-                            );
-                        }
-                        else
-                        {
-                            return Content($"<div class='alert alert-warning mb-0'>Tipo KPI non riconosciuto: {tipo}</div>");
-                        }
-
-                        // ======================================================
-                        // 🧱 TABELLA HTML RISULTATI
-                        // ======================================================
-                        if (!dati.Any())
-                            return Content("<div class='alert alert-light text-center mb-0'>Nessun dato disponibile per questo KPI.</div>");
-
-                        decimal totale = dati.Sum(x => (decimal)x.Importo);
-
-                        var sb = new System.Text.StringBuilder();
-                        sb.Append("<div class='table-responsive'>");
-                        sb.Append("<table class='table table-sm table-striped align-middle mb-0'>");
-                        sb.Append("<thead class='table-primary'><tr>");
-                        sb.Append("<th>Data</th><th>Descrizione</th><th>Categoria</th><th>Origine</th><th>Stato</th><th class='text-end'>Importo (€)</th>");
-                        sb.Append("</tr></thead><tbody>");
-
-                        foreach (var r in dati)
-                        {
-                                    string importoColor = "text-secondary";
-                                    switch (tipo)
-                                    {
-                                        case "entrate":
-                                            importoColor = "text-success";
-                                            break;
-                                        case "uscite":
-                                            importoColor = "text-danger";
-                                            break;
-                                        case "trattenute":
-                                            importoColor = "text-warning";
-                                            break;
-                                    }
-
-                                    sb.Append("<tr>");
-                            sb.Append($"<td>{r.Data:dd/MM/yyyy}</td>");
-                            sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Descrizione)}</td>");
-                            sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Categoria)}</td>");
-                            sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Origine)}</td>");
-                            sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Stato)}</td>");
-                            sb.Append($"<td class='text-end {importoColor}'><b>{r.Importo:N2}</b></td>");
-                            sb.Append("</tr>");
-                        }
-
-                        sb.Append($"<tr class='fw-bold table-secondary'><td colspan='5' class='text-end'>Totale</td><td class='text-end'>{totale:N2} €</td></tr>");
-                        sb.Append("</tbody></table></div>");
-
-                        System.Diagnostics.Trace.WriteLine($"✅ Totale {tipo}: {totale:N2} €");
-                        return Content(sb.ToString(), "text/html");
+                    {
+                        dati = db.BilancioProfessionista
+                            .Where(b =>
+                                   b.Categoria == "Trattenuta Sinergia"
+                                   && b.Origine == "Incasso"          // 🔑 SOLO INCASSI REALI
+                                   && b.Stato == "Finanziario"        // 🔑 SOLO REALI
+                                   && b.Importo > 0                   // 🔑 NO ZERI
+                                   && b.DataRegistrazione >= dal
+                                   && b.DataRegistrazione < alEsclusivo
+                                   && (
+                                        b.ID_Professionista == idUtenteAttivo
+                                     || b.ID_Professionista == idClienteProfessionista
+                                   ))
+                            .OrderByDescending(b => b.DataRegistrazione)
+                            .Take(300)
+                            .Select(b => new
+                            {
+                                Data = b.DataRegistrazione,
+                                b.Descrizione,
+                                b.Categoria,
+                                b.Origine,
+                                Stato = b.Stato,
+                                Importo = (decimal?)(b.Importo) ?? 0m
+                            })
+                            .ToList<dynamic>();
                     }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Trace.WriteLine($"❌ Errore generale GetDettaglioKPISinergia: {ex}");
-                    return Content($"<div class='alert alert-danger mb-0'>Errore generale: {ex.Message}</div>");
+
+                    // ======================================================
+                    // 💳 DISPONIBILITÀ (spiegazione)
+                    // ======================================================
+                    else if (tipo == "disponibilita")
+                    {
+                        return Content(
+                            "<div class='alert alert-info mb-0'>" +
+                            "<b>Disponibilità finanziaria</b> = Incassi reali " +
+                            "− Costi pagati − Prelievi professionista.<br>" +
+                            "Non esistono righe dirette in una singola tabella.</div>"
+                        );
+                    }
+
+                    // ======================================================
+                    // 🧾 CREDITO FATTURABILE (spiegazione)
+                    // ======================================================
+                    else if (tipo == "credito")
+                    {
+                        return Content(
+                            "<div class='alert alert-info mb-0'>" +
+                            "<b>Credito fatturabile</b> = Incassi totali − Costi totali − Trattenute Sinergia.<br>" +
+                            "È un valore calcolato, non una tabella.</div>"
+                        );
+                    }
+
+                    // ======================================================
+                    // 💶 FATTURATO NETTO (spiegazione)
+                    // ======================================================
+                    else if (tipo == "netto")
+                    {
+                        return Content(
+                            "<div class='alert alert-info mb-0'>" +
+                            "<b>Fatturato netto</b> = Incassi totali − Costi totali − Trattenute Sinergia.<br>" +
+                            "È un valore calcolato, non una tabella.</div>"
+                        );
+                    }
+
+                    else
+                    {
+                        return Content(
+                            $"<div class='alert alert-warning mb-0'>Tipo KPI non riconosciuto: {tipo}</div>");
+                    }
+
+                    // ======================================================
+                    // 🧱 TABELLA HTML RISULTATI
+                    // ======================================================
+                    if (!dati.Any())
+                        return Content(
+                            "<div class='alert alert-light text-center mb-0'>Nessun dato disponibile per questo KPI.</div>");
+
+                    decimal totale = dati.Sum(x => (decimal)x.Importo);
+
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append("<div class='table-responsive'>");
+                    sb.Append("<table class='table table-sm table-striped align-middle mb-0'>");
+                    sb.Append("<thead class='table-primary'><tr>");
+                    sb.Append("<th>Data</th><th>Descrizione</th><th>Categoria</th><th>Origine</th><th>Stato</th><th class='text-end'>Importo (€)</th>");
+                    sb.Append("</tr></thead><tbody>");
+
+                    foreach (var r in dati)
+                    {
+                        string importoColor = "text-secondary";
+                        if (tipo == "incassi") importoColor = "text-success";
+                        else if (tipo == "costi") importoColor = "text-danger";
+                        else if (tipo == "trattenute") importoColor = "text-warning";
+                        else if (tipo == "fatturato") importoColor = "text-primary";
+
+                        sb.Append("<tr>");
+                        sb.Append($"<td>{r.Data:dd/MM/yyyy}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Descrizione)}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Categoria)}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Origine)}</td>");
+                        sb.Append($"<td>{System.Net.WebUtility.HtmlEncode(r.Stato)}</td>");
+                        sb.Append($"<td class='text-end {importoColor}'><b>{r.Importo:N2}</b></td>");
+                        sb.Append("</tr>");
+                    }
+
+                    sb.Append($"<tr class='fw-bold table-secondary'><td colspan='5' class='text-end'>Totale</td><td class='text-end'>{totale:N2} €</td></tr>");
+                    sb.Append("</tbody></table></div>");
+
+                    System.Diagnostics.Trace.WriteLine(
+                        $"✅ Totale KPI PROF {tipo}: {totale:N2} €");
+
+                    return Content(sb.ToString(), "text/html");
                 }
             }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"❌ Errore GetDettaglioKPIProfessionista: {ex}");
 
+                return Content(
+                    $"<div class='alert alert-danger mb-0'>Errore generale: {ex.Message}</div>");
+            }
+        }
 
 
 
@@ -862,9 +1608,6 @@ namespace Sinergia.Controllers
                 return false;
             }
         }
-
-
-
 
         #endregion
 
@@ -2407,8 +3150,6 @@ namespace Sinergia.Controllers
             return Content($"<pre>{contenuto}</pre>");
         }
 
-
-
         // LOG MODIFICHE DETTAGLIATO 
         [HttpGet]
         public JsonResult GetStoricoCliente(int idCliente)
@@ -2674,11 +3415,6 @@ namespace Sinergia.Controllers
 
             return Json(new { success = true, storico = model }, JsonRequestBehavior.AllowGet);
         }
-
-
-
-
-
 
 
         #endregion

@@ -287,6 +287,7 @@
                                 <option value="">-- Seleziona Categoria --</option>
                                 <option value="Costo Generale">Costo Generale</option>
                                 <option value="Trattenuta Sinergia">Trattenuta Sinergia</option>
+                                <option value="Trattenuta Plafond">Trattenuta Plafond</option>
                                 <option value="Owner Fee">Owner Fee</option>
                                 <option value="Costo Fisso Resident">Costo Fisso Resident</option> <!-- ✅ MANCAVA -->
                             </select>
@@ -613,12 +614,7 @@
             });
     });
 
-
-
-
-
     //  ricorrenza costo
-
 
     function apriModaleRicorrenza(idAnagraficaCosto) {
 
@@ -720,7 +716,9 @@
                 const categoriaNorm = (r.Categoria || "").trim().toLowerCase();
                 const èSpeciale =
                     categoriaNorm === "owner fee" ||
-                    categoriaNorm === "trattenuta sinergia";
+                    categoriaNorm === "trattenuta sinergia" ||
+                    categoriaNorm === "trattenuta plafond";
+
                
                 console.log("Categoria normalizzata:", categoriaNorm);
                 console.log("È un costo speciale?:", èSpeciale);
@@ -809,7 +807,9 @@
 
         const èSpeciale =
             categoriaNorm === "owner fee" ||
-            categoriaNorm === "trattenuta sinergia" ;
+            categoriaNorm === "trattenuta sinergia" ||
+            categoriaNorm === "trattenuta plafond";
+
 
         console.log("Categoria normalizzata:", categoriaNorm);
         console.log("È un costo speciale?:", èSpeciale);

@@ -118,48 +118,36 @@ namespace SinergiaMvc.Controllers
                 }
             }
 
-
             else if (utenteCorrente.TipoUtente == "Professionista")
             {
                 int idUtenteProfessionista = idUtente;
 
-                // recupero UNA SOLA VOLTA gli operatori del professionista loggato
-                var operatoriDelProf = db.OperatoriSinergia
-                    .Where(o =>
-                        o.ID_UtenteCollegato == idUtenteProfessionista &&
-                        o.Stato == "Attivo"
+                query = query.Where(p =>
+                    // 1️⃣ RESPONSABILE PRATICA
+                    p.ID_UtenteResponsabile == idUtenteProfessionista
+
+                    // 2️⃣ OWNER da CLUSTER
+                    || db.Cluster.Any(c =>
+                        c.ID_Pratiche == p.ID_Pratiche &&
+                        c.TipoCluster == "Owner" &&
+                        c.ID_Utente == idUtenteProfessionista
                     )
-                    .Select(o => o.ID_Operatore)
-                    .ToList();
 
-                // se non ha operatori → non vede nulla
-                if (!operatoriDelProf.Any())
-                {
-                    query = query.Where(p => false);
-                }
-                else
-                {
-                    query = query.Where(p =>
-                        // 1️⃣ OWNER (ID_Owner è ID_OPERATORE)
-                        operatoriDelProf.Contains((int)p.ID_Owner)
+                    // 3️⃣ COLLABORATORE da CLUSTER
+                    || db.Cluster.Any(c =>
+                        c.ID_Pratiche == p.ID_Pratiche &&
+                        c.TipoCluster == "Collaboratore" &&
+                        c.ID_Utente == idUtenteProfessionista
+                    )
 
-                        // 2️⃣ RESPONSABILE (se è utente diretto)
-                        || p.ID_UtenteResponsabile == idUtenteProfessionista
-
-                        // 3️⃣ CLUSTER (ID_Utente = ID_OPERATORE)
-                        || db.Cluster.Any(c =>
-                            c.ID_Pratiche == p.ID_Pratiche &&
-                            operatoriDelProf.Contains(c.ID_Utente)
-                        )
-
-                        // 4️⃣ RELAZIONI (stessa logica)
-                        || db.RelazionePraticheUtenti.Any(r =>
-                            r.ID_Pratiche == p.ID_Pratiche &&
-                            operatoriDelProf.Contains(r.ID_Utente)
-                        )
-                    );
-                }
+                    // 4️⃣ RELAZIONI ESPLICITE
+                    || db.RelazionePraticheUtenti.Any(r =>
+                        r.ID_Pratiche == p.ID_Pratiche &&
+                        r.ID_Utente == idUtenteProfessionista
+                    )
+                );
             }
+
 
             else if (utenteCorrente.TipoUtente == "Collaboratore")
             {
@@ -4379,9 +4367,8 @@ namespace SinergiaMvc.Controllers
                     .FirstOrDefault() ?? "Responsabile sconosciuto";
 
                 System.Diagnostics.Trace.WriteLine($"👨‍💼 Responsabile: {nomeResponsabile}");
-
                 // =====================================================
-                // 👥 CLUSTER ASSOCIATI (lettura corretta SOLO da OperatoriSinergia)
+                // 👥 CLUSTER ASSOCIATI (ID_Utente → Utenti)
                 // =====================================================
                 var clusterRaw = (
                     from c in db.Cluster
@@ -4389,29 +4376,34 @@ namespace SinergiaMvc.Controllers
                     select new
                     {
                         c.ID_Pratiche,
-                        c.ID_Utente,   // questo è SEMPRE ID_Operatore
+                        c.ID_Utente,              // ✅ ID_UTENTE
                         c.TipoCluster,
                         c.PercentualePrevisione,
                         c.DataAssegnazione,
 
-                        Operatore = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Operatore == c.ID_Utente)
+                        Utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == c.ID_Utente)
                     }
                 ).ToList();
 
-                var clusterList = clusterRaw.Select(c => new ClusterViewModel
+                var clusterList = clusterRaw.Select(c =>
                 {
-                    ID_Pratiche = c.ID_Pratiche,
-                    ID_Utente = c.ID_Utente,
-                    TipoCluster = c.TipoCluster,
-                    PercentualePrevisione = c.PercentualePrevisione,
-                    DataAssegnazione = c.DataAssegnazione,
+                    string nomeCollaboratore = "—";
 
-                    NomeUtente = c.Operatore != null
-                        ? $"{c.Operatore.Nome} {c.Operatore.Cognome}".Trim()
-                        : "—",
+                    if (c.Utente != null)
+                        nomeCollaboratore = $"{c.Utente.Nome} {c.Utente.Cognome}";
 
-                    ImportoCalcolato = praticaEntity.Budget * (c.PercentualePrevisione / 100)
+                    return new ClusterViewModel
+                    {
+                        ID_Pratiche = c.ID_Pratiche,
+                        ID_Utente = c.ID_Utente,
+                        TipoCluster = c.TipoCluster,
+                        PercentualePrevisione = c.PercentualePrevisione,
+                        DataAssegnazione = c.DataAssegnazione,
+                        NomeUtente = nomeCollaboratore,
+                        ImportoCalcolato = praticaEntity.Budget * (c.PercentualePrevisione / 100)
+                    };
                 }).ToList();
+
 
                 // =====================================================
                 // 💼 COLLABORATORI DA COMPENSI DETTAGLIO
@@ -5603,7 +5595,6 @@ namespace SinergiaMvc.Controllers
         //}
 
 
-
         [HttpPost]
         public ActionResult CreaTipologiaCosto(TipologieCostiViewModel model)
         {
@@ -6099,6 +6090,12 @@ namespace SinergiaMvc.Controllers
                             categoriaDefault = "Trattenuta Sinergia";
                             break;
 
+                        case "Trattenuta Plafond":
+                        case "Trattenuta Plafond %":
+                            categoriaDefault = "Trattenuta Plafond";
+                            break;
+
+
                         case "Costo fisso Resident":
                         case "Costo Fisso Resident":
                             categoriaDefault = "Costo Fisso Resident";
@@ -6134,6 +6131,12 @@ namespace SinergiaMvc.Controllers
                         case "Trattenuta Sinergia":
                             categoriaFinale = "Trattenuta Sinergia";
                             break;
+
+                        case "Trattenuta Plafond":
+                        case "Trattenuta Plafond %":
+                            categoriaFinale = "Trattenuta Plafond";
+                            break;
+
 
                         case "Costo fisso Resident":
                         case "Costo Fisso Resident":
@@ -6221,6 +6224,7 @@ namespace SinergiaMvc.Controllers
 
                 bool èSpeciale =
                     cat == "trattenuta sinergia" ||
+                    cat == "trattenuta plafond" ||
                     cat == "owner fee" ;
 
                 System.Diagnostics.Trace.WriteLine($"Categoria normalizzata: '{cat}'");
@@ -8581,6 +8585,154 @@ namespace SinergiaMvc.Controllers
 
             var query = db.GenerazioneCosti.AsQueryable();
 
+            bool isAdmin = utenteCorrente.TipoUtente == "Admin";
+            bool isProfessionista = utenteCorrente.TipoUtente == "Professionista";
+            bool isSegreteria = utenteCorrente.TipoUtente == "Segreteria";
+
+            Trace.WriteLine($"[COSTI] Ruolo: Admin={isAdmin}, Prof={isProfessionista}, Segr={isSegreteria}");
+            Trace.WriteLine($"[COSTI] idUtenteCorrente (LOGIN) = {idUtenteCorrente}");
+
+
+            // =====================================================
+            // 🔗 ID OPERATORE CORRENTE (PROFESSIONISTA)
+            // =====================================================
+            int idOperatoreCorrente = db.OperatoriSinergia
+                .Where(o =>
+                    o.ID_UtenteCollegato == idUtenteCorrente &&
+                    o.TipoCliente == "Professionista")
+                .Select(o => o.ID_Operatore)
+                .FirstOrDefault();
+
+            Trace.WriteLine($"[COSTI] idOperatoreCorrente (PROFESSIONISTA) = {idOperatoreCorrente}");
+
+
+            // =====================================================
+            // 👥 TEAM DEL PROFESSIONISTA CORRENTE
+            // =====================================================
+            var teamProfessionista = db.MembriTeam
+                .Where(m =>
+                    m.ID_Professionista == idOperatoreCorrente &&
+                    m.Attivo)
+                .Select(m => m.ID_Team)
+                .ToList();
+
+            Trace.WriteLine($"[COSTI] Team trovati per professionista: " +
+                (teamProfessionista.Any()
+                    ? string.Join(",", teamProfessionista)
+                    : "NESSUNO"));
+
+
+            // =====================================================
+            // 🔐 FILTRO VISIBILITÀ PER RUOLO
+            //     PERSONALI + TEAM (solo quota giusta)
+            // =====================================================
+            if (!isAdmin)
+            {
+                if (isProfessionista)
+                {
+                    Trace.WriteLine("[COSTI] Applicato filtro PROFESSIONISTA (personali + team SOLO TUOI)");
+
+                    query = query.Where(c =>
+                        // 👤 costi personali (ID LOGIN)
+                        c.ID_Utente == idUtenteCorrente
+
+                        ||
+
+                        // 👥 costi TEAM (solo la tua quota operatore)
+                        (
+                            c.ID_Team.HasValue
+                            && teamProfessionista.Contains(c.ID_Team.Value)
+                            && c.ID_Utente == idOperatoreCorrente
+                        )
+                    );
+                }
+                else if (isSegreteria)
+                {
+                    Trace.WriteLine("[COSTI] Applicato filtro SEGRETERIA");
+
+                    // -----------------------------
+                    // ID OPERATORE collegati
+                    // -----------------------------
+                    var professionistiCollegati = db.OperatoriSinergia
+                        .Where(o =>
+                            o.ID_UtenteCollegato == idUtenteCorrente &&
+                            o.TipoCliente == "Professionista")
+                        .Select(o => o.ID_Operatore)
+                        .ToList();
+
+                    Trace.WriteLine("[COSTI] Professionisti collegati: " +
+                        (professionistiCollegati.Any()
+                            ? string.Join(",", professionistiCollegati)
+                            : "NESSUNO"));
+
+                    // -----------------------------
+                    // ID LOGIN dei professionisti collegati
+                    // -----------------------------
+                    var loginCollegati = db.OperatoriSinergia
+                        .Where(o =>
+                            professionistiCollegati.Contains(o.ID_Operatore) &&
+                            o.TipoCliente == "Professionista")
+                        .Select(o => o.ID_UtenteCollegato)
+                        .Distinct()
+                        .ToList();
+
+                    Trace.WriteLine("[COSTI] Login collegati: " +
+                        (loginCollegati.Any()
+                            ? string.Join(",", loginCollegati)
+                            : "NESSUNO"));
+
+                    // -----------------------------
+                    // TEAM dei professionisti collegati
+                    // -----------------------------
+                    var teamCollegati = db.MembriTeam
+                        .Where(m =>
+                            professionistiCollegati.Contains(m.ID_Professionista) &&
+                            m.Attivo)
+                        .Select(m => m.ID_Team)
+                        .Distinct()
+                        .ToList();
+
+                    Trace.WriteLine("[COSTI] Team collegati: " +
+                        (teamCollegati.Any()
+                            ? string.Join(",", teamCollegati)
+                            : "NESSUNO"));
+
+                    // -----------------------------
+                    // FILTRO SEGRETERIA CORRETTO
+                    // -----------------------------
+                    query = query.Where(c =>
+                        // 👤 costi personali (ID LOGIN dei professionisti collegati)
+                        (c.ID_Utente.HasValue && loginCollegati.Contains(c.ID_Utente.Value))
+
+                        ||
+
+                        // 👥 costi TEAM (solo quota del professionista collegato)
+                        (
+                            c.ID_Team.HasValue
+                            && teamCollegati.Contains(c.ID_Team.Value)
+                            && c.ID_Utente.HasValue
+                            && professionistiCollegati.Contains(c.ID_Utente.Value)
+                        )
+                    );
+                }
+            }
+
+
+            // =====================================================
+            // 🔎 TRACE SQL FINALE
+            // =====================================================
+            try
+            {
+                var sql = query.ToString(); // EF6
+                Trace.WriteLine("[COSTI] SQL FINALE:");
+                Trace.WriteLine(sql);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine("[COSTI] Impossibile stampare SQL: " + ex.Message);
+            }
+
+
             // Filtro date
             if (dataDa.HasValue)
                 query = query.Where(c => c.DataRegistrazione >= dataDa.Value);
@@ -8713,10 +8865,53 @@ namespace SinergiaMvc.Controllers
                 }
             }
 
-            ViewBag.ListaProfessionisti = db.Utenti
-                .Where(u => u.TipoUtente == "Professionista" && u.Stato == "Attivo")
-                .OrderBy(u => u.Nome)
-                .ToList();
+            // =====================================================
+            // 👤 LISTA PROFESSIONISTI (DIPENDE DAL RUOLO)
+            // =====================================================
+            List<Utenti> listaProfessionisti;
+
+            if (isAdmin)
+            {
+                // 🔓 Admin → tutti i professionisti attivi
+                listaProfessionisti = db.Utenti
+                    .Where(u => u.TipoUtente == "Professionista" && u.Stato == "Attivo")
+                    .OrderBy(u => u.Nome)
+                    .ToList();
+            }
+            else if (isProfessionista)
+            {
+                // 🔒 Professionista → solo se stesso
+                listaProfessionisti = db.Utenti
+                    .Where(u => u.ID_Utente == idUtenteCorrente)
+                    .ToList();
+            }
+            else if (isSegreteria)
+            {
+                // 🧾 Segreteria → solo professionisti collegati
+                var professionistiCollegati = db.OperatoriSinergia
+                    .Where(o =>
+                        o.ID_UtenteCollegato == idUtenteCorrente &&
+                        o.TipoCliente == "Professionista")
+                    .Select(o => o.ID_Operatore)
+                    .ToList();
+
+                listaProfessionisti = db.Utenti
+                    .Where(u =>
+                        u.TipoUtente == "Professionista"
+                        && u.Stato == "Attivo"
+                        && professionistiCollegati.Contains(u.ID_Utente))
+                    .OrderBy(u => u.Nome)
+                    .ToList();
+
+            }
+            else
+            {
+                // fallback di sicurezza
+                listaProfessionisti = new List<Utenti>();
+            }
+
+            ViewBag.ListaProfessionisti = listaProfessionisti;
+
 
 
             return PartialView("~/Views/GenerazioneCosti/_GenerazioneCostiList.cshtml", lista);
@@ -9333,7 +9528,7 @@ namespace SinergiaMvc.Controllers
                     return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
 
                 // ====================================================
-                // 🔐 Permessi (VERSIONE CORRETTA)
+                // 🔐 Permessi
                 // ====================================================
                 var permessiUtente = new PermessiViewModel
                 {
@@ -9342,7 +9537,6 @@ namespace SinergiaMvc.Controllers
 
                 if (utenteCorrente.TipoUtente == "Admin")
                 {
-                    // L’admin ha sempre tutti i permessi
                     permessiUtente.Permessi.Add(new PermessoSingoloViewModel
                     {
                         Aggiungi = true,
@@ -9368,6 +9562,7 @@ namespace SinergiaMvc.Controllers
                 }
 
                 ViewBag.PuoModificare = permessiUtente.Permessi.Any(p => p.Modifica);
+                ViewBag.PuoAggiungere = permessiUtente.Permessi.Any(p => p.Aggiungi);
                 ViewBag.PuoEliminare = permessiUtente.Permessi.Any(p => p.Elimina);
                 ViewBag.MostraAzioni = (ViewBag.PuoModificare || ViewBag.PuoEliminare);
                 ViewBag.Permessi = permessiUtente;
@@ -9401,9 +9596,43 @@ namespace SinergiaMvc.Controllers
                 var finanziamenti = db.FinanziamentiProfessionisti.ToList();
                 var versamenti = db.PlafondUtente.ToList();
                 var costi = db.CostiPersonaliUtente.ToList();
+
                 var pagamenti = db.GenerazioneCosti
                     .Where(g => g.Approvato == true && g.Stato == "Pagato" && g.ID_Utente.HasValue)
                     .ToList();
+
+                var bilancioJoin =
+                         (
+                             from b in db.BilancioProfessionista
+
+                                 // 🔥 join CORRETTO: per ID_Incasso, non per pratica
+                             join i in db.Incassi
+                                 on b.ID_Incasso equals i.ID_Incasso into incassiJoin
+                             from i in incassiJoin.DefaultIfEmpty()
+
+                                 // Avviso ricavato dall'incasso
+                             join a in db.AvvisiParcella
+                                 on i.ID_AvvisoParcella equals a.ID_AvvisoParcelle into avvisiJoin
+                             from a in avvisiJoin.DefaultIfEmpty()
+
+                             join p in db.Pratiche
+                                 on b.ID_Pratiche equals p.ID_Pratiche into praticheJoin
+                             from p in praticheJoin.DefaultIfEmpty()
+
+                             where b.Origine == "Incasso"
+                                && (b.Categoria == "Netto Effettivo Responsabile"
+                                    || b.Categoria == "Owner Fee")
+
+                             select new
+                             {
+                                 Bilancio = b,
+                                 Pratica = p,
+                                 Incasso = i,
+                                 Avviso = a
+                             }
+                         ).ToList();
+
+
 
                 // ====================================================
                 // 🔗 Applica filtro professionista
@@ -9412,44 +9641,45 @@ namespace SinergiaMvc.Controllers
                 {
                     int filter = idFiltro.Value;
 
-                    // Recupero ID_Operatore associato (ID alternativo)
                     int? idOperatore = db.OperatoriSinergia
                         .Where(o => o.ID_UtenteCollegato == filter && o.TipoCliente == "Professionista")
                         .Select(o => (int?)o.ID_Operatore)
                         .FirstOrDefault();
 
-                    // Finanziamenti personali
                     finanziamenti = finanziamenti
                         .Where(f => f.ID_Professionista == filter)
                         .ToList();
 
-                    // Versamenti → match su ID_Utente O ID_Operatore
                     versamenti = versamenti
                         .Where(v =>
                             v.ID_Utente == filter ||
-                            (idOperatore.HasValue && v.ID_Utente == idOperatore.Value)
-                        )
+                            (idOperatore.HasValue && v.ID_Utente == idOperatore.Value))
                         .ToList();
 
-                    // Costi personali
                     costi = costi
                         .Where(c => c.ID_Utente == filter)
                         .ToList();
 
-                    // Pagamenti costi
                     pagamenti = pagamenti
                         .Where(p => p.ID_Utente == filter)
                         .ToList();
+
+                    bilancioJoin = bilancioJoin
+                     .Where(x => x.Bilancio.ID_Professionista == filter)
+                     .ToList();
+
                 }
 
                 // ====================================================
-                // 💰 Mappo Finanziamenti
+                // 💰 Finanziamenti manuali
                 // ====================================================
                 var listaFin = finanziamenti.Select(f => new FinanziamentiProfessionistiViewModel
                 {
                     ID_Finanziamento = f.ID_Finanziamento,
                     NomeProfessionista = GetNomeProfessionista(f.ID_Professionista),
                     TipoPlafond = "Finanziamento",
+                    OrigineMovimento = "Finanziamento",
+                    Riferimento = $"Finanziamento #{f.ID_Finanziamento}",
                     Importo = f.Importo,
                     DataVersamento = f.DataVersamento ?? DateTime.MinValue,
                     PuoEliminare = ViewBag.PuoEliminare,
@@ -9457,27 +9687,125 @@ namespace SinergiaMvc.Controllers
                 }).ToList();
 
                 // ====================================================
-                // 💶 Mappo Versamenti (PlafondUtente)
+                // 💶 Versamenti / accantonamenti / prelievi
                 // ====================================================
-                var listaInc = versamenti.Select(v => new FinanziamentiProfessionistiViewModel
-                {
-                    ID_Plafond = v.ID_PlannedPlafond,
-                    NomeProfessionista = GetNomeProfessionista(v.ID_Utente),
-                    TipoPlafond = v.TipoPlafond ?? "Incasso",
-                    Importo = v.Importo,
-                    DataVersamento = v.DataVersamento ?? DateTime.MinValue,
-                    PuoEliminare = ViewBag.PuoEliminare,
-                    PuoModificare = ViewBag.PuoModificare
-                }).ToList();
 
                 // ====================================================
-                // 💸 Mappo Costi Personali
+                // 🔗 Mappa Incasso → Avviso
+                // ====================================================
+                var mappaAvvisiDaIncasso = db.Incassi
+                    .Where(i => i.ID_AvvisoParcella.HasValue)
+                    .Select(i => new
+                    {
+                        i.ID_Incasso,
+                        i.ID_AvvisoParcella
+                    })
+                    .ToDictionary(x => x.ID_Incasso, x => x.ID_AvvisoParcella.Value);
+
+                // ====================================================
+                // 🗂️ Mappa Pratiche → Titolo
+                // ====================================================
+                var mappaPratiche = db.Pratiche
+                    .Select(p => new { p.ID_Pratiche, p.Titolo })
+                    .ToDictionary(x => x.ID_Pratiche, x => x.Titolo);
+
+                // ====================================================
+                // 💶 Versamenti / accantonamenti / prelievi
+                // ====================================================
+                var listaInc = versamenti
+                    .Where(v =>
+                        v.TipoPlafond != "Finanziamento" &&
+                        v.TipoPlafond != "Storno Finanziamento" &&
+                        v.TipoPlafond != "Costo Personale")
+                    .Select(v =>
+                    {
+                        // ============================
+                        // 🔥 Ricostruzione Avviso
+                        // ============================
+                        int? idAvviso = null;
+
+                        if (v.ID_Incasso.HasValue &&
+                            mappaAvvisiDaIncasso.TryGetValue(v.ID_Incasso.Value, out var avvId))
+                        {
+                            idAvviso = avvId;
+                        }
+
+                        // ============================
+                        // 🧭 Tipo movimento normalizzato
+                        // ============================
+                        string tipo = v.TipoPlafond ?? "Incasso";
+
+                        if (tipo.Equals("Trattenuta Plafond", StringComparison.OrdinalIgnoreCase))
+                            tipo = "Trattenuta Plafond";
+                        else if (tipo.Equals("Owner Fee", StringComparison.OrdinalIgnoreCase))
+                            tipo = "Versamento Owner Fee";
+                        else if (tipo.Equals("Incasso", StringComparison.OrdinalIgnoreCase))
+                            tipo = "Versamento Netto";
+                        else if (tipo.Equals("Prelievo Professionista", StringComparison.OrdinalIgnoreCase))
+                            tipo = "Prelievo Professionista";
+
+                        // ============================
+                        // 🧾 Nome pratica (UI)
+                        // ============================
+                        string nomePratica = null;
+
+                        if (v.ID_Pratiche.HasValue &&
+                            mappaPratiche.TryGetValue(v.ID_Pratiche.Value, out var titolo))
+                        {
+                            nomePratica = titolo;
+                        }
+
+                        return new FinanziamentiProfessionistiViewModel
+                        {
+                            ID_Plafond = v.ID_PlannedPlafond,
+                            NomeProfessionista = GetNomeProfessionista(v.ID_Utente),
+                            TipoPlafond = tipo,
+
+                            // 🔥 Segno corretto
+                            Importo =
+                                tipo.Equals("Prelievo Professionista", StringComparison.OrdinalIgnoreCase)
+                                    ? -v.Importo
+                                    : v.Importo,
+
+                            DataVersamento = v.DataVersamento ?? DateTime.MinValue,
+
+                            // 🔧 FK tecniche
+                            ID_Pratiche = v.ID_Pratiche,
+                            ID_Incasso = v.ID_Incasso,
+
+                            // 🔥 Avviso ricostruito
+                            ID_AvvisoParcella = idAvviso,
+                            NumeroAvviso = idAvviso.HasValue
+                                ? $"AVV-{idAvviso.Value}"
+                                : null,
+
+                            // 🔥 Nome pratica ora popolato
+                            NomePratica = nomePratica,
+
+                            OrigineMovimento = tipo,
+
+                            Riferimento =
+                                v.ID_Incasso.HasValue
+                                    ? $"Incasso #{v.ID_Incasso}"
+                                    : $"Plafond #{v.ID_PlannedPlafond}",
+
+                            PuoEliminare = ViewBag.PuoEliminare,
+                            PuoModificare = ViewBag.PuoModificare
+                        };
+                    })
+                    .ToList();
+
+
+                // ====================================================
+                // 💸 Costi personali
                 // ====================================================
                 var listaCosti = costi.Select(c => new FinanziamentiProfessionistiViewModel
                 {
                     ID_CostoPersonale = c.ID_CostoPersonale,
                     NomeProfessionista = GetNomeProfessionista(c.ID_Utente),
                     TipoPlafond = "Costo Personale",
+                    OrigineMovimento = "Costo Personale",
+                    Riferimento = $"Costo #{c.ID_CostoPersonale}",
                     Importo = -(c.Importo ?? 0),
                     DataVersamento = c.DataInserimento,
                     PuoEliminare = ViewBag.PuoEliminare,
@@ -9485,7 +9813,7 @@ namespace SinergiaMvc.Controllers
                 }).ToList();
 
                 // ====================================================
-                // 🧾 Mappo Pagamenti (se richiesto)
+                // 🧾 Pagamenti costi (opzionali)
                 // ====================================================
                 var listaPagamenti = new List<FinanziamentiProfessionistiViewModel>();
 
@@ -9496,12 +9824,61 @@ namespace SinergiaMvc.Controllers
                         ID_Plafond = g.ID_GenerazioneCosto,
                         NomeProfessionista = GetNomeProfessionista(g.ID_Utente.Value),
                         TipoPlafond = "Pagamento Costo",
+                        OrigineMovimento = "Pagamento Costo",
+                        Riferimento = $"Costo #{g.ID_GenerazioneCosto}",
                         Importo = -(g.Importo ?? 0),
                         DataVersamento = g.DataRegistrazione,
-                        PuoEliminare = ViewBag.PuoEliminare,
-                        PuoModificare = ViewBag.PuoModificare
+                        PuoEliminare = false,
+                        PuoModificare = false
                     }).ToList();
                 }
+
+                var listaBilancio = bilancioJoin.Select(x =>
+                {
+                    var b = x.Bilancio;
+
+                    string tipo = b.Categoria == "Owner Fee"
+                        ? "Owner Fee"
+                        : "Netto Effettivo";
+
+                    string origineMovimento =
+                       x.Incasso != null
+                           ? "Incasso"
+                           : x.Avviso != null
+                               ? "Avviso Parcella"
+                               : x.Pratica != null
+                                   ? "Pratica"
+                                   : x.Bilancio.Origine;
+
+                    return new FinanziamentiProfessionistiViewModel
+                    {
+                        // 🔧 ID tecnici
+                        ID_Plafond = b.ID_Bilancio,
+                        ID_Pratiche = b.ID_Pratiche,
+                        ID_Incasso = x.Incasso?.ID_Incasso,
+                        ID_AvvisoParcella = x.Avviso?.ID_AvvisoParcelle,
+
+                        // 🧾 Dati visivi
+                        NomeProfessionista = GetNomeProfessionista(b.ID_Professionista),
+                        TipoPlafond = tipo,
+                        Importo = b.Importo,
+                        DataVersamento = b.DataRegistrazione,
+
+                        // (se vuoi mostrarli in tabella dopo)
+                        NomePratica = x.Pratica?.Titolo ?? null,
+                        NumeroAvviso = x.Avviso != null
+                        ? $"AVV-{x.Avviso.ID_AvvisoParcelle}"
+                        : null,
+                        OrigineMovimento = origineMovimento,
+                        Riferimento =
+                        x.Incasso != null ? $"Incasso #{x.Incasso.ID_Incasso}" :
+                        x.Avviso != null ? $"Avviso #{x.Avviso.ID_AvvisoParcelle}" :
+                        x.Pratica != null ? $"Pratica #{x.Pratica.ID_Pratiche}" :
+                        null,
+                        PuoEliminare = false,
+                        PuoModificare = false
+                    };
+                }).ToList();
 
                 // ====================================================
                 // 📊 Unisco tutto
@@ -9510,11 +9887,33 @@ namespace SinergiaMvc.Controllers
                     .Concat(listaInc)
                     .Concat(listaCosti)
                     .Concat(listaPagamenti)
+                    .Concat(listaBilancio)
                     .OrderByDescending(x => x.DataVersamento)
                     .ToList();
 
                 ViewBag.TotalePlafond = lista.Sum(x => x.Importo);
                 ViewBag.MostraPagamenti = mostraPagamenti;
+
+                // 🔥 QUESTO BLOCCO MANCAVA
+                // ====================================================
+                // 👥 Lista professionisti per modale finanziamento
+                // ====================================================
+                ViewBag.Professionisti = db.Utenti
+                    .Where(u =>
+                        u.TipoUtente == "Professionista" &&
+                        u.Stato == "Attivo"      // 🔥 qui la logica corretta per Sinergia
+                    )
+                    .OrderBy(u => u.Cognome)
+                    .Select(u => new SelectListItem
+                    {
+                        Value = u.ID_Utente.ToString(),
+                        Text = u.Cognome + " " + u.Nome
+                    })
+                    .ToList();
+
+                ViewBag.IDUtenteCorrente = idUtenteCorrente;
+                ViewBag.TipoUtenteCorrente = utenteCorrente.TipoUtente;
+                ViewBag.NomeUtenteCorrente = utenteCorrente.Cognome + " " + utenteCorrente.Nome;
 
                 return PartialView("~/Views/Plafond/_GestionePlafondList.cshtml", lista);
             }
@@ -9527,7 +9926,6 @@ namespace SinergiaMvc.Controllers
                 }, JsonRequestBehavior.AllowGet);
             }
         }
-
 
 
         private string GetNomeProfessionista(int id)
@@ -9589,135 +9987,108 @@ namespace SinergiaMvc.Controllers
                 System.Diagnostics.Debug.WriteLine($"- Importo: {model.Importo}");
                 System.Diagnostics.Debug.WriteLine($"- DataVersamento: {model.DataVersamento?.ToString("yyyy-MM-dd") ?? "null"}");
 
-                // ✅ Controllo sicurezza su date "minime" non valide
+                if (model.Importo <= 0)
+                    return Json(new { success = false, message = "Importo non valido." });
+
+                // ✅ sicurezza su date SQL
                 if (model.DataVersamento.HasValue && model.DataVersamento.Value < new DateTime(1753, 1, 1))
                     model.DataVersamento = null;
 
-                // ➕ Crea finanziamento
-                var nuovo = new FinanziamentiProfessionisti
+                using (var tx = db.Database.BeginTransaction())
                 {
-                    ID_Professionista = model.ID_Professionista,
-                    Importo = model.Importo,
-                    DataVersamento = model.DataVersamento,
-                    ID_UtenteCreatore = idUtenteCorrente,
-                    DataUltimaModifica = DateTime.Now,
-                    ID_UtenteUltimaModifica = idUtenteCorrente
-                };
+                    var oggi = DateTime.Today;
 
-                db.FinanziamentiProfessionisti.Add(nuovo);
-                db.SaveChanges();
-
-                // 🔁 Versionamento archivio
-                db.FinanziamentiProfessionisti_a.Add(new FinanziamentiProfessionisti_a
-                {
-                    ID_Finanziamento_Originale = nuovo.ID_Finanziamento,
-                    ID_Professionista = nuovo.ID_Professionista,
-                    Importo = nuovo.Importo,
-                    DataVersamento = nuovo.DataVersamento,
-                    ID_UtenteCreatore = idUtenteCorrente,
-                    ID_UtenteUltimaModifica = idUtenteCorrente,
-                    DataUltimaModifica = DateTime.Now,
-                    NumeroVersione = 1,
-                    Operazione = "Inserimento",
-                    ModificheTestuali = $"Inserito finanziamento di {nuovo.Importo:N2}" +
-                                        (nuovo.DataVersamento.HasValue ? $" il {nuovo.DataVersamento.Value:dd/MM/yyyy}" : ""),
-                    DataArchiviazione = DateTime.Now,
-                    ID_UtenteArchiviazione = idUtenteCorrente
-                });
-
-                db.SaveChanges();
-
-                // 🔁 Calcolo totale finanziamenti
-                var finanziamentiTotali = db.FinanziamentiProfessionisti
-                    .Where(f => f.ID_Professionista == model.ID_Professionista)
-                    .Sum(f => (decimal?)f.Importo) ?? 0;
-
-                // 🔁 Aggiorna o crea Plafond
-                var plafondEsistente = db.PlafondUtente
-                    .FirstOrDefault(p => p.ID_Utente == model.ID_Professionista);
-
-                if (plafondEsistente != null)
-                {
-                    int ultimaVersione = db.PlafondUtente_a
-                        .Where(p => p.ID_Utente == plafondEsistente.ID_Utente)
-                        .Select(p => p.NumeroVersione)
-                        .DefaultIfEmpty(0)
-                        .Max();
-
-                    db.PlafondUtente_a.Add(new PlafondUtente_a
+                    // ====================================================
+                    // 1️⃣ Salvataggio finanziamento
+                    // ====================================================
+                    var nuovo = new FinanziamentiProfessionisti
                     {
-                        ID_Utente = plafondEsistente.ID_Utente,
-                        ImportoTotale = plafondEsistente.ImportoTotale,
-                        TipoPlafond = plafondEsistente.TipoPlafond,
-                        DataInizio = plafondEsistente.DataInizio,
-                        DataFine = plafondEsistente.DataFine,
-                        ID_UtenteCreatore = plafondEsistente.ID_UtenteCreatore,
+                        ID_Professionista = model.ID_Professionista,
+                        Importo = model.Importo,
+                        DataVersamento = model.DataVersamento,
+                        ID_UtenteCreatore = idUtenteCorrente,
+                        DataUltimaModifica = DateTime.Now,
+                        ID_UtenteUltimaModifica = idUtenteCorrente
+                    };
+
+                    db.FinanziamentiProfessionisti.Add(nuovo);
+                    db.SaveChanges();
+
+                    // ====================================================
+                    // 2️⃣ Versionamento finanziamento
+                    // ====================================================
+                    db.FinanziamentiProfessionisti_a.Add(new FinanziamentiProfessionisti_a
+                    {
+                        ID_Finanziamento_Originale = nuovo.ID_Finanziamento,
+                        ID_Professionista = nuovo.ID_Professionista,
+                        Importo = nuovo.Importo,
+                        DataVersamento = nuovo.DataVersamento,
+                        ID_UtenteCreatore = idUtenteCorrente,
                         ID_UtenteUltimaModifica = idUtenteCorrente,
                         DataUltimaModifica = DateTime.Now,
-                        NumeroVersione = ultimaVersione + 1,
-                        Operazione = "Aggiornamento dopo finanziamento",
-                        ModificheTestuali = $"Plafond aggiornato a {finanziamentiTotali:N2}",
+                        NumeroVersione = 1,
+                        Operazione = "Inserimento",
+                        ModificheTestuali =
+                            $"Inserito finanziamento di {nuovo.Importo:N2}" +
+                            (nuovo.DataVersamento.HasValue
+                                ? $" il {nuovo.DataVersamento.Value:dd/MM/yyyy}"
+                                : ""),
                         DataArchiviazione = DateTime.Now,
                         ID_UtenteArchiviazione = idUtenteCorrente
                     });
 
-                    plafondEsistente.ImportoTotale = finanziamentiTotali;
-                    plafondEsistente.DataUltimaModifica = DateTime.Now;
-                    plafondEsistente.ID_UtenteUltimaModifica = idUtenteCorrente;
-                }
-                else
-                {
-                    var nuovoPlafond = new PlafondUtente
-                    {
-                        ID_Utente = model.ID_Professionista,
-                        ImportoTotale = finanziamentiTotali,
-                        TipoPlafond = "Investimento",
-                        DataInizio = model.DataVersamento,
-                        DataFine = null,
-                        ID_UtenteCreatore = idUtenteCorrente,
-                        DataUltimaModifica = DateTime.Now,
-                        ID_UtenteUltimaModifica = idUtenteCorrente,
-                        DataVersamento = model.DataVersamento,
-                        DataInserimento = DateTime.Now,
-                        ID_UtenteInserimento = idUtenteCorrente,
-                        Importo = model.Importo,
-                        Note = null,
-                        ID_Incasso = null,
-                        ID_Pratiche = null
-                    };
-
-                    db.PlafondUtente.Add(nuovoPlafond);
                     db.SaveChanges();
 
+                    // ====================================================
+                    // 3️⃣ Riga PlafondUtente (movimento reale)
+                    // ====================================================
+                    var vocePlafond = new PlafondUtente
+                    {
+                        ID_Utente = model.ID_Professionista,
+                        ImportoTotale = model.Importo,   // valore singolo evento
+                        Importo = model.Importo,
+                        TipoPlafond = "Finanziamento",
+                        DataVersamento = model.DataVersamento ?? oggi,
+                        DataInserimento = DateTime.Now,
+                        DataCompetenzaFinanziaria = model.DataVersamento ?? oggi,
+                        Operazione = "Finanziamento personale",
+                        Note = "Versamento fondi nel plafond",
+                        ID_UtenteCreatore = idUtenteCorrente,
+                        ID_UtenteInserimento = idUtenteCorrente
+                    };
+
+                    db.PlafondUtente.Add(vocePlafond);
+                    db.SaveChanges();
+
+                    // ====================================================
+                    // 4️⃣ Versionamento riga plafond
+                    // ====================================================
                     db.PlafondUtente_a.Add(new PlafondUtente_a
                     {
-                        ID_Utente = nuovoPlafond.ID_Utente,
-                        ImportoTotale = nuovoPlafond.ImportoTotale,
-                        TipoPlafond = nuovoPlafond.TipoPlafond,
-                        DataInizio = nuovoPlafond.DataInizio,
-                        DataFine = nuovoPlafond.DataFine,
-                        ID_UtenteCreatore = nuovoPlafond.ID_UtenteCreatore,
-                        ID_UtenteUltimaModifica = nuovoPlafond.ID_UtenteUltimaModifica,
-                        DataUltimaModifica = nuovoPlafond.DataUltimaModifica,
+                        ID_PlannedPlafond_Originale = vocePlafond.ID_PlannedPlafond,
+                        ID_Utente = vocePlafond.ID_Utente,
+                        ImportoTotale = vocePlafond.ImportoTotale,
+                        Importo = vocePlafond.Importo,
+                        TipoPlafond = vocePlafond.TipoPlafond,
+                        DataVersamento = vocePlafond.DataVersamento,
+                        DataInserimento = vocePlafond.DataInserimento,
+                        DataCompetenzaFinanziaria = vocePlafond.DataCompetenzaFinanziaria,
+                        Operazione = vocePlafond.Operazione,
+                        Note = vocePlafond.Note,
                         NumeroVersione = 1,
-                        Operazione = "Inserimento",
-                        ModificheTestuali = $"Creato nuovo plafond con importo {nuovoPlafond.ImportoTotale:N2}",
                         DataArchiviazione = DateTime.Now,
-                        ID_UtenteArchiviazione = idUtenteCorrente,
-                        DataVersamento = nuovoPlafond.DataVersamento,
-                        DataInserimento = nuovoPlafond.DataInserimento,
-                        ID_UtenteInserimento = nuovoPlafond.ID_UtenteInserimento,
-                        Importo = nuovoPlafond.Importo,
-                        Note = nuovoPlafond.Note,
-                        ID_Incasso = nuovoPlafond.ID_Incasso,
-                        ID_Pratiche = nuovoPlafond.ID_Pratiche,
-                        ID_PlannedPlafond_Originale = nuovoPlafond.ID_PlannedPlafond
+                        ID_UtenteArchiviazione = idUtenteCorrente
                     });
+
+                    db.SaveChanges();
+                    tx.Commit();
                 }
 
-                db.SaveChanges();
-
-                return Json(new { success = true, message = "✅ Finanziamento registrato e Plafond aggiornato." });
+                return Json(new
+                {
+                    success = true,
+                    message = "✅ Finanziamento registrato correttamente nel plafond."
+                });
             }
             catch (Exception ex)
             {
@@ -9727,12 +10098,11 @@ namespace SinergiaMvc.Controllers
                 return Json(new
                 {
                     success = false,
-                    message = "Errore durante la creazione del finanziamento: " + ex.GetBaseException().Message
+                    message = "Errore durante la creazione del finanziamento: " +
+                              ex.GetBaseException().Message
                 });
             }
         }
-
-
 
 
         [HttpPost]
@@ -9743,7 +10113,9 @@ namespace SinergiaMvc.Controllers
             if (utente == null)
                 return Json(new { success = false, message = "Utente non autenticato." });
 
-            var finanziamento = db.FinanziamentiProfessionisti.FirstOrDefault(f => f.ID_Finanziamento == model.ID_Finanziamento);
+            var finanziamento = db.FinanziamentiProfessionisti
+                .FirstOrDefault(f => f.ID_Finanziamento == model.ID_Finanziamento);
+
             if (finanziamento == null)
                 return Json(new { success = false, message = "Finanziamento non trovato." });
 
@@ -9751,34 +10123,21 @@ namespace SinergiaMvc.Controllers
             var permessi = db.Permessi.Where(p => p.ID_Utente == idUtente).ToList();
             bool puoModificare = isAdmin || permessi.Any(p => p.Modifica == true);
 
-            if (!isAdmin)
-            {
-                if (utente.TipoUtente == "Professionista" && finanziamento.ID_Professionista != idUtente)
-                    return Json(new { success = false, message = "Non puoi modificare finanziamenti di altri professionisti." });
-
-                if (utente.TipoUtente == "Collaboratore")
-                {
-                    var professionistiAssegnati = db.RelazioneUtenti
-                        .Where(r => r.ID_UtenteAssociato == idUtente && r.Stato == "Attivo")
-                        .Select(r => r.ID_Utente)
-                        .ToList();
-
-                    if (!professionistiAssegnati.Contains(finanziamento.ID_Professionista))
-                        return Json(new { success = false, message = "Non hai accesso a questo finanziamento." });
-                }
-            }
-
             if (!puoModificare)
                 return Json(new { success = false, message = "Non hai i permessi per modificare finanziamenti." });
 
             try
             {
-                using (var transaction = db.Database.BeginTransaction())
+                using (var tx = db.Database.BeginTransaction())
                 {
-                    // 🔍 Confronto dati finanziamento
+                    // ===============================
+                    // 1️⃣ Versionamento finanziamento
+                    // ===============================
                     var modifiche = new List<string>();
+
                     if (finanziamento.Importo != model.Importo)
                         modifiche.Add($"Importo: {finanziamento.Importo:N2} → {model.Importo:N2}");
+
                     if (finanziamento.DataVersamento?.Date != model.DataVersamento?.Date)
                         modifiche.Add($"DataVersamento: {finanziamento.DataVersamento:dd/MM/yyyy} → {model.DataVersamento:dd/MM/yyyy}");
 
@@ -9791,7 +10150,7 @@ namespace SinergiaMvc.Controllers
                         ID_Finanziamento_Originale = finanziamento.ID_Finanziamento,
                         ID_Professionista = finanziamento.ID_Professionista,
                         Importo = finanziamento.Importo,
-                        DataVersamento = finanziamento.DataVersamento ?? DateTime.MinValue, // fallback per sicurezza
+                        DataVersamento = finanziamento.DataVersamento,
                         ID_UtenteCreatore = finanziamento.ID_UtenteCreatore,
                         ID_UtenteUltimaModifica = finanziamento.ID_UtenteUltimaModifica,
                         DataUltimaModifica = finanziamento.DataUltimaModifica,
@@ -9802,75 +10161,115 @@ namespace SinergiaMvc.Controllers
                         Operazione = "Modifica"
                     });
 
-                    // ✏️ Modifica
+                    // ===============================
+                    // 2️⃣ Update finanziamento
+                    // ===============================
+                    decimal importoVecchio = finanziamento.Importo;
+
                     finanziamento.Importo = model.Importo;
                     finanziamento.DataVersamento = model.DataVersamento;
                     finanziamento.ID_UtenteUltimaModifica = idUtente;
                     finanziamento.DataUltimaModifica = DateTime.Now;
 
-                    // 🔁 Ricalcolo e aggiornamento Plafond
-                    var totale = db.FinanziamentiProfessionisti
-                        .Where(f => f.ID_Professionista == finanziamento.ID_Professionista)
-                        .Sum(f => (decimal?)f.Importo) ?? 0;
+                    db.SaveChanges();
 
-                    var plafond = db.PlafondUtente.FirstOrDefault(p => p.ID_Utente == finanziamento.ID_Professionista);
-                    if (plafond != null)
+                    // ===============================
+                    // 3️⃣ STORNO plafond (vecchio)
+                    // ===============================
+                    var storno = new PlafondUtente
                     {
-                        decimal importoPrecedente = plafond.ImportoTotale;
+                        ID_Utente = finanziamento.ID_Professionista,
+                        ImportoTotale = -importoVecchio,
+                        Importo = -importoVecchio,
+                        TipoPlafond = "Finanziamento",
+                        DataVersamento = DateTime.Today,
+                        DataInserimento = DateTime.Now,
+                        DataCompetenzaFinanziaria = DateTime.Today,
+                        Operazione = "Storno finanziamento modificato",
+                        Note = $"Storno vecchio importo {importoVecchio:N2} €",
+                        ID_UtenteCreatore = idUtente,
+                        ID_UtenteInserimento = idUtente
+                    };
 
-                        var modifichePlafond = new List<string>();
-                        if (importoPrecedente != totale)
-                            modifichePlafond.Add($"ImportoTotale: {importoPrecedente:N2} → {totale:N2}");
+                    db.PlafondUtente.Add(storno);
+                    db.SaveChanges();
 
-                        if (modifichePlafond.Any())
-                        {
-                            int ultimaVers = db.PlafondUtente_a
-                                .Where(a => a.ID_Utente == plafond.ID_Utente)
-                                .Select(a => (int?)a.NumeroVersione).Max() ?? 0;
-
-                            db.PlafondUtente_a.Add(new PlafondUtente_a
-                            {
-                                ID_Utente = plafond.ID_Utente,
-                                ImportoTotale = importoPrecedente,
-                                TipoPlafond = plafond.TipoPlafond,
-                                DataInizio = plafond.DataInizio,
-                                DataFine = plafond.DataFine,
-                                ID_UtenteCreatore = plafond.ID_UtenteCreatore,
-                                ID_UtenteUltimaModifica = plafond.ID_UtenteUltimaModifica,
-                                DataUltimaModifica = plafond.DataUltimaModifica,
-                                DataArchiviazione = DateTime.Now,
-                                ID_UtenteArchiviazione = idUtente,
-                                NumeroVersione = ultimaVers + 1,
-                                ModificheTestuali = string.Join(" | ", modifichePlafond),
-                                Operazione = "Modifica"
-                            });
-                        }
-
-                        plafond.ImportoTotale = totale;
-                        plafond.DataUltimaModifica = DateTime.Now;
-                        plafond.ID_UtenteUltimaModifica = idUtente;
-                    }
+                    db.PlafondUtente_a.Add(new PlafondUtente_a
+                    {
+                        ID_PlannedPlafond_Originale = storno.ID_PlannedPlafond,
+                        ID_Utente = storno.ID_Utente,
+                        ImportoTotale = storno.ImportoTotale,
+                        Importo = storno.Importo,
+                        TipoPlafond = storno.TipoPlafond,
+                        DataVersamento = storno.DataVersamento,
+                        DataInserimento = storno.DataInserimento,
+                        DataCompetenzaFinanziaria = storno.DataCompetenzaFinanziaria,
+                        Operazione = storno.Operazione,
+                        Note = storno.Note,
+                        NumeroVersione = 1,
+                        DataArchiviazione = DateTime.Now,
+                        ID_UtenteArchiviazione = idUtente
+                    });
 
                     db.SaveChanges();
-                    transaction.Commit();
 
-                    return Json(new { success = true, message = "✅ Finanziamento e Plafond aggiornati con versione." });
+                    // ===============================
+                    // 4️⃣ NUOVO movimento plafond
+                    // ===============================
+                    var nuovaVoce = new PlafondUtente
+                    {
+                        ID_Utente = finanziamento.ID_Professionista,
+                        ImportoTotale = model.Importo,
+                        Importo = model.Importo,
+                        TipoPlafond = "Finanziamento",
+                        DataVersamento = model.DataVersamento ?? DateTime.Today,
+                        DataInserimento = DateTime.Now,
+                        DataCompetenzaFinanziaria = model.DataVersamento ?? DateTime.Today,
+                        Operazione = "Finanziamento modificato",
+                        Note = $"Nuovo importo {model.Importo:N2} €",
+                        ID_UtenteCreatore = idUtente,
+                        ID_UtenteInserimento = idUtente
+                    };
+
+                    db.PlafondUtente.Add(nuovaVoce);
+                    db.SaveChanges();
+
+                    db.PlafondUtente_a.Add(new PlafondUtente_a
+                    {
+                        ID_PlannedPlafond_Originale = nuovaVoce.ID_PlannedPlafond,
+                        ID_Utente = nuovaVoce.ID_Utente,
+                        ImportoTotale = nuovaVoce.ImportoTotale,
+                        Importo = nuovaVoce.Importo,
+                        TipoPlafond = nuovaVoce.TipoPlafond,
+                        DataVersamento = nuovaVoce.DataVersamento,
+                        DataInserimento = nuovaVoce.DataInserimento,
+                        DataCompetenzaFinanziaria = nuovaVoce.DataCompetenzaFinanziaria,
+                        Operazione = nuovaVoce.Operazione,
+                        Note = nuovaVoce.Note,
+                        NumeroVersione = 1,
+                        DataArchiviazione = DateTime.Now,
+                        ID_UtenteArchiviazione = idUtente
+                    });
+
+                    db.SaveChanges();
+                    tx.Commit();
+
+                    return Json(new
+                    {
+                        success = true,
+                        message = "✅ Finanziamento modificato con storno + nuova riga plafond."
+                    });
                 }
             }
-            catch (DbEntityValidationException ex)
+            catch (Exception ex)
             {
-                var errorMessages = ex.EntityValidationErrors
-                    .SelectMany(e => e.ValidationErrors)
-                    .Select(e => $"❌ {e.PropertyName}: {e.ErrorMessage}")
-                    .ToList();
-
-                var fullErrorMessage = string.Join(" | ", errorMessages);
-                return Json(new { success = false, message = "Errore di validazione: " + fullErrorMessage });
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante la modifica: " + ex.GetBaseException().Message
+                });
             }
         }
-
-
-
 
 
         [HttpGet]
@@ -9907,7 +10306,9 @@ namespace SinergiaMvc.Controllers
             if (utente == null)
                 return Json(new { success = false, message = "Utente non autenticato." });
 
-            var finanziamento = db.FinanziamentiProfessionisti.FirstOrDefault(f => f.ID_Finanziamento == id);
+            var finanziamento = db.FinanziamentiProfessionisti
+                .FirstOrDefault(f => f.ID_Finanziamento == id);
+
             if (finanziamento == null)
                 return Json(new { success = false, message = "Finanziamento non trovato." });
 
@@ -9917,7 +10318,9 @@ namespace SinergiaMvc.Controllers
 
             if (utente.TipoUtente == "Admin")
                 autorizzato = true;
-            else if (utente.TipoUtente == "Professionista" && finanziamento.ID_Professionista == idUtente && puoEliminare)
+            else if (utente.TipoUtente == "Professionista" &&
+                     finanziamento.ID_Professionista == idUtente &&
+                     puoEliminare)
                 autorizzato = true;
             else if (utente.TipoUtente == "Collaboratore")
             {
@@ -9935,256 +10338,417 @@ namespace SinergiaMvc.Controllers
 
             try
             {
-                using (var transaction = db.Database.BeginTransaction())
+                using (var tx = db.Database.BeginTransaction())
                 {
-                    // 🔢 Numero versione precedente del finanziamento
+                    DateTime oggi = DateTime.Today;
+
+                    // ====================================================
+                    // 1️⃣ VERSIONAMENTO EVENTO FINANZIAMENTO
+                    // ====================================================
                     int ultimaVersione = db.FinanziamentiProfessionisti_a
                         .Where(a => a.ID_Finanziamento_Originale == finanziamento.ID_Finanziamento)
-                        .Select(a => (int?)a.NumeroVersione).Max() ?? 0;
+                        .Select(a => (int?)a.NumeroVersione)
+                        .Max() ?? 0;
 
-                    // 🗂️ Archivia finanziamento eliminato
                     db.FinanziamentiProfessionisti_a.Add(new FinanziamentiProfessionisti_a
                     {
+                        ID_Finanziamento_Originale = finanziamento.ID_Finanziamento,
                         ID_Professionista = finanziamento.ID_Professionista,
                         Importo = finanziamento.Importo,
-                        DataVersamento = (DateTime)finanziamento.DataVersamento,
+                        DataVersamento = finanziamento.DataVersamento ?? DateTime.MinValue,
                         ID_UtenteCreatore = finanziamento.ID_UtenteCreatore,
                         ID_UtenteUltimaModifica = idUtente,
                         DataUltimaModifica = DateTime.Now,
-                        ID_Finanziamento_Originale = finanziamento.ID_Finanziamento,
                         DataArchiviazione = DateTime.Now,
                         ID_UtenteArchiviazione = idUtente,
                         NumeroVersione = ultimaVersione + 1,
-                        ModificheTestuali = "❌ Eliminazione finanziamento",
-                        Operazione = "Eliminazione"
+                        Operazione = "Eliminazione",
+                        ModificheTestuali = "❌ Eliminazione finanziamento"
                     });
 
-                    db.FinanziamentiProfessionisti.Remove(finanziamento);
-                    db.SaveChanges(); // Stato consistente prima di aggiornare il plafond
-
-                    // 🔁 Ricalcola Plafond
-                    var nuovoTotale = db.FinanziamentiProfessionisti
-                        .Where(f => f.ID_Professionista == finanziamento.ID_Professionista)
-                        .Sum(f => (decimal?)f.Importo) ?? 0;
-
-                    var plafond = db.PlafondUtente.FirstOrDefault(p => p.ID_Utente == finanziamento.ID_Professionista);
-                    if (plafond != null)
+                    // ====================================================
+                    // 2️⃣ STORNO CONTABILE NEL PLAFOND (LEDGER)
+                    // ====================================================
+                    var storno = new PlafondUtente
                     {
-                        // 🔢 Versionamento plafond
-                        int ultimaVersPlafond = db.PlafondUtente_a
-                            .Where(a => a.ID_Utente == plafond.ID_Utente)
-                            .Select(a => (int?)a.NumeroVersione).Max() ?? 0;
+                        ID_Utente = finanziamento.ID_Professionista,
+                        ImportoTotale = -finanziamento.Importo,
+                        Importo = -finanziamento.Importo,
+                        TipoPlafond = "Storno Finanziamento",
+                        DataVersamento = oggi,
+                        DataInserimento = oggi,
+                        DataCompetenzaFinanziaria = oggi,
+                        Operazione = "Storno finanziamento eliminato",
+                        Note = $"Storno finanziamento ID {finanziamento.ID_Finanziamento}",
+                        ID_UtenteCreatore = idUtente,
+                        ID_UtenteInserimento = idUtente
+                    };
 
-                        db.PlafondUtente_a.Add(new PlafondUtente_a
-                        {
-                            ID_Utente = plafond.ID_Utente,
-                            ImportoTotale = plafond.ImportoTotale,
-                            TipoPlafond = plafond.TipoPlafond,
-                            DataInizio = plafond.DataInizio,
-                            DataFine = plafond.DataFine,
-                            ID_UtenteCreatore = plafond.ID_UtenteCreatore,
-                            ID_UtenteUltimaModifica = idUtente,
-                            DataUltimaModifica = DateTime.Now,
-                            NumeroVersione = ultimaVersPlafond + 1,
-                            Operazione = "Aggiornamento dopo eliminazione",
-                            ModificheTestuali = $"❌ Eliminazione finanziamento, nuovo totale = {nuovoTotale:N2}",
-                            DataArchiviazione = DateTime.Now,
-                            ID_UtenteArchiviazione = idUtente
-                        });
+                    db.PlafondUtente.Add(storno);
+                    db.SaveChanges();
 
-                        // 🔁 Aggiorna plafond attuale
-                        plafond.ImportoTotale = nuovoTotale;
-                        plafond.DataUltimaModifica = DateTime.Now;
-                        plafond.ID_UtenteUltimaModifica = idUtente;
+                    db.PlafondUtente_a.Add(new PlafondUtente_a
+                    {
+                        ID_PlannedPlafond_Originale = storno.ID_PlannedPlafond,
+                        ID_Utente = storno.ID_Utente,
+                        ImportoTotale = storno.ImportoTotale,
+                        Importo = storno.Importo,
+                        TipoPlafond = storno.TipoPlafond,
+                        DataVersamento = storno.DataVersamento,
+                        DataInserimento = storno.DataInserimento,
+                        DataCompetenzaFinanziaria = storno.DataCompetenzaFinanziaria,
+                        Operazione = storno.Operazione,
+                        Note = storno.Note,
+                        NumeroVersione = 1,
+                        DataArchiviazione = DateTime.Now,
+                        ID_UtenteArchiviazione = idUtente
+                    });
 
-                        db.SaveChanges();
-                    }
 
-                    transaction.Commit();
-                    return Json(new { success = true, message = "✅ Finanziamento eliminato e Plafond aggiornato con versionamento." });
+                    // ====================================================
+                    // 3️⃣ ELIMINAZIONE EVENTO
+                    // ====================================================
+                    db.FinanziamentiProfessionisti.Remove(finanziamento);
+                    db.SaveChanges();
+
+                    tx.Commit();
+
+                    return Json(new
+                    {
+                        success = true,
+                        message = "✅ Finanziamento eliminato con storno contabile."
+                    });
                 }
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Errore durante l'eliminazione: " + ex.Message });
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante l'eliminazione: " + ex.GetBaseException().Message
+                });
             }
         }
-
-
 
 
         [HttpPost]
         public ActionResult InserisciCostoPersonale(CostiPersonaliUtenteViewModel model)
         {
-            int idUtente = UserManager.GetIDUtenteCollegato();
-            var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtente);
-            if (utente == null)
-                return Json(new { success = false, message = "Utente non autenticato." });
-
-            int idProfessionista = 0;
-
-            if (utente.TipoUtente == "Professionista")
-            {
-                idProfessionista = utente.ID_Utente;
-            }
-            else if (utente.TipoUtente == "Collaboratore")
-            {
-                var rel = db.RelazioneUtenti
-                    .FirstOrDefault(r => r.ID_UtenteAssociato == idUtente && r.Stato == "Attivo");
-
-                if (rel == null)
-                    return Json(new { success = false, message = "Nessun professionista assegnato." });
-
-                idProfessionista = (int)rel.ID_Utente;
-            }
-
-            var plafond = db.PlafondUtente
-                .FirstOrDefault(p => p.ID_Utente == idProfessionista && p.TipoPlafond == "Investimento");
-
-            if (plafond == null)
-                return Json(new { success = false, message = "Plafond non trovato per questo professionista." });
-
-            var totaleCostiPersonali = db.CostiPersonaliUtente
-                .Where(c => c.ID_Utente == idProfessionista)
-                .Sum(c => (decimal?)c.Importo) ?? 0;
-
-            if (totaleCostiPersonali + model.Importo > plafond.ImportoTotale)
-            {
-                return Json(new
-                {
-                    success = false,
-                    message = "❌ Il costo personale supera il plafond disponibile."
-                });
-            }
-
             try
             {
+                int idUtenteLoggato = UserManager.GetIDUtenteCollegato();
+
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+                System.Diagnostics.Trace.WriteLine("📥 [InserisciCostoPersonale] START");
+                System.Diagnostics.Trace.WriteLine($"   Utente loggato ........ {idUtenteLoggato}");
+                System.Diagnostics.Trace.WriteLine($"   Model.ID_Utente ....... {model.ID_Utente}");
+                System.Diagnostics.Trace.WriteLine($"   Model.Importo ........ {model.Importo}");
+                System.Diagnostics.Trace.WriteLine($"   Model.DataInserimento  {model.DataInserimento:yyyy-MM-dd}");
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+
+                // ====================================================
+                // 🔥 FIX CULTURE: ricostruisco Importo dalla Request
+                // ====================================================
+
+                var rawImporto = Request["Importo"];
+
+                System.Diagnostics.Trace.WriteLine($"   Request[Importo] RAW .. {rawImporto}");
+
+                if (string.IsNullOrWhiteSpace(rawImporto))
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Importo mancante."
+                    });
+                }
+
+                rawImporto = rawImporto.Trim();
+
+                // 🇮🇹 Caso formato italiano: 1.234,56
+                if (rawImporto.Contains(","))
+                {
+                    rawImporto = rawImporto
+                        .Replace(".", "")   // separatori migliaia
+                        .Replace(",", "."); // decimale
+                }
+
+                // 🇺🇸 Caso formato US: 1234.56 → NON TOCCO NIENTE
+
+                System.Diagnostics.Trace.WriteLine($"   RAW NORMALIZZATO ...... {rawImporto}");
+
+                if (!decimal.TryParse(
+                        rawImporto,
+                        System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var importoParsed))
+                {
+                    System.Diagnostics.Trace.WriteLine($"❌ Parse Importo FALLITO: {rawImporto}");
+
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Importo non valido (formato numerico)."
+                    });
+                }
+
+                // 🔁 SOVRASCRIVO SEMPRE IL MODEL
+                model.Importo = importoParsed;
+
+                System.Diagnostics.Trace.WriteLine($"   🔧 Importo ricostruito = {model.Importo}");
+
+
+                var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteLoggato);
+                if (utente == null)
+                {
+                    System.Diagnostics.Trace.WriteLine("❌ Utente loggato NON trovato in Utenti");
+                    return Json(new { success = false, message = "Utente non autenticato." });
+                }
+
+                // ====================================================
+                // 🔑 PROFESSIONISTA REALE (deve esistere in OperatoriSinergia)
+                // ====================================================
+
+                var operatore = db.OperatoriSinergia
+                    .FirstOrDefault(o => o.ID_UtenteCollegato == model.ID_Utente);
+
+                if (operatore == null)
+                {
+                    System.Diagnostics.Trace.WriteLine("❌ OperatoreSinergia NON trovato per ID_UtenteCollegato = " + model.ID_Utente);
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Professionista non valido."
+                    });
+                }
+
+                int idProfessionista = (int)operatore.ID_UtenteCollegato; // 🔥 QUESTO È L'ID CANONICO
+                int idOperatore = operatore.ID_Operatore;           // 🔧 QUESTO SERVE PER GLI INCASSI STORICI
+
+                System.Diagnostics.Trace.WriteLine($"✅ Operatore trovato: ID_Operatore = {idOperatore}, ID_UtenteCollegato = {idProfessionista}");
+
+                // ====================================================
+                // ➕ ENTRATE
+                // ====================================================
+
+                decimal totaleFinanziamenti = db.FinanziamentiProfessionisti
+                    .Where(f => f.ID_Professionista == idProfessionista)
+                    .Sum(f => (decimal?)f.Importo) ?? 0m;
+
+                decimal totaleIncassiPlafond = db.PlafondUtente
+                    .Where(p =>
+                        (p.ID_Utente == idProfessionista ||
+                         p.ID_Utente == idOperatore) &&
+                        p.TipoPlafond == "Incasso"
+                    )
+                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+
+                decimal totaleBilancio = db.BilancioProfessionista
+                    .Where(b =>
+                        b.ID_Professionista == idProfessionista &&
+                        b.Origine == "Incasso" &&
+                        (b.Categoria == "Netto Effettivo Responsabile" ||
+                         b.Categoria == "Owner Fee")
+                    )
+                    .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                // ====================================================
+                // ➖ USCITE
+                // ====================================================
+
+                decimal totaleCosti = db.CostiPersonaliUtente
+                    .Where(c => c.ID_Utente == idProfessionista)
+                    .Sum(c => (decimal?)c.Importo) ?? 0m;
+
+                decimal totalePrelievi = db.PlafondUtente
+                    .Where(p =>
+                        (p.ID_Utente == idProfessionista ||
+                         p.ID_Utente == idOperatore) &&
+                        p.TipoPlafond == "Prelievo Professionista"
+                    )
+                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+
+                decimal totalePagamentiCosti = db.GenerazioneCosti
+                    .Where(g =>
+                        g.ID_Utente == idProfessionista &&
+                        g.Stato == "Pagato")
+                    .Sum(g => (decimal?)g.Importo) ?? 0m;
+
+                // ====================================================
+                // 🧮 PLAFOND DISPONIBILE REALE
+                // ====================================================
+
+                decimal disponibile =
+                    totaleFinanziamenti +
+                    totaleIncassiPlafond +
+                    totaleBilancio -
+                    totaleCosti -
+                    totalePrelievi -
+                    totalePagamentiCosti;
+
+                System.Diagnostics.Trace.WriteLine("📊 CALCOLO PLAFOND:");
+                System.Diagnostics.Trace.WriteLine($"   Finanziamenti .......... {totaleFinanziamenti:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Incassi (Plafond) ...... {totaleIncassiPlafond:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Bilancio (ricavi) ...... {totaleBilancio:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Costi personali ........ {totaleCosti:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Prelievi ............... {totalePrelievi:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Pagamenti costi ........ {totalePagamentiCosti:N2}");
+                System.Diagnostics.Trace.WriteLine($"   ▶ DISPONIBILE .......... {disponibile:N2}");
+
+                if (model.Importo > disponibile)
+                {
+                    System.Diagnostics.Trace.WriteLine("⛔ BLOCCATO: importo > disponibile");
+                    return Json(new
+                    {
+                        success = false,
+                        message = "❌ Il costo personale supera il plafond disponibile."
+                    });
+                }
+
+                // ====================================================
+                // 💾 SALVATAGGIO
+                // ====================================================
+
                 using (var transaction = db.Database.BeginTransaction())
                 {
-                    // ➕ Inserisci costo personale
                     var nuovoCosto = new CostiPersonaliUtente
                     {
                         ID_Utente = idProfessionista,
                         Descrizione = model.Descrizione,
                         Importo = model.Importo,
-                        DataInserimento = DateTime.Now,
-                        ID_UtenteCreatore = idUtente,
+                        DataInserimento = model.DataInserimento,
+                        ID_UtenteCreatore = idUtenteLoggato,
                         Approvato = false
                     };
 
                     db.CostiPersonaliUtente.Add(nuovoCosto);
-                    db.SaveChanges(); // serve per ottenere ID_CostoPersonale
+                    db.SaveChanges();
 
-                    // 🗂️ Archivia anche in _a
-                    db.CostiPersonaliUtente_a.Add(new CostiPersonaliUtente_a
-                    {
-                        IDVersioneCostoPersonale = nuovoCosto.ID_CostoPersonale,
-                        ID_Utente = nuovoCosto.ID_Utente,
-                        Descrizione = nuovoCosto.Descrizione,
-                        Approvato = nuovoCosto.Approvato,
-                        Importo = nuovoCosto.Importo,
-                        DataInserimento = nuovoCosto.DataInserimento,
-                        ID_UtenteCreatore = (int)nuovoCosto.ID_UtenteCreatore,
-                        DataArchiviazione = DateTime.Now,
-                        ID_UtenteArchiviazione = idUtente,
-                        NumeroVersione = 1,
-                        ModificheTestuali = "➕ Costo personale inserito"
-                    });
+                    System.Diagnostics.Trace.WriteLine($"💾 Costo inserito: ID = {nuovoCosto.ID_CostoPersonale}");
 
-                    // ➕ Inserisci voce collegata nel PlafondUtente
+                    // ➕ Voce movimento plafond (usa SEMPRE ID_Operatore se esiste)
                     var nuovaVocePlafond = new PlafondUtente
                     {
-                        ID_Utente = idProfessionista,
+                        ID_Utente = idOperatore,   // 🔥 QUI È LA REGOLA CHE VOLEVI
                         ImportoTotale = model.Importo,
+                        Importo = model.Importo,
                         TipoPlafond = "Costo Personale",
-                        DataInizio = DateTime.Now,
-                        ID_UtenteCreatore = idUtente,
+                        DataInizio = model.DataInserimento,
+                        ID_UtenteCreatore = idUtenteLoggato,
                         ID_CostoPersonale = nuovoCosto.ID_CostoPersonale
                     };
+
                     db.PlafondUtente.Add(nuovaVocePlafond);
                     db.SaveChanges();
 
-                    // 🔁 Archivia versione plafond collegata
-                    db.PlafondUtente_a.Add(new PlafondUtente_a
-                    {
-                        ID_PlannedPlafond_Originale = nuovaVocePlafond.ID_PlannedPlafond,
-                        ID_Utente = nuovaVocePlafond.ID_Utente,
-                        ImportoTotale = nuovaVocePlafond.ImportoTotale,
-                        TipoPlafond = nuovaVocePlafond.TipoPlafond,
-                        DataInizio = nuovaVocePlafond.DataInizio,
-                        DataFine = nuovaVocePlafond.DataFine,
-                        ID_UtenteCreatore = nuovaVocePlafond.ID_UtenteCreatore,
-                        ID_UtenteUltimaModifica = idUtente,
-                        DataUltimaModifica = DateTime.Now,
-                        DataArchiviazione = DateTime.Now,
-                        ID_UtenteArchiviazione = idUtente,
-                        NumeroVersione = 1,
-                        Operazione = "Costo Personale",
-                        ModificheTestuali = $"➕ Inserito costo personale '{model.Descrizione}' da {model.Importo:N2}."
-                    });
+                    System.Diagnostics.Trace.WriteLine($"💾 Voce Plafond inserita: ID_PlannedPlafond = {nuovaVocePlafond.ID_PlannedPlafond}");
 
-                    db.SaveChanges();
                     transaction.Commit();
-
-                    return Json(new { success = true, message = "✅ Costo personale inserito e versionato correttamente." });
                 }
-            }
-            catch (DbEntityValidationException ex)
-            {
-                var errorMessages = ex.EntityValidationErrors
-                    .SelectMany(e => e.ValidationErrors)
-                    .Select(e => $"{e.PropertyName}: {e.ErrorMessage}");
 
-                var fullErrorMessage = string.Join("; ", errorMessages);
-                return Json(new { success = false, message = "Errore durante l'inserimento: " + fullErrorMessage });
+                System.Diagnostics.Trace.WriteLine("✅ [InserisciCostoPersonale] COMPLETATO");
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+
+                return Json(new
+                {
+                    success = true,
+                    message = "✅ Costo personale inserito correttamente."
+                });
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Errore generico: " + ex.Message });
+                System.Diagnostics.Trace.WriteLine("❌ [InserisciCostoPersonale] ERRORE: " + ex);
+
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante l'inserimento: " + ex.Message
+                });
             }
         }
+
         [HttpPost]
         public ActionResult EliminaCostoPersonale(int id)
         {
-            int idUtente = UserManager.GetIDUtenteCollegato();
-            var utente = db.Utenti.Find(idUtente);
-            if (utente == null)
-                return Json(new { success = false, message = "Utente non autenticato." });
-
-            var costo = db.CostiPersonaliUtente.FirstOrDefault(c => c.ID_CostoPersonale == id);
-            if (costo == null)
-                return Json(new { success = false, message = "Costo personale non trovato." });
-
-            var permessi = db.Permessi.Where(p => p.ID_Utente == idUtente).ToList();
-            bool puoEliminare = permessi.Any(p => p.Elimina == true);
-            bool autorizzato = false;
-
-            if (utente.TipoUtente == "Admin")
-                autorizzato = true;
-            else if (utente.TipoUtente == "Professionista" && costo.ID_Utente == idUtente && puoEliminare)
-                autorizzato = true;
-            else if (utente.TipoUtente == "Collaboratore")
-            {
-                var assegnati = db.RelazioneUtenti
-                    .Where(r => r.ID_UtenteAssociato == idUtente && r.Stato == "Attivo")
-                    .Select(r => r.ID_Utente)
-                    .ToList();
-
-                if (assegnati.Contains(costo.ID_Utente) && puoEliminare)
-                    autorizzato = true;
-            }
-
-            if (!autorizzato)
-                return Json(new { success = false, message = "Non hai i permessi per eliminare questo costo personale." });
-
             try
             {
+                int idUtenteLoggato = UserManager.GetIDUtenteCollegato();
+                var utente = db.Utenti.Find(idUtenteLoggato);
+
+                if (utente == null)
+                    return Json(new { success = false, message = "Utente non autenticato." });
+
+                var costo = db.CostiPersonaliUtente
+                    .FirstOrDefault(c => c.ID_CostoPersonale == id);
+
+                if (costo == null)
+                    return Json(new { success = false, message = "Costo personale non trovato." });
+
+                // ====================================================
+                // 🔐 PERMESSI
+                // ====================================================
+
+                bool autorizzato = false;
+
+                if (utente.TipoUtente == "Admin")
+                {
+                    autorizzato = true;
+                }
+                else if (utente.TipoUtente == "Professionista" &&
+                         costo.ID_Utente == idUtenteLoggato)
+                {
+                    autorizzato = true;
+                }
+                else if (utente.TipoUtente == "Collaboratore")
+                {
+                    var assegnati = db.RelazioneUtenti
+                        .Where(r =>
+                            r.ID_UtenteAssociato == idUtenteLoggato &&
+                            r.Stato == "Attivo")
+                        .Select(r => r.ID_Utente)
+                        .ToList();
+
+                    if (assegnati.Contains(costo.ID_Utente))
+                        autorizzato = true;
+                }
+
+                if (!autorizzato)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Non hai i permessi per eliminare questo costo personale."
+                    });
+                }
+
+                // ====================================================
+                // ⛔ BLOCCO SE GIÀ COPERTO DA PAGAMENTI
+                // ====================================================
+
+                bool giaPagato = db.GenerazioneCosti.Any(g =>
+                    g.ID_Utente == costo.ID_Utente &&
+                    g.ID_Riferimento == costo.ID_CostoPersonale &&
+                    g.Stato == "Pagato");
+
+                if (giaPagato)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "❌ Questo costo è già stato coperto da un pagamento e non può essere eliminato."
+                    });
+                }
+
                 using (var transaction = db.Database.BeginTransaction())
                 {
+                    // ====================================================
                     // 📁 Versionamento costo personale
+                    // ====================================================
+
                     int ultimaVersioneCosto = db.CostiPersonaliUtente_a
                         .Where(a => a.ID_CostoPersonale == costo.ID_CostoPersonale)
-                        .Select(a => (int?)a.NumeroVersione).Max() ?? 0;
+                        .Select(a => (int?)a.NumeroVersione)
+                        .Max() ?? 0;
 
                     db.CostiPersonaliUtente_a.Add(new CostiPersonaliUtente_a
                     {
@@ -10195,23 +10759,30 @@ namespace SinergiaMvc.Controllers
                         DataInserimento = costo.DataInserimento,
                         Approvato = costo.Approvato,
                         ID_UtenteCreatore = (int)costo.ID_UtenteCreatore,
-                        ID_UtenteUltimaModifica = idUtente,
+                        ID_UtenteUltimaModifica = idUtenteLoggato,
                         DataUltimaModifica = DateTime.Now,
                         DataArchiviazione = DateTime.Now,
-                        ID_UtenteArchiviazione = idUtente,
+                        ID_UtenteArchiviazione = idUtenteLoggato,
                         NumeroVersione = ultimaVersioneCosto + 1,
                         ModificheTestuali = "❌ Eliminazione costo personale"
                     });
 
-                    // 🔎 Cerca riga in PlafondUtente legata al costo personale
-                    var vocePlafond = db.PlafondUtente.FirstOrDefault(p => p.ID_CostoPersonale == costo.ID_CostoPersonale);
+                    // ====================================================
+                    // 🔎 Voce plafond collegata
+                    // ====================================================
+
+                    var vocePlafond = db.PlafondUtente
+                        .FirstOrDefault(p =>
+                            p.ID_CostoPersonale == costo.ID_CostoPersonale &&
+                            p.TipoPlafond == "Costo Personale");
 
                     if (vocePlafond != null)
                     {
-                        // 🗂️ Versionamento riga plafond
                         int ultimaVersionePlafond = db.PlafondUtente_a
-                            .Where(p => p.ID_PlannedPlafond_Originale == vocePlafond.ID_PlannedPlafond)
-                            .Select(p => (int?)p.NumeroVersione).Max() ?? 0;
+                            .Where(p =>
+                                p.ID_PlannedPlafond_Originale == vocePlafond.ID_PlannedPlafond)
+                            .Select(p => (int?)p.NumeroVersione)
+                            .Max() ?? 0;
 
                         db.PlafondUtente_a.Add(new PlafondUtente_a
                         {
@@ -10222,32 +10793,46 @@ namespace SinergiaMvc.Controllers
                             DataInizio = vocePlafond.DataInizio,
                             DataFine = vocePlafond.DataFine,
                             ID_UtenteCreatore = vocePlafond.ID_UtenteCreatore,
-                            ID_UtenteUltimaModifica = idUtente,
+                            ID_UtenteUltimaModifica = idUtenteLoggato,
                             DataUltimaModifica = DateTime.Now,
                             DataArchiviazione = DateTime.Now,
-                            ID_UtenteArchiviazione = idUtente,
+                            ID_UtenteArchiviazione = idUtenteLoggato,
                             NumeroVersione = ultimaVersionePlafond + 1,
                             Operazione = "❌ Costo Personale Eliminato",
-                            ModificheTestuali = $"❌ Eliminato collegamento al costo personale '{costo.Descrizione}' da {costo.Importo:N2}."
+                            ModificheTestuali =
+                                $"❌ Eliminato collegamento al costo personale '{costo.Descrizione}' da {costo.Importo:N2}."
                         });
 
                         db.PlafondUtente.Remove(vocePlafond);
                     }
 
-                    // 🗑️ Elimina costo personale
+                    // ====================================================
+                    // 🗑️ Elimina costo
+                    // ====================================================
+
                     db.CostiPersonaliUtente.Remove(costo);
                     db.SaveChanges();
 
                     transaction.Commit();
-                    return Json(new { success = true, message = "✅ Costo personale e voce plafond eliminati con versionamento." });
+
+                    return Json(new
+                    {
+                        success = true,
+                        message = "✅ Costo personale eliminato correttamente."
+                    });
                 }
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Errore durante l'eliminazione: " + ex.Message });
+                System.Diagnostics.Trace.WriteLine("❌ [EliminaCostoPersonale] Errore: " + ex);
+
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante l'eliminazione: " + ex.Message
+                });
             }
         }
-
 
 
 
@@ -10293,41 +10878,455 @@ namespace SinergiaMvc.Controllers
         //        return Json(new { success = true, totale = totale.ToString("N2") }, JsonRequestBehavior.AllowGet);
         //    }
         //}
+
+
         [HttpGet]
-        public JsonResult GetPlafondDisponibile()
+        public JsonResult GetPlafondDisponibile(int? idUtente = null)
         {
             try
             {
-                int idUtente = UserManager.GetIDUtenteCollegato();
+                int idUtenteEffettivo =
+                    idUtente
+                    ?? UserManager.GetIDUtenteCollegato();
 
-                using (var db = new SinergiaDB())
+                // 🔍 Operatore Sinergia collegato (se esiste)
+                var operatore = db.OperatoriSinergia
+                    .FirstOrDefault(o => o.ID_UtenteCollegato == idUtenteEffettivo);
+
+                int? idCliente = operatore?.ID_Operatore;
+
+                // ====================================================
+                // ➕ ENTRATE
+                // ====================================================
+
+                decimal totaleFinanziamenti = db.FinanziamentiProfessionisti
+                    .Where(f => f.ID_Professionista == idUtenteEffettivo)
+                    .Sum(f => (decimal?)f.Importo) ?? 0m;
+
+                decimal totaleIncassiPlafond = db.PlafondUtente
+                    .Where(p =>
+                        (p.ID_Utente == idUtenteEffettivo ||
+                         (idCliente != null && p.ID_Utente == idCliente)) &&
+                        p.TipoPlafond == "Incasso"
+                    )
+                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+
+                decimal totaleBilancio = db.BilancioProfessionista
+                    .Where(b =>
+                        b.ID_Professionista == idUtenteEffettivo &&
+                        b.Origine == "Incasso" &&
+                        (b.Categoria == "Netto Effettivo Responsabile" ||
+                         b.Categoria == "Owner Fee")
+                    )
+                    .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                // ====================================================
+                // ➖ USCITE
+                // ====================================================
+
+                decimal totaleCosti = db.CostiPersonaliUtente
+                    .Where(c => c.ID_Utente == idUtenteEffettivo)
+                    .Sum(c => (decimal?)c.Importo) ?? 0m;
+
+                decimal totalePrelievi = db.PlafondUtente
+                    .Where(p =>
+                        (p.ID_Utente == idUtenteEffettivo ||
+                         (idCliente != null && p.ID_Utente == idCliente)) &&
+                        p.TipoPlafond == "Prelievo Professionista"
+                    )
+                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+
+                decimal totalePagamentiCosti = db.GenerazioneCosti
+                    .Where(g =>
+                        g.ID_Utente == idUtenteEffettivo &&
+                        g.Stato == "Pagato"
+                    )
+                    .Sum(g => (decimal?)g.Importo) ?? 0m;
+
+                // ====================================================
+                // 🧮 FORMULA DEFINITIVA
+                // ====================================================
+
+                decimal disponibile =
+                    totaleFinanziamenti +
+                    totaleIncassiPlafond +
+                    totaleBilancio -
+                    totaleCosti -
+                    totalePrelievi -
+                    totalePagamentiCosti;
+
+                // ====================================================
+                // 🪵 LOG
+                // ====================================================
+
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+                System.Diagnostics.Trace.WriteLine("📊 [GetPlafondDisponibile]");
+                System.Diagnostics.Trace.WriteLine($"   Utente calcolato ....... {idUtenteEffettivo}");
+                System.Diagnostics.Trace.WriteLine($"   Finanziamenti .......... {totaleFinanziamenti:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Incassi (Plafond) ...... {totaleIncassiPlafond:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Bilancio (ricavi) ...... {totaleBilancio:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Costi personali ........ {totaleCosti:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Prelievi ............... {totalePrelievi:N2}");
+                System.Diagnostics.Trace.WriteLine($"   Pagamenti costi ........ {totalePagamentiCosti:N2}");
+                System.Diagnostics.Trace.WriteLine($"   ▶ DISPONIBILE FINALE ... {disponibile:N2}");
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+
+                return Json(new
                 {
-                    // 🔍 1. Verifica se l’utente ha anche un OperatoreSinergia associato
-                    var operatore = db.OperatoriSinergia.FirstOrDefault(o => o.ID_UtenteCollegato == idUtente);
-                    int? idCliente = operatore?.ID_Operatore;
-
-                    // 🔢 2. Recupera tutti i plafond associati sia come utente diretto che da OperatoreSinergia
-                    var plafondTotale = db.PlafondUtente
-                        .Where(p => p.ID_Utente == idUtente || (idCliente != null && p.ID_Utente == idCliente))
-                        .Sum(p => (decimal?)p.Importo) ?? 0;
-
-                    // 🔻 3. Sottrai eventuali Costi Personali registrati
-                    var costiPersonali = db.CostiPersonaliUtente
-                        .Where(c => c.ID_Utente == idUtente || (idCliente != null && c.ID_Utente == idCliente))
-                        .Sum(c => (decimal?)c.Importo) ?? 0;
-
-                    var disponibile = plafondTotale - costiPersonali;
-
-                    return Json(new { success = true, plafond = disponibile.ToString("N2") + " €" }, JsonRequestBehavior.AllowGet);
-                }
+                    success = true,
+                    plafond = disponibile.ToString("N2") + " €",
+                    disponibile
+                }, JsonRequestBehavior.AllowGet);
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Errore: " + ex.Message }, JsonRequestBehavior.AllowGet);
+                System.Diagnostics.Trace.WriteLine("❌ [GetPlafondDisponibile] Errore: " + ex);
+
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore nel calcolo del plafond disponibile: " + ex.Message
+                }, JsonRequestBehavior.AllowGet);
             }
         }
 
 
+
+        private decimal CalcolaPlafondDisponibile(int idUtente)
+        {
+            var voci = db.PlafondUtente
+                .Where(p => p.ID_Utente == idUtente)
+                .Select(p => new { p.TipoPlafond, p.Importo })
+                .ToList();
+
+            decimal totale =
+                voci.Where(v => v.TipoPlafond == "Accantonamento Incasso")
+                    .Sum(v => (decimal?)v.Importo ?? 0)
+
+              + voci.Where(v => v.TipoPlafond == "Finanziamento")
+                    .Sum(v => (decimal?)v.Importo ?? 0)
+
+              - voci.Where(v => v.TipoPlafond == "Trattenuta Sinergia")
+                    .Sum(v => (decimal?)v.Importo ?? 0)
+
+              - voci.Where(v => v.TipoPlafond == "Pagamento Costo")
+                    .Sum(v => (decimal?)v.Importo ?? 0)
+
+              - voci.Where(v => v.TipoPlafond == "Costo Personale")
+                    .Sum(v => (decimal?)v.Importo ?? 0)
+
+              - voci.Where(v => v.TipoPlafond == "Prelievo Professionista")
+                    .Sum(v => (decimal?)v.Importo ?? 0);
+
+            return Math.Round(totale, 2);
+        }
+
+
+        [HttpPost]
+        public ActionResult InserisciPrelievoProfessionista(
+      int ID_Utente,      // 🔥 professionista selezionato
+      decimal importo,
+      string note)
+        {
+            try
+            {
+                int idUtenteLoggato = UserManager.GetIDUtenteCollegato();
+
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+                System.Diagnostics.Trace.WriteLine("📤 [InserisciPrelievoProfessionista] START");
+                System.Diagnostics.Trace.WriteLine($"   Utente loggato ......... {idUtenteLoggato}");
+                System.Diagnostics.Trace.WriteLine($"   Professionista scelto . {ID_Utente}");
+                System.Diagnostics.Trace.WriteLine($"   Importo RAW ........... {importo}");
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+
+                var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteLoggato);
+                if (utente == null)
+                    return Json(new { success = false, message = "Utente non autenticato." });
+
+                if (importo <= 0)
+                    return Json(new { success = false, message = "Importo non valido." });
+
+                // ====================================================
+                // 🔑 PROFESSIONISTA REALE (via OperatoriSinergia)
+                // ====================================================
+                var operatore = db.OperatoriSinergia
+                    .FirstOrDefault(o => o.ID_UtenteCollegato == ID_Utente);
+
+                if (operatore == null)
+                {
+                    System.Diagnostics.Trace.WriteLine("❌ OperatoreSinergia NON trovato per ID_Utente=" + ID_Utente);
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Professionista non valido."
+                    });
+                }
+
+                int idProfessionista = ID_Utente;
+                int idOperatore = operatore.ID_Operatore;
+
+                System.Diagnostics.Trace.WriteLine($"✅ Operatore trovato: ID_Operatore = {idOperatore}, ID_UtenteCollegato = {idProfessionista}");
+
+                // ====================================================
+                // 🧮 CALCOLO PLAFOND DISPONIBILE
+                // ====================================================
+
+                decimal totaleFinanziamenti = db.FinanziamentiProfessionisti
+                    .Where(f => f.ID_Professionista == idProfessionista)
+                    .Sum(f => (decimal?)f.Importo) ?? 0m;
+
+                decimal totaleIncassiPlafond = db.PlafondUtente
+                    .Where(p =>
+                        (p.ID_Utente == idProfessionista ||
+                         p.ID_Utente == idOperatore) &&
+                        p.TipoPlafond == "Incasso")
+                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+
+                decimal totaleBilancio = db.BilancioProfessionista
+                    .Where(b =>
+                        b.ID_Professionista == idProfessionista &&
+                        b.Origine == "Incasso" &&
+                        (b.Categoria == "Netto Effettivo Responsabile" ||
+                         b.Categoria == "Owner Fee"))
+                    .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                decimal totaleCosti = db.CostiPersonaliUtente
+                    .Where(c => c.ID_Utente == idProfessionista)
+                    .Sum(c => (decimal?)c.Importo) ?? 0m;
+
+                decimal totalePrelievi = db.PlafondUtente
+                    .Where(p =>
+                        (p.ID_Utente == idProfessionista ||
+                         p.ID_Utente == idOperatore) &&
+                        p.TipoPlafond == "Prelievo Professionista")
+                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+
+                decimal totalePagamentiCosti = db.GenerazioneCosti
+                    .Where(g =>
+                        g.ID_Utente == idProfessionista &&
+                        g.Stato == "Pagato")
+                    .Sum(g => (decimal?)g.Importo) ?? 0m;
+
+                decimal disponibile =
+                    totaleFinanziamenti +
+                    totaleIncassiPlafond +
+                    totaleBilancio -
+                    totaleCosti -
+                    totalePrelievi -
+                    totalePagamentiCosti;
+
+                System.Diagnostics.Trace.WriteLine($"▶ DISPONIBILE .......... {disponibile:N2}");
+
+                if (importo > disponibile)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "❌ Il prelievo supera il plafond disponibile."
+                    });
+                }
+
+                // ====================================================
+                // 💾 SALVATAGGIO
+                // ====================================================
+
+                using (var tx = db.Database.BeginTransaction())
+                {
+                    DateTime oggi = DateTime.Today;
+
+                    var voce = new PlafondUtente
+                    {
+                        ID_Utente = idOperatore,   // 🔥 REGOLA SINERGIA
+                        ImportoTotale = importo,
+                        Importo = importo,
+                        TipoPlafond = "Prelievo Professionista",
+                        DataVersamento = oggi,
+                        DataInserimento = DateTime.Now,
+                        DataCompetenzaFinanziaria = oggi,
+                        Operazione = "Bonifico al professionista",
+                        Note = string.IsNullOrWhiteSpace(note)
+                            ? "Bonifico al professionista"
+                            : note.Trim(),
+                        ID_UtenteCreatore = idUtenteLoggato,
+                        ID_UtenteInserimento = idUtenteLoggato
+                    };
+
+                    db.PlafondUtente.Add(voce);
+                    db.SaveChanges();
+
+                    db.PlafondUtente_a.Add(new PlafondUtente_a
+                    {
+                        ID_PlannedPlafond_Originale = voce.ID_PlannedPlafond,
+                        ID_Utente = voce.ID_Utente,
+                        ImportoTotale = voce.ImportoTotale,
+                        Importo = voce.Importo,
+                        TipoPlafond = voce.TipoPlafond,
+                        DataVersamento = voce.DataVersamento,
+                        DataInserimento = voce.DataInserimento,
+                        DataCompetenzaFinanziaria = voce.DataCompetenzaFinanziaria,
+                        Operazione = voce.Operazione,
+                        Note = voce.Note,
+                        NumeroVersione = 1,
+                        DataArchiviazione = DateTime.Now,
+                        ID_UtenteArchiviazione = idUtenteLoggato
+                    });
+
+                    db.SaveChanges();
+                    tx.Commit();
+                }
+
+                return Json(new
+                {
+                    success = true,
+                    message = "✅ Prelievo registrato correttamente nel plafond."
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante il prelievo: " + ex.GetBaseException().Message
+                });
+            }
+        }
+
+
+        [HttpPost]
+        public JsonResult EliminaPrelievoProfessionista(int id)
+        {
+            try
+            {
+                int idUtenteLoggato = UserManager.GetIDUtenteCollegato();
+
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+                System.Diagnostics.Trace.WriteLine("🗑️ [EliminaPrelievoProfessionista] START");
+                System.Diagnostics.Trace.WriteLine($"   Utente loggato ......... {idUtenteLoggato}");
+                System.Diagnostics.Trace.WriteLine($"   ID Prelievo ........... {id}");
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+
+                var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteLoggato);
+                if (utente == null)
+                    return Json(new { success = false, message = "Utente non autenticato." });
+
+                var voce = db.PlafondUtente
+                    .FirstOrDefault(p =>
+                        p.ID_PlannedPlafond == id &&
+                        p.TipoPlafond == "Prelievo Professionista");
+
+                if (voce == null)
+                    return Json(new { success = false, message = "Prelievo non trovato." });
+
+                // ====================================================
+                // 🔑 PROFESSIONISTA REALE (via OperatoriSinergia)
+                // ====================================================
+                var operatore = db.OperatoriSinergia
+                    .FirstOrDefault(o => o.ID_Operatore == voce.ID_Utente);
+
+                if (operatore == null)
+                {
+                    System.Diagnostics.Trace.WriteLine("❌ OperatoreSinergia NON trovato per voce.ID_Utente = " + voce.ID_Utente);
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Prelievo non valido (operatore non trovato)."
+                    });
+                }
+
+                int idProfessionista = (int)operatore.ID_UtenteCollegato;
+
+                // ====================================================
+                // 🔐 CONTROLLO PERMESSI
+                // ====================================================
+                bool autorizzato = false;
+
+                if (utente.TipoUtente == "Admin")
+                {
+                    autorizzato = true;
+                }
+                else if (utente.TipoUtente == "Professionista" &&
+                         idProfessionista == idUtenteLoggato)
+                {
+                    autorizzato = true;
+                }
+                else if (utente.TipoUtente == "Collaboratore")
+                {
+                    var assegnati = db.RelazioneUtenti
+                        .Where(r => r.ID_UtenteAssociato == idUtenteLoggato && r.Stato == "Attivo")
+                        .Select(r => r.ID_Utente)
+                        .ToList();
+
+                    if (assegnati.Contains(idProfessionista))
+                        autorizzato = true;
+                }
+
+                if (!autorizzato)
+                {
+                    System.Diagnostics.Trace.WriteLine("⛔ Tentativo eliminazione NON autorizzato");
+
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Non hai i permessi per eliminare questo prelievo."
+                    });
+                }
+
+                // ====================================================
+                // 💾 VERSIONAMENTO + ELIMINAZIONE
+                // ====================================================
+                using (var tx = db.Database.BeginTransaction())
+                {
+                    int ultimaVersione = db.PlafondUtente_a
+                        .Where(a => a.ID_PlannedPlafond_Originale == voce.ID_PlannedPlafond)
+                        .Select(a => (int?)a.NumeroVersione)
+                        .Max() ?? 0;
+
+                    db.PlafondUtente_a.Add(new PlafondUtente_a
+                    {
+                        ID_PlannedPlafond_Originale = voce.ID_PlannedPlafond,
+                        ID_Utente = voce.ID_Utente,
+                        ImportoTotale = voce.ImportoTotale,
+                        Importo = voce.Importo,
+                        TipoPlafond = voce.TipoPlafond,
+                        DataVersamento = voce.DataVersamento,
+                        DataInserimento = voce.DataInserimento,
+                        DataCompetenzaFinanziaria = voce.DataCompetenzaFinanziaria,
+                        Operazione = "❌ Eliminazione Prelievo Professionista",
+                        Note = voce.Note,
+                        NumeroVersione = ultimaVersione + 1,
+                        DataArchiviazione = DateTime.Now,
+                        ID_UtenteArchiviazione = idUtenteLoggato,
+                        ModificheTestuali =
+                            $"❌ Eliminato prelievo professionista da {voce.Importo:N2} €"
+                    });
+
+                    db.PlafondUtente.Remove(voce);
+                    db.SaveChanges();
+
+                    tx.Commit();
+                }
+
+                System.Diagnostics.Trace.WriteLine("✅ [EliminaPrelievoProfessionista] COMPLETATO");
+                System.Diagnostics.Trace.WriteLine("────────────────────────────────────────────");
+
+                return Json(new
+                {
+                    success = true,
+                    message = "✅ Prelievo eliminato. Importo riaccreditato nel plafond."
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("❌ [EliminaPrelievoProfessionista] ERRORE: " + ex);
+
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore durante l'eliminazione del prelievo: " +
+                              ex.GetBaseException().Message
+                });
+            }
+        }
 
         #endregion
 
@@ -13653,8 +14652,6 @@ td, th {
         }
 
 
-
-
         [HttpPost]
         public ActionResult CreaIncasso(IncassoViewModel model)
         {
@@ -13857,16 +14854,21 @@ td, th {
                 // ====================================================
                 // 7️⃣ COMPENSI + PLAFOND + STATO AVVISO
                 // ====================================================
-                var vociRicavo = db.BilancioProfessionista
+
+                // ====================================================
+                // 7.1 — COMPENSI PRATICA (solo collaboratori)
+                // ====================================================
+                var vociCompensi = db.BilancioProfessionista
                     .Where(b => b.ID_Pratiche == pratica.ID_Pratiche &&
                                 b.ID_Incasso == incasso.ID_Incasso &&
                                 b.Origine == "Incasso" &&
                                 b.TipoVoce == "Ricavo" &&
-                                !b.Categoria.Contains("Trattenuta") &&
-                                b.Importo > 0)
+                                b.Importo > 0 &&
+                                b.Categoria != "Owner Fee" &&
+                                b.Categoria != "Netto Effettivo Responsabile")
                     .ToList();
 
-                foreach (var voce in vociRicavo)
+                foreach (var voce in vociCompensi)
                 {
                     var nuovoCompenso = new CompensiPratica
                     {
@@ -13878,6 +14880,7 @@ td, th {
                         DataInserimento = now,
                         ID_UtenteCreatore = idUtenteCorrente
                     };
+
                     db.CompensiPratica.Add(nuovoCompenso);
                     db.SaveChanges();
 
@@ -13894,22 +14897,43 @@ td, th {
                         DataArchiviazione = now,
                         ID_UtenteArchiviazione = idUtenteCorrente,
                         NumeroVersione = 1,
-                        ModificheTestuali = $"💰 Compenso registrato da incasso ID {incasso.ID_Incasso} ({voce.Categoria} - {voce.Importo:N2} €)"
+                        ModificheTestuali =
+                            $"💰 Compenso registrato da incasso ID {incasso.ID_Incasso} " +
+                            $"({voce.Categoria} - {voce.Importo:N2} €)"
                     });
+
                     db.SaveChanges();
                 }
 
-                // 💰 Versamento in plafond
+                // ====================================================
+                // 7.2 — PLAFOND (Netto + Owner Fee)
+                // ====================================================
                 if (model.VersaInPlafond == true)
                 {
-                    foreach (var voce in vociRicavo)
+                    var vociPlafond = db.BilancioProfessionista
+                        .Where(b => b.ID_Pratiche == pratica.ID_Pratiche &&
+                                    b.ID_Incasso == incasso.ID_Incasso &&
+                                    b.Origine == "Incasso" &&
+                                    b.TipoVoce == "Ricavo" &&
+                                    b.Importo > 0 &&
+                                    (b.Categoria == "Netto Effettivo Responsabile" ||
+                                     b.Categoria == "Owner Fee"))
+                        .ToList();
+
+                    foreach (var voce in vociPlafond)
                     {
                         bool esisteGia = db.PlafondUtente.Any(p =>
                             p.ID_Incasso == incasso.ID_Incasso &&
                             p.ID_Utente == voce.ID_Professionista &&
                             p.TipoPlafond == "Incasso");
 
-                        if (esisteGia) continue;
+                        if (esisteGia)
+                        {
+                            System.Diagnostics.Trace.WriteLine(
+                                $"⚠️ [Plafond] Voce già presente → " +
+                                $"Utente {voce.ID_Professionista}, Categoria {voce.Categoria}");
+                            continue;
+                        }
 
                         var nuovoPlafond = new PlafondUtente
                         {
@@ -13923,9 +14947,14 @@ td, th {
                             DataInizio = now.Date,
                             ID_UtenteCreatore = idUtenteCorrente,
                             ID_UtenteInserimento = idUtenteCorrente,
-                            Operazione = "Versamento da incasso pratica",
+                            Operazione = voce.Categoria == "Owner Fee"
+                                ? "Versamento Owner Fee da incasso"
+                                : "Versamento netto da incasso",
                             DataInserimento = now,
-                            Note = $"💰 Versamento da incasso ID {incasso.ID_Incasso} | Professionista ID {voce.ID_Professionista}"
+                            Note =
+                                voce.Categoria == "Owner Fee"
+                                    ? $"💰 Versamento Owner Fee da incasso ID {incasso.ID_Incasso}"
+                                    : $"💰 Versamento netto responsabile da incasso ID {incasso.ID_Incasso}"
                         };
 
                         db.PlafondUtente.Add(nuovoPlafond);
@@ -13942,8 +14971,12 @@ td, th {
                             DataVersamento = nuovoPlafond.DataVersamento,
                             DataArchiviazione = now,
                             NumeroVersione = 1,
-                            ModificheTestuali = $"💰 Versamento da incasso pratica {pratica.ID_Pratiche} = {nuovoPlafond.Importo:N2} € (Professionista ID {nuovoPlafond.ID_Utente})"
+                            ModificheTestuali =
+                                voce.Categoria == "Owner Fee"
+                                    ? $"💰 Versamento Owner Fee da incasso pratica {pratica.ID_Pratiche}"
+                                    : $"💰 Versamento netto da incasso pratica {pratica.ID_Pratiche}"
                         });
+
                         db.SaveChanges();
                     }
                 }
@@ -14478,9 +15511,20 @@ td, th {
                 decimal importoIVA = avviso.ImportoIVA ?? 0;
                 decimal totaleAvviso = avviso.TotaleAvvisiParcella ?? avviso.Importo ?? 0m;
 
-                bool stessoProfessionista = (owner != null && responsabile != null)
-                    ? owner.ID_Operatore == responsabile.ID_Utente
-                    : false;
+                // =====================================================
+                // 🔄 RISOLUZIONE OWNER → UTENTE (FIX DEFINITIVO)
+                // =====================================================
+                int? idUtenteOwner = null;
+
+                if (owner != null)
+                {
+                    idUtenteOwner = owner.ID_UtenteCollegato;   // 👈 FK GIUSTO
+                }
+
+                bool stessoProfessionista = idUtenteOwner.HasValue
+                    && responsabile != null
+                    && idUtenteOwner.Value == responsabile.ID_Utente;
+
 
                 // =====================================================
                 // 🧩 OWNER FEE DAL CLUSTER
@@ -14508,6 +15552,35 @@ td, th {
 
                 decimal quotaTrattenutaSinergia = Math.Round(importoImponibile * (percentualeTrattenutaSinergia / 100m), 2);
                 decimal baseDopoTrattenuta = importoImponibile - quotaTrattenutaSinergia;
+
+                // =====================================================
+                // 🏦 TRATTENUTA PLAFOND (percentuale accantonamento)
+                // =====================================================
+                decimal percentualePlafond = 0m;
+
+                var ricorrenzaPlafond = db.RicorrenzeCosti
+                    .FirstOrDefault(r => r.Categoria == "Trattenuta Plafond" &&
+                                         r.TipoValore == "Percentuale" &&
+                                         r.Attivo == true);
+
+                if (ricorrenzaPlafond != null)
+                    percentualePlafond = ricorrenzaPlafond.Valore;
+
+                System.Diagnostics.Trace.WriteLine("🏦 DEBUG PLAFOND ======================");
+                System.Diagnostics.Trace.WriteLine($"Ricorrenza trovata? {(ricorrenzaPlafond != null)}");
+
+                if (ricorrenzaPlafond != null)
+                {
+                    System.Diagnostics.Trace.WriteLine($"Categoria DB = '{ricorrenzaPlafond.Categoria}'");
+                    System.Diagnostics.Trace.WriteLine($"TipoValore DB = '{ricorrenzaPlafond.TipoValore}'");
+                    System.Diagnostics.Trace.WriteLine($"Valore DB = {ricorrenzaPlafond.Valore}");
+                    System.Diagnostics.Trace.WriteLine($"Attivo DB = {ricorrenzaPlafond.Attivo}");
+                }
+
+                System.Diagnostics.Trace.WriteLine($"PercentualePlafond CALCOLATA = {percentualePlafond}");
+                System.Diagnostics.Trace.WriteLine("=======================================");
+
+
 
                 // =====================================================
                 // 👥 COLLABORATORI DA CLUSTER (su post-trattenuta)
@@ -14598,9 +15671,29 @@ td, th {
                 // =====================================================
                 // 💶 OWNER FEE (su base post-trattenuta)
                 // =====================================================
-                decimal quotaOwner = (!stessoProfessionista && percentualeOwner > 0)
-                    ? Math.Round(baseDopoTrattenuta * (percentualeOwner / 100m), 2)
-                    : 0m;
+              decimal quotaOwner = (percentualeOwner > 0)
+                ? Math.Round(baseDopoTrattenuta * (percentualeOwner / 100m), 2)
+                : 0m;
+
+                // =====================================================
+                // 🔄 QUOTA OWNER EFFETTIVA (partita di giro se stesso profilo)
+                // =====================================================
+                decimal quotaOwnerEffettiva = quotaOwner;
+
+                if (stessoProfessionista) // owner == responsabile
+                {
+                    quotaOwnerEffettiva = 0m;
+                }
+
+
+                System.Diagnostics.Trace.WriteLine("👑 DEBUG OWNER UI ======================");
+                System.Diagnostics.Trace.WriteLine($"Owner.ID_Operatore = {owner?.ID_Operatore}");
+                System.Diagnostics.Trace.WriteLine($"Responsabile.ID_Utente = {responsabile?.ID_Utente}");
+                System.Diagnostics.Trace.WriteLine($"stessoProfessionista = {stessoProfessionista}");
+                System.Diagnostics.Trace.WriteLine($"percentualeOwner = {percentualeOwner}");
+                System.Diagnostics.Trace.WriteLine($"baseDopoTrattenuta = {baseDopoTrattenuta}");
+                System.Diagnostics.Trace.WriteLine($"quotaOwner = {quotaOwner}");
+                System.Diagnostics.Trace.WriteLine("=======================================");
 
                 // =====================================================
                 // 💶 CALCOLO NETTO PROFESSIONISTA
@@ -14609,8 +15702,9 @@ td, th {
 
                 decimal importoNettoFinale = Math.Round(
                     (baseDopoTrattenuta + speseGeneraliImporto)
-                    - (quotaOwner + contributoIntegrativoImporto + totaleCollaboratori),
+                    - (quotaOwnerEffettiva + contributoIntegrativoImporto + totaleCollaboratori),
                     2);
+
 
                 // =====================================================
                 // 📦 MODELLO RISPOSTA COMPLETO
@@ -14628,26 +15722,23 @@ td, th {
                         : "-",
                     NomeOwner = owner != null ? $"{owner.Nome} {owner.Cognome}" : "-",
                     NomeResponsabile = responsabile != null ? $"{responsabile.Nome} {responsabile.Cognome}" : "-",
-
-
                     TotaleAvviso = totaleAvviso,
                     ImportoImponibile = importoImponibile,
                     ImportoIVA = importoIVA,
                     AliquotaIVA = aliquotaIVA,
-
                     BaseDopoTrattenuta = baseDopoTrattenuta,
                     QuotaTrattenutaSinergia = quotaTrattenutaSinergia,
                     PercentualeTrattenutaSinergia = percentualeTrattenutaSinergia,
-
+                    // 🔥 NUOVO
+                    PercentualePlafond = percentualePlafond,
                     PercentualeOwner = percentualeOwner,
                     QuotaOwner = quotaOwner,
-
+                    QuotaOwnerEffettiva = quotaOwnerEffettiva,
+                    StessoProfessionista = stessoProfessionista,
                     PercentualeSpeseGenerali = percentualeSpeseGenerali,
                     SpeseGeneraliImporto = speseGeneraliImporto,
-
                     PercentualeContributoIntegrativo = percentualeContributoIntegrativo,
                     ContributoIntegrativoImporto = contributoIntegrativoImporto,
-
                     CollaboratoriCluster = listaCollaboratoriCluster,
                     CollaboratoriDettaglio = listaCollaboratoriDettaglio,
                     TotaleCollaboratori = totaleCollaboratori,

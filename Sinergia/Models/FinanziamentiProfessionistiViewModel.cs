@@ -44,6 +44,17 @@ namespace Sinergia.Models
         public DateTime? DataInizio { get; set; } // da PlafondUtente
         public DateTime? DataFine { get; set; }
 
+        public int? ID_Pratiche { get; set; }
+        public int? ID_Incasso { get; set; }
+        public int? ID_AvvisoParcella { get; set; }
+
+        public string Riferimento { get; set; }   // es: "Pratica #123 – Avviso #45"
+        public string OrigineMovimento { get; set; }
+        // es: "Incasso", "Owner Fee", "Trattenuta Plafond", "Pagamento Costo"
+
+        public string NomePratica { get; set; }
+        public string NumeroAvviso { get; set; }
+
         public bool PuoModificare { get; set; }
         public bool PuoEliminare { get; set; }
     }

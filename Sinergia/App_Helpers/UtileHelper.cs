@@ -119,16 +119,98 @@ namespace Sinergia.App_Helpers
                             DataInserimento = DateTime.Now
                         });
                     }
+                    // ==========================================================
+                    // 4️⃣ BIS — PLAFOND: TRACCIA TECNICA TRATTENUTA SINERGIA (CORRETTO)
+                    // ==========================================================
+                    if (ricTratt != null && quotaTrattenuta > 0 && idIncasso.HasValue)
+                    {
+                        string descrBase =
+                            $"Trattenuta Sinergia {percTrattenutaSinergia:N1}% " +
+                            $"| Avviso #{idAvvisoParcella} | Incasso #{idIncasso}";
+
+                        // 🔐 BLOCCO ANTI-DUPLICAZIONE (sull’ENTRATA, che è la capostipite)
+                        bool esisteGiaAccantonamento = db.PlafondUtente.Any(p =>
+                            p.ID_Incasso == idIncasso &&
+                            p.ID_Pratiche == idPratica &&
+                            p.TipoPlafond == "Accantonamento Incasso");
+
+                        if (!esisteGiaAccantonamento)
+                        {
+                            // ======================================================
+                            // ➕ ENTRATA — Accantonamento Incasso
+                            // ======================================================
+                            var entrataPlafond = new PlafondUtente
+                            {
+                                ID_Utente = idResponsabile,
+                                ImportoTotale = quotaTrattenuta,
+                                Importo = quotaTrattenuta,
+                                TipoPlafond = "Accantonamento Incasso",
+                                DataVersamento = oggi,
+                                DataInserimento = oggi,
+                                DataCompetenzaFinanziaria = oggi,
+                                ID_Incasso = idIncasso,
+                                ID_Pratiche = idPratica,
+                                Operazione = "Accantonamento da incasso",
+                                Note = $"➕ Accantonamento {quotaTrattenuta:N2} € - {descrBase}",
+                                ID_UtenteCreatore = idUtenteInserimento,
+                                ID_UtenteInserimento = idUtenteInserimento
+                            };
+
+                            db.PlafondUtente.Add(entrataPlafond);
+                            db.SaveChanges();
+
+                            // ======================================================
+                            // ➖ USCITA — Trattenuta Sinergia
+                            // ======================================================
+                            var uscitaPlafond = new PlafondUtente
+                            {
+                                ID_Utente = idResponsabile,
+                                ImportoTotale = -quotaTrattenuta,
+                                Importo = -quotaTrattenuta,
+                                TipoPlafond = "Trattenuta Sinergia",
+                                DataVersamento = oggi,
+                                DataInserimento = oggi,
+                                DataCompetenzaFinanziaria = oggi,
+                                ID_Incasso = idIncasso,
+                                ID_Pratiche = idPratica,
+                                Operazione = "Trattenuta Sinergia su incasso",
+                                Note = $"➖ Trattenuta Sinergia {quotaTrattenuta:N2} € - {descrBase}",
+                                ID_UtenteCreatore = idUtenteInserimento,
+                                ID_UtenteInserimento = idUtenteInserimento
+                            };
+
+                            db.PlafondUtente.Add(uscitaPlafond);
+                            db.SaveChanges();
+
+                            System.Diagnostics.Trace.WriteLine(
+                                $"🏦 [Plafond] Accantonamento + Trattenuta Sinergia inseriti: +{quotaTrattenuta:N2} € / -{quotaTrattenuta:N2} €");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Trace.WriteLine(
+                                "⚠️ [Plafond] Accantonamento Incasso già presente, salto inserimento.");
+                        }
+                    }
 
                     // ==========================================================
-                    // 5️⃣ OWNER FEE (5%) — su base dopo trattenuta
+                    // 5️⃣ OWNER FEE (5%) — su base dopo trattenuta (SEMPRE)
                     // ==========================================================
                     decimal ownerFee = 0m;
-                    bool ownerDiverso = idOwner.HasValue && idOwner.Value != idResponsabile;
+                    decimal ownerFeeEffettiva = 0m;
 
-                    if (ownerDiverso)
+                    bool ownerValido = idOwner.HasValue;
+                    bool stessoProfessionista = ownerValido &&
+                                idOwner.Value == idResponsabile;
+
+
+                    if (ownerValido)
                     {
                         ownerFee = Math.Round(baseDopoTrattenuta * 0.05m, 2);
+
+                        // 👉 partita di giro se owner == responsabile
+                        ownerFeeEffettiva = stessoProfessionista ? 0m : ownerFee;
+
+                        // 🔹 REGISTRA SEMPRE LA OWNER FEE (anche se partita di giro)
                         voci.Add(new BilancioProfessionista
                         {
                             ID_Professionista = idOwner.Value,
@@ -136,7 +218,9 @@ namespace Sinergia.App_Helpers
                             ID_Incasso = idIncasso,
                             TipoVoce = "Ricavo",
                             Categoria = "Owner Fee",
-                            Descrizione = "Compenso Owner (5%)",
+                            Descrizione = stessoProfessionista
+                                ? "Compenso Owner (5%) – partita di giro"
+                                : "Compenso Owner (5%)",
                             Importo = ownerFee,
                             Stato = "Finanziario",
                             Origine = "Incasso",
@@ -145,6 +229,72 @@ namespace Sinergia.App_Helpers
                             DataInserimento = DateTime.Now
                         });
                     }
+                    // ==========================================================
+                    // 5️⃣ BIS — PLAFOND: TRACCIA OWNER FEE (SEMPRE)
+                    // ==========================================================
+                    if (ownerValido && ownerFee > 0 && idIncasso.HasValue)
+                    {
+                        bool esisteGiaOwnerPlafond = db.PlafondUtente.Any(p =>
+                            p.ID_Incasso == idIncasso &&
+                            p.ID_Pratiche == idPratica &&
+                            p.TipoPlafond == "Owner Fee");
+
+                        if (!esisteGiaOwnerPlafond)
+                        {
+                            var pfOwner = new PlafondUtente
+                            {
+                                ID_Utente = idOwner.Value,
+                                ImportoTotale = ownerFee,
+                                Importo = ownerFee,
+                                TipoPlafond = "Owner Fee",
+                                DataVersamento = oggi,
+                                DataInserimento = oggi,
+                                DataCompetenzaFinanziaria = oggi,
+                                ID_Incasso = idIncasso,
+                                ID_Pratiche = idPratica,
+                                Operazione = "Owner Fee da incasso",
+                                Note = stessoProfessionista
+                                    ? $"Owner Fee 5% (partita di giro) da incasso pratica #{idPratica}"
+                                    : $"Owner Fee 5% da incasso pratica #{idPratica}",
+                                ID_UtenteCreatore = idUtenteInserimento,
+                                ID_UtenteInserimento = idUtenteInserimento
+                            };
+
+                            db.PlafondUtente.Add(pfOwner);
+                            db.SaveChanges();
+
+                            db.PlafondUtente_a.Add(new PlafondUtente_a
+                            {
+                                ID_PlannedPlafond_Originale = pfOwner.ID_PlannedPlafond,
+                                ID_Utente = pfOwner.ID_Utente,
+                                ImportoTotale = pfOwner.ImportoTotale,
+                                Importo = pfOwner.Importo,
+                                TipoPlafond = pfOwner.TipoPlafond,
+                                DataVersamento = pfOwner.DataVersamento,
+                                DataInserimento = pfOwner.DataInserimento,
+                                DataCompetenzaFinanziaria = pfOwner.DataCompetenzaFinanziaria,
+                                ID_Incasso = pfOwner.ID_Incasso,
+                                ID_Pratiche = pfOwner.ID_Pratiche,
+                                Operazione = pfOwner.Operazione,
+                                Note = pfOwner.Note,
+                                NumeroVersione = 1,
+                                DataArchiviazione = DateTime.Now,
+                                ID_UtenteArchiviazione = idUtenteInserimento
+                            });
+
+                            db.SaveChanges();
+
+                            System.Diagnostics.Trace.WriteLine(
+                                $"🏦 [Plafond] Owner Fee tracciata: {ownerFee:N2} € per utente {idOwner.Value} " +
+                                (stessoProfessionista ? "(partita di giro)" : ""));
+                        }
+                        else
+                        {
+                            System.Diagnostics.Trace.WriteLine(
+                                "⚠️ [Plafond] Owner Fee già presente, salto inserimento.");
+                        }
+                    }
+
 
                     // ==========================================================
                     // 6️⃣ COLLABORATORI CLUSTER — su base dopo trattenuta
@@ -265,15 +415,128 @@ namespace Sinergia.App_Helpers
                     }
 
                     // ==========================================================
-                    // 9️⃣ NETTO RESPONSABILE — nuova formula
+                    // 9️⃣ NETTO RESPONSABILE — nuova formula (allineata UI)
                     // ==========================================================
-                    decimal nettoResponsabile = (baseDopoTrattenuta + speseGenerali)
-                        - (contributoIntegrativo + ownerFee + totaleCluster + totaleDettaglio);
+
+                    decimal nettoResponsabile = Math.Round(
+                        (baseDopoTrattenuta + speseGenerali)
+                        - (contributoIntegrativo + ownerFeeEffettiva + totaleCluster + totaleDettaglio),
+                        2);
 
                     System.Diagnostics.Trace.WriteLine("──────────────────────────────────────────────────────────────");
-                    System.Diagnostics.Trace.WriteLine($"📘 [FormulaNetto] (Base {baseDopoTrattenuta:N2} + Spese {speseGenerali:N2}) - (CI {contributoIntegrativo:N2} + Owner {ownerFee:N2} + Cluster {totaleCluster:N2} + Dettaglio {totaleDettaglio:N2})");
+                    System.Diagnostics.Trace.WriteLine(
+                        $"📘 [FormulaNetto] (Base {baseDopoTrattenuta:N2} + Spese {speseGenerali:N2}) " +
+                        $"- (CI {contributoIntegrativo:N2} + OwnerEff {ownerFeeEffettiva:N2} + Cluster {totaleCluster:N2} + Dettaglio {totaleDettaglio:N2})");
+                    System.Diagnostics.Trace.WriteLine($"👑 OwnerFeeTotale      = {ownerFee:N2} €");
+                    System.Diagnostics.Trace.WriteLine($"👑 OwnerFeeEffettiva  = {ownerFeeEffettiva:N2} € {(stessoProfessionista ? "(partita di giro)" : "")}");
                     System.Diagnostics.Trace.WriteLine($"✅ [NettoResponsabile] = {nettoResponsabile:N2} €");
                     System.Diagnostics.Trace.WriteLine("──────────────────────────────────────────────────────────────");
+
+                    // ==========================================================
+                    // 9️⃣ BIS — TRATTENUTA PLAFOND (NUOVA)
+                    // ==========================================================
+                    decimal percTrattenutaPlafond = 0m;
+
+                    var ricPlafond = db.RicorrenzeCosti.FirstOrDefault(r =>
+                        r.Categoria == "Trattenuta Plafond" &&
+                        r.Attivo == true &&
+                        r.TipoValore == "Percentuale");
+
+                    if (ricPlafond != null)
+                        percTrattenutaPlafond = ricPlafond.Valore;
+
+                    decimal importoTrattenutaPlafond = Math.Round(
+                        nettoResponsabile * (percTrattenutaPlafond / 100m),
+                        2
+                    );
+
+                    System.Diagnostics.Trace.WriteLine($"🏦 Trattenuta Plafond {percTrattenutaPlafond:N1}% = {importoTrattenutaPlafond:N2} €");
+
+                    if (importoTrattenutaPlafond > 0 && idIncasso.HasValue)
+                    {
+                        bool esisteGiaPlafondAccantonamento = db.PlafondUtente.Any(p =>
+                            p.ID_Incasso == idIncasso &&
+                            p.ID_Pratiche == idPratica &&
+                            p.TipoPlafond == "Trattenuta Plafond");
+
+                        if (!esisteGiaPlafondAccantonamento)
+                        {
+                            // ➖ scala dal netto responsabile
+                            nettoResponsabile -= importoTrattenutaPlafond;
+
+                            // 💾 voce bilancio (solo tracciamento, NON costo vero)
+                            voci.Add(new BilancioProfessionista
+                            {
+                                ID_Professionista = idResponsabile,
+                                ID_Pratiche = idPratica,
+                                ID_Incasso = idIncasso,
+                                TipoVoce = "Costo",
+                                Categoria = "Trattenuta Plafond",
+                                Descrizione = $"Accantonamento plafond {percTrattenutaPlafond:N1}%",
+                                Importo = importoTrattenutaPlafond,
+                                Stato = "Finanziario",
+                                Origine = "Incasso",
+                                DataRegistrazione = oggi,
+                                ID_UtenteInserimento = idUtenteInserimento,
+                                DataInserimento = DateTime.Now
+                            });
+
+                            // 💰 versamento automatico in plafond
+                            var plafond = new PlafondUtente
+                            {
+                                ID_Utente = idResponsabile,
+                                ImportoTotale = importoTrattenutaPlafond,
+                                Importo = importoTrattenutaPlafond,
+                                TipoPlafond = "Trattenuta Plafond",
+                                DataVersamento = oggi,
+                                DataInserimento = oggi,
+                                DataCompetenzaFinanziaria = oggi,
+                                ID_Incasso = idIncasso,
+                                ID_Pratiche = idPratica,
+                                Operazione = "Accantonamento automatico da incasso",
+                                Note = $"Accantonamento {percTrattenutaPlafond}% da incasso pratica #{idPratica}",
+                                ID_UtenteCreatore = idUtenteInserimento,
+                                ID_UtenteInserimento = idUtenteInserimento
+                            };
+
+                            db.PlafondUtente.Add(plafond);
+                            db.SaveChanges();
+
+                            // 🗂️ archivio plafond
+                            db.PlafondUtente_a.Add(new PlafondUtente_a
+                            {
+                                ID_PlannedPlafond_Originale = plafond.ID_PlannedPlafond,
+                                ID_Utente = plafond.ID_Utente,
+                                ImportoTotale = plafond.ImportoTotale,
+                                Importo = plafond.Importo,
+                                TipoPlafond = plafond.TipoPlafond,
+                                DataVersamento = plafond.DataVersamento,
+                                DataInserimento = plafond.DataInserimento,
+                                DataCompetenzaFinanziaria = plafond.DataCompetenzaFinanziaria,
+                                ID_Incasso = plafond.ID_Incasso,
+                                ID_Pratiche = plafond.ID_Pratiche,
+                                Operazione = plafond.Operazione,
+                                Note = plafond.Note,
+                                NumeroVersione = 1,
+                                DataArchiviazione = DateTime.Now,
+                                ID_UtenteArchiviazione = idUtenteInserimento
+                            });
+
+                            db.SaveChanges();
+
+                            System.Diagnostics.Trace.WriteLine(
+                                $"🏦 [Plafond] Accantonamento Trattenuta Plafond inserito: {importoTrattenutaPlafond:N2} €");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Trace.WriteLine(
+                                "⚠️ [Plafond] Trattenuta Plafond già presente, salto inserimento.");
+                        }
+                    }
+
+
+                    System.Diagnostics.Trace.WriteLine($"✅ Netto responsabile DOPO Trattenuta Plafond = {nettoResponsabile:N2} €");
+
 
                     voci.Add(new BilancioProfessionista
                     {
@@ -283,13 +546,14 @@ namespace Sinergia.App_Helpers
                         TipoVoce = "Ricavo",
                         Categoria = "Netto Effettivo Responsabile",
                         Descrizione = "Ricavo netto effettivo post-ripartizione",
-                        Importo = nettoResponsabile,
+                        Importo = nettoResponsabile,   // 🔥 già scalato del plafond
                         Stato = "Finanziario",
                         Origine = "Incasso",
                         DataRegistrazione = oggi,
                         ID_UtenteInserimento = idUtenteInserimento,
                         DataInserimento = DateTime.Now
                     });
+
 
                     // ==========================================================
                     // 🔟 SALVATAGGIO + QUADRATURA

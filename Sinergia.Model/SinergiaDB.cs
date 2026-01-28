@@ -110,6 +110,7 @@ namespace Sinergia.Model
         public virtual DbSet<TipoRagioneSociale_a> TipoRagioneSociale_a { get; set; }
         public virtual DbSet<Utenti> Utenti { get; set; }
         public virtual DbSet<Utenti_a> Utenti_a { get; set; }
+        public virtual DbSet<PlafondUtente_BACKUP_2026_01_21> PlafondUtente_BACKUP_2026_01_21 { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -929,6 +930,10 @@ namespace Sinergia.Model
             modelBuilder.Entity<Utenti_a>()
                 .Property(e => e.Note)
                 .IsUnicode(false);
+
+            modelBuilder.Entity<PlafondUtente_BACKUP_2026_01_21>()
+                .Property(e => e.ImportoTotale)
+                .HasPrecision(10, 2);
         }
     }
 }

@@ -1974,38 +1974,46 @@ namespace SinergiaMvc.Controllers
         [HttpGet]
         public ActionResult GetUtentiDisponibili(int idAzienda)
         {
-            // Recupera utenti già collegati DIRETTAMENTE all'azienda
-            var utentiDirettiIds = db.RelazioneUtenti
-                .Where(r => r.ID_UtenteAssociato == idAzienda
-                            && r.Stato == "Attivo"
-                            && r.ID_Utente != null)   // solo relazioni dirette
+            // ======================================================
+            // 1️⃣ UTENTI GIÀ ASSEGNATI ALL’AZIENDA
+            // ======================================================
+            var utentiGiaAssegnatiIds = db.RelazioneUtenti
+                .Where(r =>
+                    r.ID_UtenteAssociato == idAzienda &&
+                    r.Stato == "Attivo" &&
+                    r.ID_Utente != null
+                )
                 .Select(r => r.ID_Utente.Value)
+                .Distinct()
                 .ToList();
 
-            // Recupera utenti già collegati tramite TEAM
-            var utentiTramiteTeam = (from rel in db.RelazioneUtenti
-                                     join mt in db.MembriTeam on rel.ID_Team equals mt.ID_Team
-                                     where rel.ID_UtenteAssociato == idAzienda
-                                           && rel.Stato == "Attivo"
-                                           && rel.ID_Team != null
-                                     select mt.ID_Professionista)
-                                     .ToList();
 
-            // Unione di utenti già collegati (diretti + indiretti tramite team)
-            var utentiAssegnatiIds = utentiDirettiIds.Union(utentiTramiteTeam).Distinct().ToList();
-
-            // Seleziona solo utenti attivi e non già assegnati
-            var utentiDisponibili = db.Utenti
-                .Where(u => u.Stato == "Attivo" && !utentiAssegnatiIds.Contains(u.ID_Utente))
-                .Select(u => new
-                {
-                    u.ID_Utente,
-                    NomeUtente = u.Nome + " " + u.Cognome
-                })
+            // ======================================================
+            // 2️⃣ PROFESSIONISTI ATTIVI (FONTE DI VERITÀ)
+            // ======================================================
+            var professionistiDisponibili =
+                (from op in db.OperatoriSinergia
+                 join u in db.Utenti
+                     on op.ID_UtenteCollegato equals u.ID_Utente
+                 where
+                    op.Stato == "Attivo" &&
+                    u.Stato == "Attivo" &&
+                    !utentiGiaAssegnatiIds.Contains(u.ID_Utente)
+                 orderby u.Nome, u.Cognome
+                 select new
+                 {
+                     ID_Utente = u.ID_Utente,
+                     NomeUtente = u.Nome + " " + u.Cognome
+                 })
                 .ToList();
 
-            return Json(utentiDisponibili, JsonRequestBehavior.AllowGet);
+
+            // ======================================================
+            // 3️⃣ OUTPUT PER LA UI
+            // ======================================================
+            return Json(professionistiDisponibili, JsonRequestBehavior.AllowGet);
         }
+
 
         [HttpGet]
         public ActionResult GetTeamDisponibili(int idAzienda)

@@ -116,7 +116,7 @@
                             <td>@i.NomePratica</td>
                             <td>@(i.DataCompetenza?.ToString("dd/MM/yyyy") ?? "-")</td>
                             <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
-                            <td> @(i.Importo.ToString("C") ?? "-")</td>
+                            <td class="text-end"> @(i.Importo.ToString("C") ?? "-")</td>
                             <td>@(i.MetodoPagamento ?? "-")</td>
                             <td>@(i.VersaInPlafond == true ? "Sì" : "No")</td>
                             <td class="text-center">
@@ -199,7 +199,7 @@
                 <div class="small text-muted">
                     <strong>Data incasso:</strong> @(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")
                 </div>
-                <div class="small text-muted">
+                <div class="small text-muted text-end">
                     <strong>Importo:</strong> @(i.Importo.ToString("C") ?? "-")
                 </div>
                 <div class="small text-muted">
@@ -368,8 +368,8 @@
                         <div class="col-md-6">
                             <label class="form-label">Versare l’Utile nel Plafond?</label>
                             <select name="VersaInPlafond" class="form-select form-select-sm">
+                                <option value="false" selected>No</option>
                                 <option value="true">Sì</option>
-                                <option value="false">No</option>
                             </select>
                         </div>
 
@@ -538,6 +538,7 @@
                     PercentualeSpeseGenerali: safeNumber(data.dati.PercentualeSpeseGenerali),
                     ContributoIntegrativoImporto: safeNumber(data.dati.ContributoIntegrativoImporto),
                     PercentualeContributoIntegrativo: safeNumber(data.dati.PercentualeContributoIntegrativo),
+                    PercentualePlafond: safeNumber(data.dati.PercentualePlafond),
                     ImportoIVA: safeNumber(data.dati.ImportoIVA),
                     AliquotaIVA: safeNumber(data.dati.AliquotaIVA),
                     PercentualeOwner: safeNumber(data.dati.PercentualeOwner),
@@ -604,11 +605,26 @@
                 // ============================================================
                 const baseDopoTrattenuta = safeNumber(avv.ImportoImponibile) - safeNumber(avv.QuotaTrattenutaSinergia);
 
+                // 🏦 Accantonamento automatico nel plafond (TRATTENUTA PLAFOND CORRETTA)
+                const percentualePlafond = safeNumber(avv.PercentualePlafond);
+
+                // ricostruzione netto PRIMA della trattenuta plafond
+                const nettoPrimaPlafond =
+                    percentualePlafond > 0
+                        ? safeNumber(avv.ImportoNettoFinale) / (1 - percentualePlafond / 100)
+                        : safeNumber(avv.ImportoNettoFinale);
+
+                const accantonamentoPlafond =
+                    nettoPrimaPlafond * (percentualePlafond / 100);
+
                 document.getElementById("importoBaseCalc").textContent =
                     `${baseDopoTrattenuta.toFixed(2)} € (dopo trattenuta)`;
 
-                document.getElementById("quotaOwner").textContent =
-                    `${avv.PercentualeOwner.toFixed(1)}% (${avv.QuotaOwner.toFixed(2)} €)`;
+                const quotaOwnerLabel = avv.StessoProfessionista
+                    ? `${avv.PercentualeOwner.toFixed(1)}% (${avv.QuotaOwner.toFixed(2)} €) — partita di giro`
+                    : `${avv.PercentualeOwner.toFixed(1)}% (${avv.QuotaOwner.toFixed(2)} €)`;
+
+                document.getElementById("quotaOwner").textContent = quotaOwnerLabel;
 
                 document.getElementById("quotaTrattenuta").textContent =
                     `${avv.PercentualeTrattenutaSinergia.toFixed(1)}% (${avv.QuotaTrattenutaSinergia.toFixed(2)} €)`;
@@ -654,14 +670,27 @@
                 // ============================================================
                 // 🧾 RIEPILOGO CALCOLO TESTUALE (NUOVA LOGICA)
                 // ============================================================
-                let riepilogo = `
-            📘 <b>Calcolo del netto professionista:</b><br>
-            <b>${avv.ImportoImponibile.toFixed(2)} €</b> (Base imponibile)
-            − <b>${avv.QuotaTrattenutaSinergia.toFixed(2)} €</b> (Trattenuta Sinergia)
-            = <b>${baseDopoTrattenuta.toFixed(2)} €</b> (Base dopo trattenuta)
-            <br>+ <b>${avv.SpeseGeneraliImporto.toFixed(2)} €</b> (Spese generali)
-            − <b>${avv.ContributoIntegrativoImporto.toFixed(2)} €</b> (Contributo integrativo)
-            − <b>${avv.QuotaOwner.toFixed(2)} €</b> (Quota owner)`;
+                 let riepilogo = `
+                    📘 <b>Calcolo del netto professionista:</b><br>
+
+                    <b>${avv.ImportoImponibile.toFixed(2)} €</b> (Base imponibile)
+                    − <b>${avv.QuotaTrattenutaSinergia.toFixed(2)} €</b> (Trattenuta Sinergia)
+                    = <b>${baseDopoTrattenuta.toFixed(2)} €</b> (Base dopo trattenuta)
+
+                    <br>+ <b>${avv.SpeseGeneraliImporto.toFixed(2)} €</b> (Spese generali)
+                    − <b>${avv.ContributoIntegrativoImporto.toFixed(2)} €</b> (Contributo integrativo)
+                    ${avv.StessoProfessionista
+                                            ? `<br>− <b>0.00 €</b> (Quota owner — partita di giro)`
+                                            : `<br>− <b>${avv.QuotaOwner.toFixed(2)} €</b> (Quota owner)`
+                                        }
+
+                    <br>= <b>${avv.ImportoNettoFinale.toFixed(2)} €</b> (Netto professionista)
+
+                    <br><br><small class="text-muted">
+                    ℹ️ Di questo netto, <b>${accantonamentoPlafond.toFixed(2)} €</b> verranno accantonati automaticamente nel tuo plafond
+                    per coprire i costi futuri. L’importo restante resta immediatamente disponibile.
+                    </small>`;
+
 
                 if (collabCluster.length > 0) {
                     const totaleCluster = collabCluster.reduce((sum, c) => sum + safeNumber(c.Importo), 0);
@@ -691,17 +720,22 @@
                 const lordoEffettivo = baseDopoTrattenuta + safeNumber(avv.SpeseGeneraliImporto);
 
                 riepilogo += `
-                <br><hr style="margin:6px 0;">
-                <b>Riepilogo numerico:</b><br>
-                ${baseDopoTrattenuta.toFixed(2)} € (Base dopo trattenuta)
-                + ${safeNumber(avv.SpeseGeneraliImporto).toFixed(2)} € (Spese generali)
-                − ${contributo.toFixed(2)} € (Contributo integrativo)
-                − ${quotaOwner.toFixed(2)} € (Quota owner)
-                (${trattenuta.toFixed(2)} € Trattenuta Sinergia già sottratta)
-                − ${totaleCluster.toFixed(2)} € (Collaboratori Cluster)
-                − ${totaleDettaglio.toFixed(2)} € (Collaboratori Dettaglio)
-                <br>= <b class="text-success">${nettoFinale.toFixed(2)} €</b> (Netto professionista)`;
-
+                    <br><hr style="margin:6px 0;">
+                    <b>Riepilogo numerico:</b><br>
+                    ${baseDopoTrattenuta.toFixed(2)} € (Base dopo trattenuta)
+                    + ${safeNumber(avv.SpeseGeneraliImporto).toFixed(2)} € (Spese generali)
+                    − ${contributo.toFixed(2)} € (Contributo integrativo)
+                    ${avv.StessoProfessionista
+                                            ? `− 0.00 € (Quota owner — partita di giro)`
+                                            : `− ${quotaOwner.toFixed(2)} € (Quota owner)`
+                                        }
+                    (${trattenuta.toFixed(2)} € Trattenuta Sinergia già sottratta)
+                    − ${totaleCluster.toFixed(2)} € (Collaboratori Cluster)
+                    − ${totaleDettaglio.toFixed(2)} € (Collaboratori Dettaglio)
+                    <br>= <b class="text-success">${nettoFinale.toFixed(2)} €</b> (Netto professionista)
+                    <br><small class="text-muted">
+                    ↳ Di questo importo, <b>${accantonamentoPlafond.toFixed(2)} €</b> verranno accantonati automaticamente nel tuo plafond
+                    </small>`;
 
                 document.getElementById("riepilogoCalcolo").innerHTML = riepilogo;
 
@@ -710,7 +744,7 @@
                 // ============================================================
                 const oggi = new Date().toISOString().split("T")[0];
                 form.querySelector('[name="DataIncasso"]').value = oggi;
-                form.querySelector('[name="VersaInPlafond"]').value = "true";
+                form.querySelector('[name="VersaInPlafond"]').value = "false";
 
                 let importoField = form.querySelector('[name="Importo"]');
                 if (!importoField) {
@@ -1068,7 +1102,6 @@
 
 
 
-
     // 🔍 Filtro e paginazione Incassi
     document.addEventListener("DOMContentLoaded", function () {
         const table = document.getElementById('tabellaIncassi');
@@ -1082,6 +1115,12 @@
 
         const searchInput = document.createElement('input');
         const selectPageSize = document.createElement('select');
+        const selectStato = document.createElement('select');
+
+        // 👉 LABEL VISIVA
+        const labelStato = document.createElement('span');
+        labelStato.textContent = 'Filtro incassi:';
+        labelStato.className = 'small fw-semibold text-muted';
 
         let pageSize = 10;
         let currentPage = 1;
@@ -1100,25 +1139,60 @@
         });
         selectPageSize.className = 'form-select form-select-sm w-auto';
 
-        // Aggiungi i controlli alla barra
+        // 💰 Filtro Stato Incasso
+        [
+            { value: 'tutti', label: 'Tutti' },
+            { value: 'incassati', label: 'Incassati' },
+            { value: 'da-incassare', label: 'Da incassare' }
+        ].forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.value;
+            opt.textContent = s.label;
+            selectStato.appendChild(opt);
+        });
+        selectStato.className = 'form-select form-select-sm w-auto';
+
+        // ➕ Aggiunta controlli (ordine corretto)
         controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(labelStato);   // 👈 SOLO TESTO
+        controlliContainer.appendChild(selectStato);
         controlliContainer.appendChild(selectPageSize);
 
         function renderTable() {
             const keyword = searchInput.value.toLowerCase();
+            const statoFiltro = selectStato.value;
 
-            // 🔍 Filtraggio per parola chiave
-            let filteredRows = rows.filter(row => row.innerText.toLowerCase().includes(keyword));
+            let filteredRows = rows.filter(row => {
+                const testo = row.innerText.toLowerCase();
+
+                // 🔍 filtro testo
+                if (!testo.includes(keyword)) return false;
+
+                // 💰 filtro stato
+                if (statoFiltro !== 'tutti') {
+                    const badge = row.querySelector('span.badge');
+                    const stato = badge ? badge.innerText.toLowerCase() : '';
+
+                    const isIncassato = stato.includes('pagato');
+                    const isDaIncassare = !isIncassato;
+
+                    if (statoFiltro === 'incassati' && !isIncassato) return false;
+                    if (statoFiltro === 'da-incassare' && !isDaIncassare) return false;
+                }
+
+                return true;
+            });
 
             const totalPages = Math.ceil(filteredRows.length / pageSize);
             currentPage = Math.min(currentPage, totalPages || 1);
 
-            // Tabella desktop
+            // 🖥️ Tabella desktop
             rows.forEach(r => r.style.display = 'none');
-            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                 .forEach(r => r.style.display = '');
 
-            // Card mobile
+            // 📱 Card mobile
             cards.forEach(c => c.style.display = 'none');
             filteredRows.forEach(row => {
                 const id = row.getAttribute('data-id');
@@ -1126,8 +1200,9 @@
                 if (card) card.style.display = '';
             });
 
-            // Paginazione
+            // 🔄 Paginazione
             paginationContainer.innerHTML = '';
+
             const pageInfo = document.createElement('span');
             pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
             pageInfo.className = 'me-2';
@@ -1137,21 +1212,36 @@
             prevBtn.textContent = '← Indietro';
             prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
             prevBtn.disabled = currentPage === 1;
-            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            prevBtn.onclick = () => {
+                currentPage--;
+                renderTable();
+            };
             paginationContainer.appendChild(prevBtn);
 
             const nextBtn = document.createElement('button');
             nextBtn.textContent = 'Prossima →';
             nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
             nextBtn.disabled = currentPage === totalPages;
-            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            nextBtn.onclick = () => {
+                currentPage++;
+                renderTable();
+            };
             paginationContainer.appendChild(nextBtn);
         }
 
-        // Eventi
-        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        // 🎯 Eventi
+        searchInput.addEventListener('input', () => {
+            currentPage = 1;
+            renderTable();
+        });
+
         selectPageSize.addEventListener('change', () => {
             pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        selectStato.addEventListener('change', () => {
             currentPage = 1;
             renderTable();
         });

@@ -553,8 +553,6 @@
         new bootstrap.Modal(document.getElementById("clienteModal")).show();
     }
 
-
-
     function apriModificaCliente(id) {
         fetch(`/Utenti/GetClienteEsterno?id=${id}`)
             .then(res => res.json())

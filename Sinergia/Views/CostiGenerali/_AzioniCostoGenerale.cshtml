@@ -1,8 +1,13 @@
 ﻿@model Sinergia.Models.TipologieCostiViewModel
 @{
     var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
-    bool isCostoSpeciale = Model.Nome != null &&
-                           (Model.Nome.Contains("Trattenuta Sinergia") || Model.Nome.Contains("Owner Fee"));
+    bool isCostoSpeciale =
+        Model.Nome != null &&
+        (
+            Model.Nome.ToLower().Contains("trattenuta sinergia") ||
+            Model.Nome.ToLower().Contains("owner fee") ||
+            Model.Nome.ToLower().Contains("trattenuta plafond")
+        );
 }
 
 <div class="d-flex justify-content-center flex-wrap gap-1">
@@ -46,7 +51,7 @@
     }
 
     @* 👥 Visualizza assegnati *@
-    @if (Model.NumeroAssegnati > 0)
+    @if (Model.NumeroAssegnati > 0 || isCostoSpeciale)
     {
         <button class="btn btn-primary btn-sm"
                 title="Visualizza assegnati"
@@ -54,4 +59,5 @@
             <i class="fa fa-users"></i>
         </button>
     }
+
 </div>

@@ -4,6 +4,9 @@
     var permessiUtente = ViewBag.Permessi as Sinergia.Models.PermessiViewModel;
     bool mostraAzioni = puoAggiungere || Model.Any();
     var professionisti = ViewBag.Professionisti as List<SelectListItem> ?? new List<SelectListItem>();
+    var tipoUtente = ViewBag.TipoUtenteCorrente as string;
+    var idUtenteCorrente = (int?)ViewBag.IDUtenteCorrente;
+    var nomeUtenteCorrente = ViewBag.NomeUtenteCorrente as string;
 
 }
 
@@ -31,10 +34,21 @@
 <div class="alert alert-info py-2 px-3 mb-3">
     <strong>Legenda:</strong>
     <ul class="mb-0 small">
-        <li><strong>💰 Finanziamento (versamento):</strong> importo versato dal professionista per alimentare il proprio plafond.</li>
-        <li><strong>🧾 Costo Personale (spesa):</strong> spesa sostenuta dal professionista, che verrà scalata dal plafond disponibile.</li>
+        <li>
+            <strong>💰 Finanziamento (versamento):</strong>
+            importo versato dal professionista per alimentare il proprio plafond.
+        </li>
+        <li>
+            <strong>🧾 Costo Personale (spesa):</strong>
+            spesa sostenuta dal professionista, che verrà scalata dal plafond disponibile.
+        </li>
+        <li>
+            <strong>🏦 Prelievo (bonifico):</strong>
+            importo prelevato dal plafond e bonificato al professionista (uscita di cassa).
+        </li>
     </ul>
 </div>
+
 
 <!-- ➕ Pulsanti aggiunta -->
 <div class="d-flex justify-content-end mb-2">
@@ -53,8 +67,15 @@
             <i class="fa fa-receipt me-1"></i> Costo Personale (spesa)
         </button>
     }
-</div>
 
+    <button class="btn btn-outline-primary btn-sm mx-2"
+            style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"
+            onclick="apriModalePrelievoProfessionista()"
+            title="Registra un prelievo/bonifico al professionista (uscita dal plafond).">
+        <i class="fa fa-university me-1"></i> Prelievo (bonifico)
+    </button>
+
+</div>
 <!-- 🖥️ TABELLA DESKTOP -->
 <div class="d-none d-md-block">
     <div class="table-responsive">
@@ -63,8 +84,16 @@
                 <tr>
                     <th>Professionista</th>
                     <th>Tipo Plafond</th>
+
+                    <!-- 🆕 -->
+                    <th>Pratica</th>
+                    <th>Avviso</th>
+                    <th>Incasso</th>
+
+                    <th>Origine Movimento</th>
                     <th>Importo</th>
                     <th>Data Versamento</th>
+
                     @if (mostraAzioni)
                     {
                         <th class="text-center">Azioni</th>
@@ -74,11 +103,68 @@
             <tbody>
                 @foreach (var p in Model)
                 {
-                    <tr data-id="@p.ID_Finanziamento">
+                    <tr data-id="@p.ID_Finanziamento"
+                        data-id-pratica="@p.ID_Pratiche"
+                        data-id-avviso="@p.ID_AvvisoParcella"
+                        data-id-incasso="@p.ID_Incasso">
+
                         <td>@p.NomeProfessionista</td>
                         <td>@p.TipoPlafond</td>
-                        <td>@p.Importo.ToString("N2")</td>
+
+                        <!-- 🆕 PRATICA -->
+                        <td>
+                            @if (p.ID_Pratiche.HasValue)
+                            {
+                                <a class="badge bg-info text-decoration-none"
+                                   href="@Url.Action("GestionePratiche", "Pratiche", new { id = p.ID_Pratiche })"
+                                   title="Apri pratica">
+                                    @(!string.IsNullOrWhiteSpace(p.NomePratica) ? p.NomePratica : $"#{p.ID_Pratiche}")
+                                </a>
+                            }
+                            else
+                            { <span class="text-muted">-</span>}
+                        </td>
+
+
+                        <!-- 🆕 AVVISO -->
+                        <td class="text-center">
+                            @if (p.ID_AvvisoParcella.HasValue)
+                            {
+                                <a class="badge bg-warning text-dark text-decoration-none"
+                                   href="@Url.Action("GestioneParcelle", "Pratiche")"
+                                   title="Apri lista avvisi parcella">
+                                    @(!string.IsNullOrWhiteSpace(p.NumeroAvviso)
+                                    ? p.NumeroAvviso
+                                    : $"#{p.ID_AvvisoParcella}")
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </td>
+
+
+                        <!-- 🆕 INCASSO -->
+                        <td class="text-center">
+                            @if (p.ID_Incasso.HasValue)
+                            {
+                                <a class="badge bg-success text-decoration-none"
+                                   href="@Url.Action("GestioneIncassi", "Pratiche", new { id = p.ID_Incasso })"
+                                   title="Apri incasso">
+                                    #@p.ID_Incasso
+                                </a>
+                            }
+                            else
+                            { <span class="text-muted">-</span>}
+                        </td>
+
+
+                        <td>@(string.IsNullOrEmpty(p.OrigineMovimento) ? "-" : p.OrigineMovimento)</td>
+
+                        <td class="text-end">@p.Importo.ToString("N2")</td>
                         <td width="200px">@(p.DataVersamento?.ToString("yyyy-MM-dd") ?? "")</td>
+
                         @if (mostraAzioni)
                         {
                             <td class="text-center">
@@ -92,17 +178,83 @@
     </div>
 </div>
 
+
 <!-- 📱 CARD VIEW MOBILE -->
 <div class="d-block d-md-none mt-3 px-2">
     @foreach (var p in Model)
     {
-        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-plafond" data-id="@p.ID_Finanziamento">
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-plafond"
+             data-id="@p.ID_Finanziamento"
+             data-id-pratica="@p.ID_Pratiche"
+             data-id-avviso="@p.ID_AvvisoParcella"
+             data-id-incasso="@p.ID_Incasso">
+
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-bold text-primary">@p.NomeProfessionista</span>
                 <span class="badge bg-secondary">@p.TipoPlafond</span>
             </div>
-            <div class="small text-muted"><strong>Importo:</strong> @p.Importo.ToString("N2")</div>
-            <div class="small text-muted"><strong>Data:</strong> @(p.DataVersamento?.ToString("dd/MM/yyyy") ?? "-")</div>
+
+            <!-- 🆕 PRATICA -->
+            @if (p.ID_Pratiche.HasValue)
+            {
+                <div class="small text-muted">
+                    <strong>Pratica:</strong>
+                    @if (p.ID_Pratiche.HasValue)
+                    {
+                        <a class="badge bg-info text-decoration-none"
+                           href="@Url.Action("GestionePratiche", "Pratiche", new { id = p.ID_Pratiche })">
+                            @(!string.IsNullOrWhiteSpace(p.NomePratica) ? p.NomePratica : $"#{p.ID_Pratiche}")
+                        </a>
+                    }
+                    else
+                    { <span>-</span>}
+                </div>
+            }
+
+            <!-- 🆕 AVVISO -->
+
+            <div class="small text-muted mt-1">
+                <strong>Avviso:</strong>
+                @if (p.ID_AvvisoParcella.HasValue)
+                {
+                    <a class="badge bg-warning text-dark text-decoration-none"
+                       href="@Url.Action("GestioneAParcelle", "Pratiche", new { id = p.ID_AvvisoParcella })">
+                        @(!string.IsNullOrWhiteSpace(p.NumeroAvviso) ? p.NumeroAvviso : $"#{p.ID_AvvisoParcella}")
+                    </a>
+                }
+                else
+                { <span>-</span>}
+            </div>
+
+            <!-- 🆕 INCASSO -->
+            <div class="small text-muted mt-1">
+                <strong>Incasso:</strong>
+                @if (p.ID_Incasso.HasValue)
+                {
+                    <a class="badge bg-success text-decoration-none"
+                       href="@Url.Action("GestioneIncassi", "Pratiche", new { id = p.ID_Incasso })">
+                        #@p.ID_Incasso
+                    </a>
+                }
+                else
+                { <span>-</span>}
+            </div>
+
+            <!-- 🆕 ORIGINE -->
+            @if (!string.IsNullOrEmpty(p.OrigineMovimento))
+            {
+                <div class="small text-muted">
+                    <strong>Origine:</strong> @p.OrigineMovimento
+                </div>
+            }
+
+            <div class="small text-muted text-end">
+                <strong>Importo:</strong> @p.Importo.ToString("N2")
+            </div>
+
+            <div class="small text-muted">
+                <strong>Data:</strong> @(p.DataVersamento?.ToString("dd/MM/yyyy") ?? "-")
+            </div>
 
             @if (mostraAzioni)
             {
@@ -113,6 +265,8 @@
         </div>
     }
 </div>
+
+
 
 <!-- 🔄 Paginazione -->
 <div id="paginazionePlafondTable" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
@@ -140,30 +294,61 @@
                     <h5 class="modal-title" id="finanziamentoModalLabel">Nuovo Finanziamento</h5>
                     <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
                 </div>
+
                 <div class="modal-body">
                     <input type="hidden" name="ID_Finanziamento" />
 
+                    <!-- 👤 PROFESSIONISTA -->
                     <div class="mb-3">
                         <label>Professionista</label>
-                        <select class="form-select form-select-sm" name="ID_Professionista" required>
-                            <option value="">-- Seleziona --</option>
-                            @foreach (var prof in professionisti)
-                            {
-                                <option value="@prof.Value">@prof.Text</option>
-                            }
-                        </select>
+
+                        @if (tipoUtente == "Admin")
+                        {
+                            <select class="form-select form-select-sm"
+                                    name="ID_Professionista"
+                                    id="ID_Professionista_Fin"
+                                    required>
+                                <option value="">-- Seleziona --</option>
+                                @foreach (var prof in professionisti)
+                                {
+                                    <option value="@prof.Value">@prof.Text</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input type="hidden"
+                                   name="ID_Professionista"
+                                   id="ID_Professionista_Fin"
+                                   value="@idUtenteCorrente" />
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   value="@nomeUtenteCorrente"
+                                   readonly />
+                        }
                     </div>
 
+                    <!-- 💰 IMPORTO -->
                     <div class="mb-3">
                         <label>Importo</label>
-                        <input type="number" name="Importo" step="0.01" class="form-control form-control-sm" required />
+                        <input type="number"
+                               name="Importo"
+                               step="0.01"
+                               class="form-control form-control-sm"
+                               required />
                     </div>
 
+                    <!-- 📅 DATA -->
                     <div class="mb-3">
                         <label>Data Versamento</label>
-                        <input type="date" name="DataVersamento" class="form-control form-control-sm" required />
+                        <input type="date"
+                               name="DataVersamento"
+                               class="form-control form-control-sm"
+                               required />
                     </div>
                 </div>
+
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-success btn-sm">Salva</button>
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
@@ -172,6 +357,108 @@
         </form>
     </div>
 </div>
+
+
+@* Modale costo personale *@
+<div class="modal fade" id="modalCostoPersonale" tabindex="-1"
+     aria-labelledby="modalCostoPersonaleLabel" aria-hidden="true">
+
+    <div class="modal-dialog">
+        <div class="modal-content">
+
+            <form id="formCostoPersonale">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalCostoPersonaleLabel">
+                        Nuovo Costo Personale
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <!-- 👤 PROFESSIONISTA -->
+                    <div class="mb-2">
+                        <label>Professionista</label>
+
+                        @if (tipoUtente == "Admin")
+                        {
+                            <select class="form-select form-select-sm"
+                                    name="ID_Utente"
+                                    id="idUtenteCosto"
+                                    required>
+                                <option value="">-- Seleziona --</option>
+                                @foreach (var prof in professionisti)
+                                {
+                                    <option value="@prof.Value">@prof.Text</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input type="hidden"
+                                   name="ID_Utente"
+                                   id="idUtenteCosto"
+                                   value="@idUtenteCorrente" />
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   value="@nomeUtenteCorrente"
+                                   readonly />
+                        }
+                    </div>
+
+                    <!-- 💰 PLAFOND -->
+                    <div class="mb-2">
+                        <label>Plafond disponibile (€)</label>
+                        <input type="text"
+                               id="plafondDisponibileInput"
+                               class="form-control"
+                               readonly />
+                    </div>
+
+                    <!-- 📝 DESCRIZIONE -->
+                    <div class="mb-2">
+                        <label>Descrizione</label>
+                        <input type="text"
+                               name="Descrizione"
+                               class="form-control"
+                               maxlength="200"
+                               required />
+                    </div>
+
+                    <!-- 💶 IMPORTO -->
+                    <div class="mb-2">
+                        <label>Importo (€)</label>
+                        <input type="text"
+                               name="Importo"
+                               inputmode="decimal"
+                               class="form-control"
+                               placeholder="Es. 12,74"
+                               required />
+                    </div>
+
+                    <!-- 📅 DATA -->
+                    <div class="mb-2">
+                        <label>Data del Costo</label>
+                        <input type="date"
+                               name="DataInserimento"
+                               class="form-control"
+                               required />
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">
+                        Salva
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
 
 <!-- 🗑️ Modale Conferma Eliminazione Finanziamento -->
 <div class="modal fade" id="eliminaFinanziamentoModal" tabindex="-1">
@@ -230,39 +517,126 @@
     </div>
 </div>
 
-
-@* Modale costo personale *@
-<div class="modal fade" id="modalCostoPersonale" tabindex="-1" aria-labelledby="modalCostoPersonaleLabel" aria-hidden="true">
+<!-- 🗑️ Modale Prelievo   -->
+<div class="modal fade" id="modalPrelievoProfessionista" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form id="formCostoPersonale">
+
+            <form id="formPrelievoProfessionista">
+
                 <div class="modal-header">
-                    <h5 class="modal-title" id="modalCostoPersonaleLabel">Nuovo Costo Personale</h5>
+                    <h5 class="modal-title">Nuovo Prelievo Professionista</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
                 <div class="modal-body">
+
+                    <!-- 👤 PROFESSIONISTA -->
+                    <div class="mb-2">
+                        <label>Professionista</label>
+
+                        @if (tipoUtente == "Admin")
+                        {
+                            <select class="form-select form-select-sm"
+                                    name="idProfessionista"
+                                    id="idUtentePrelievo"
+                                    required>
+                                <option value="">-- Seleziona --</option>
+                                @foreach (var prof in professionisti)
+                                {
+                                    <option value="@prof.Value">@prof.Text</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input type="hidden"
+                                   name="idProfessionista"
+                                   id="idUtentePrelievo"
+                                   value="@idUtenteCorrente" />
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   value="@nomeUtenteCorrente"
+                                   readonly />
+                        }
+                    </div>
+
+                    <!-- 💰 PLAFOND -->
                     <div class="mb-2">
                         <label>Plafond disponibile (€)</label>
-                        <input type="text" id="plafondDisponibileInput" class="form-control" readonly />
+                        <input type="text"
+                               id="plafondDisponibilePrelievoInput"
+                               class="form-control"
+                               readonly />
                     </div>
-                    <div class="mb-2">
-                        <label>Descrizione</label>
-                        <input type="text" name="descrizione" class="form-control" maxlength="200" required />
-                    </div>
+
+                    <!-- 💶 IMPORTO -->
                     <div class="mb-2">
                         <label>Importo (€)</label>
-                        <input type="number" name="importo" step="0.01" min="0" class="form-control" required />
+                        <input type="text"
+                               name="importo"
+                               inputmode="decimal"
+                               class="form-control"
+                               placeholder="Es. 150,00"
+                               required />
                     </div>
+
+                    <!-- 📝 NOTE -->
                     <div class="mb-2">
-                        <label>Data del Costo</label>
-                        <input type="date" name="dataCosto" class="form-control" required />
+                        <label>Note</label>
+                        <input type="text"
+                               name="note"
+                               class="form-control"
+                               maxlength="200" />
                     </div>
+
                 </div>
+
                 <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">Salva</button>
+                    <button type="submit" class="btn btn-primary">
+                        Salva
+                    </button>
                 </div>
+
             </form>
+        </div>
+    </div>
+</div>
+
+
+
+
+<!-- 🗑️ Modale Conferma Eliminazione Prelievo Professionista -->
+<div class="modal fade" id="eliminaPrelievoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Conferma Eliminazione Prelievo</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                Sei sicuro di voler eliminare questo <strong>prelievo al professionista</strong>?
+                <br />
+                <span class="text-muted small">
+                    L'importo verrà riaccreditato nel plafond disponibile.
+                </span>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button"
+                        class="btn btn-secondary btn-sm"
+                        data-bs-dismiss="modal">
+                    Annulla
+                </button>
+
+                <button type="button"
+                        class="btn btn-danger btn-sm"
+                        id="btnConfermaEliminazionePrelievo">
+                    Elimina Prelievo
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -348,82 +722,294 @@
 
 
     function apriModaleCostoPersonale(idProfessionista) {
-        // ⚠️ Puoi passare l'ID del professionista se necessario
-        fetch('/Pratiche/GetPlafondDisponibile') // o con parametro: `?idProfessionista=${idProfessionista}`
+
+        const select = document.getElementById('idUtenteCosto');
+        const idUtente = idProfessionista || (select ? select.value : '');
+
+        if (idUtente) {
+            caricaPlafondDisponibile(idUtente);
+        } else {
+            document.getElementById("plafondDisponibileInput").value = '';
+        }
+
+        new bootstrap.Modal(
+            document.getElementById("modalCostoPersonale")
+        ).show();
+    }
+
+
+    document.getElementById("formCostoPersonale")
+        .addEventListener("submit", function (e) {
+
+            e.preventDefault();
+
+            const form = this;
+            const formData = new FormData(form);
+
+            // ============================
+            // 🔥 LETTURA IMPORTO RAW (STRINGA PURA)
+            // ============================
+            const rawImporto = formData.get("Importo");
+
+            console.log("RAW IMPORTO:", rawImporto);
+
+            if (!rawImporto || !rawImporto.trim()) {
+                toastr.warning("Inserisci un importo valido.");
+                return;
+            }
+
+            // ============================
+            // 🔥 NORMALIZZAZIONE SMART
+            // ============================
+            let importoNormalizzato = rawImporto.trim();
+
+            // Caso formato italiano
+            if (importoNormalizzato.includes(',')) {
+                importoNormalizzato = importoNormalizzato
+                    .replace(/\./g, '')   // separatori migliaia
+                    .replace(',', '.');   // decimale
+            }
+
+            console.log("IMPORTO NORMALIZZATO:", importoNormalizzato);
+
+            const importoInserito = parseFloat(importoNormalizzato);
+            const idUtente = formData.get("ID_Utente");
+
+            if (!idUtente) {
+                toastr.warning("Seleziona un professionista.");
+                return;
+            }
+
+            if (isNaN(importoInserito) || importoInserito <= 0) {
+                toastr.warning("Inserisci un importo valido.");
+                return;
+            }
+
+            // Sovrascrivo valore pulito
+            formData.set("Importo", importoNormalizzato);
+
+            // ============================
+            // 🔎 RECUPERO PLAFOND
+            // ============================
+            fetch('/Pratiche/GetPlafondDisponibile?idUtente=' + encodeURIComponent(idUtente))
+                .then(res => res.json())
+                .then(data => {
+
+                    if (!data.success) {
+                        toastr.error("Errore nel recupero del plafond disponibile.");
+                        return;
+                    }
+
+                    let rawPlafond = (data.plafond || "")
+                        .replace("€", "")
+                        .trim()
+                        .replace(/\./g, "")
+                        .replace(",", ".");
+
+                    const plafondDisponibile = parseFloat(rawPlafond);
+
+                    if (isNaN(plafondDisponibile)) {
+                        toastr.error("Errore nel parsing del plafond disponibile.");
+                        return;
+                    }
+
+                    if (importoInserito > plafondDisponibile) {
+                        toastr.warning("Il costo supera il plafond disponibile.");
+                        return;
+                    }
+
+                    // ============================
+                    // ✅ INVIO AL SERVER
+                    // ============================
+                    fetch('/Pratiche/InserisciCostoPersonale', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(r => r.json())
+                        .then(res => {
+
+                            if (res.success) {
+                                toastr.success(res.message);
+
+                                bootstrap.Modal
+                                    .getInstance(
+                                        document.getElementById("modalCostoPersonale")
+                                    )
+                                    .hide();
+
+                                form.reset();
+                                location.reload();
+
+                            } else {
+                                toastr.error(res.message || "Errore durante il salvataggio.");
+                            }
+                        });
+
+                })
+                .catch(() => toastr.error("Errore nel recupero del plafond."));
+        });
+
+
+    function caricaPlafondDisponibile(idUtente) {
+        fetch('/Pratiche/GetPlafondDisponibile?idUtente=' + encodeURIComponent(idUtente))
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    document.getElementById("plafondDisponibileInput").value = data.plafond ;
+                    $('#plafondDisponibileInput').val(data.plafond);
+                    $('#plafondDisponibilePrelievoInput').val(data.plafond); // se esiste
                 } else {
-                    document.getElementById("plafondDisponibileInput").value = "Errore";
+                    $('#plafondDisponibileInput').val('Errore');
+                    $('#plafondDisponibilePrelievoInput').val('Errore');
                 }
-
-                // Mostra la modale solo dopo il fetch
-                const modal = new bootstrap.Modal(document.getElementById("modalCostoPersonale"));
-                modal.show();
             })
             .catch(() => {
-                document.getElementById("plafondDisponibileInput").value = "Errore";
-                const modal = new bootstrap.Modal(document.getElementById("modalCostoPersonale"));
-                modal.show();
+                $('#plafondDisponibileInput').val('Errore');
+                $('#plafondDisponibilePrelievoInput').val('Errore');
             });
     }
 
-    document.getElementById("formCostoPersonale").addEventListener("submit", function (e) {
-        e.preventDefault();
 
-        const form = this;
-        const formData = new FormData(form);
-        const importoInserito = parseFloat(formData.get("importo"));
+    function apriModalePrelievoProfessionista(idProfessionista) {
 
-        fetch('/Pratiche/GetPlafondDisponibile')
-            .then(res => res.json())
-            .then(data => {
-                if (!data.success) {
-                    toastr.error("Errore nel recupero del plafond disponibile.");
-                    return;
-                }
+        const select = document.getElementById('idUtentePrelievo');
+        const idUtente = idProfessionista || (select ? select.value : '');
 
-                // ✅ Parsing sicuro del valore numerico del plafond
-                let rawPlafond = data.plafond
-                    .replace("€", "")        // rimuove il simbolo euro
-                    .trim()
-                    .replace(/\./g, "")     // rimuove i punti separatori delle migliaia
-                    .replace(",", ".");     // converte virgola in punto decimale
-
-                const plafondDisponibile = parseFloat(rawPlafond);
-
-                if (isNaN(plafondDisponibile)) {
-                    toastr.error("Errore nel parsing del plafond disponibile.");
-                    return;
-                }
-
-                if (importoInserito > plafondDisponibile) {
-                    toastr.warning("Il costo supera il plafond disponibile.");
-                    return;
-                }
-
-                fetch('/Pratiche/InserisciCostoPersonale', {
-                    method: 'POST',
-                    body: formData
+        if (idUtente) {
+            fetch('/Pratiche/GetPlafondDisponibile?idUtente=' + encodeURIComponent(idUtente))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById("plafondDisponibilePrelievoInput").value = data.plafond;
+                    } else {
+                        document.getElementById("plafondDisponibilePrelievoInput").value = "Errore";
+                    }
                 })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.success) {
-                            toastr.success(data.message);
-                            const modal = bootstrap.Modal.getInstance(document.getElementById("modalCostoPersonale"));
-                            modal.hide();
-                            form.reset();
-                            location.reload();
-                        } else {
-                            toastr.error(data.message);
-                        }
-                    });
-            })
-            .catch(() => toastr.error("Errore nel recupero del plafond."));
-    });
+                .catch(() => {
+                    document.getElementById("plafondDisponibilePrelievoInput").value = "Errore";
+                });
+        } else {
+            document.getElementById("plafondDisponibilePrelievoInput").value = '';
+        }
+
+        new bootstrap.Modal(
+            document.getElementById("modalPrelievoProfessionista")
+        ).show();
+    }
 
 
+
+    document.getElementById("formPrelievoProfessionista")
+        .addEventListener("submit", function (e) {
+
+            e.preventDefault();
+
+            const form = this;
+            const formData = new FormData(form);
+
+            // ============================
+            // 🔥 LETTURA CAMPI
+            // ============================
+            const rawImporto = formData.get("importo");
+            const note = formData.get("note") || "";
+            const idProfessionista = formData.get("idProfessionista");
+
+            if (!idProfessionista) {
+                toastr.warning("Seleziona un professionista.");
+                return;
+            }
+
+            if (!rawImporto || !rawImporto.trim()) {
+                toastr.warning("Inserisci un importo valido.");
+                return;
+            }
+
+            // ============================
+            // 🔥 NORMALIZZAZIONE IMPORTO
+            // ============================
+            let importoNormalizzato = rawImporto.trim();
+
+            if (importoNormalizzato.includes(',')) {
+                importoNormalizzato = importoNormalizzato
+                    .replace(/\./g, '')   // separatori migliaia
+                    .replace(',', '.');   // decimale
+            }
+
+            const importoInserito = parseFloat(importoNormalizzato);
+
+            if (isNaN(importoInserito) || importoInserito <= 0) {
+                toastr.warning("Inserisci un importo valido.");
+                return;
+            }
+
+            // ============================
+            // 🔎 RECUPERO PLAFOND CORRETTO
+            // ============================
+            fetch('/Pratiche/GetPlafondDisponibile?idUtente=' + encodeURIComponent(idProfessionista))
+                .then(res => res.json())
+                .then(data => {
+
+                    if (!data.success) {
+                        toastr.error("Errore nel recupero del plafond disponibile.");
+                        return;
+                    }
+
+                    let rawPlafond = (data.plafond || "")
+                        .replace("€", "")
+                        .trim()
+                        .replace(/\./g, "")
+                        .replace(",", ".");
+
+                    const plafondDisponibile = parseFloat(rawPlafond);
+
+                    if (isNaN(plafondDisponibile)) {
+                        toastr.error("Errore nel parsing del plafond disponibile.");
+                        return;
+                    }
+
+                    if (importoInserito > plafondDisponibile) {
+                        toastr.warning("Il prelievo supera il plafond disponibile.");
+                        return;
+                    }
+
+                    // ============================
+                    // ✅ INVIO AL SERVER
+                    // ============================
+                    const payload =
+                        `ID_Utente=${encodeURIComponent(idProfessionista)}` +
+                        `&importo=${encodeURIComponent(importoNormalizzato)}` +
+                        `&note=${encodeURIComponent(note)}`;
+
+
+                    fetch('/Pratiche/InserisciPrelievoProfessionista', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: payload
+                    })
+                        .then(r => r.json())
+                        .then(res => {
+
+                            if (res.success) {
+                                toastr.success(res.message);
+
+                                bootstrap.Modal
+                                    .getInstance(
+                                        document.getElementById("modalPrelievoProfessionista")
+                                    )
+                                    .hide();
+
+                                form.reset();
+                                location.reload();
+
+                            } else {
+                                toastr.error(res.message || "Errore durante il prelievo.");
+                            }
+                        });
+
+                })
+                .catch(() => toastr.error("Errore nel recupero del plafond."));
+        });
 
 
     let idElementoDaEliminare = null;
@@ -434,25 +1020,43 @@
         tipoEliminazione = tipo;
 
         let modalId = '';
+
         if (tipo === 'versamento') {
             modalId = 'eliminaVersamentoModal';
-        } else if (tipo === 'costo') {
+        }
+        else if (tipo === 'costo') {
             modalId = 'eliminaCostoPersonaleModal';
-        } else if (tipo === 'finanziamento') {
+        }
+        else if (tipo === 'finanziamento') {
             modalId = 'eliminaFinanziamentoModal';
+        }
+        else if (tipo === 'prelievo') {
+            modalId = 'eliminaPrelievoModal';
         }
 
         if (modalId) {
-            const modal = new bootstrap.Modal(document.getElementById(modalId));
+            const modal = new bootstrap.Modal(
+                document.getElementById(modalId)
+            );
             modal.show();
         }
     }
 
+
     // Event listener per i bottoni di conferma eliminazione (unico listener)
-    document.querySelectorAll('#btnConfermaEliminazioneVersamento, #btnConfermaEliminazioneCostoPersonale, #btnConfermaEliminazioneFinanziamento')
+    document.querySelectorAll(
+        '#btnConfermaEliminazioneVersamento, ' +
+        '#btnConfermaEliminazioneCostoPersonale, ' +
+        '#btnConfermaEliminazioneFinanziamento, ' +
+        '#btnConfermaEliminazionePrelievo'
+    )
         .forEach(btn => {
             btn.addEventListener('click', function () {
-                if (!idElementoDaEliminare || !tipoEliminazione) return;
+
+                if (!idElementoDaEliminare || !tipoEliminazione) {
+                    console.warn("❌ Nessun elemento da eliminare");
+                    return;
+                }
 
                 let url = '';
                 switch (tipoEliminazione) {
@@ -465,14 +1069,20 @@
                     case 'finanziamento':
                         url = '/Pratiche/EliminaFinanziamento';
                         break;
+                    case 'prelievo':
+                        url = '/Pratiche/EliminaPrelievoProfessionista';
+                        break;
                 }
 
-                if (!url) return;
+                if (!url) {
+                    console.error("❌ Tipo eliminazione sconosciuto:", tipoEliminazione);
+                    return;
+                }
 
                 fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `id=${idElementoDaEliminare}`
+                    body: `id=${encodeURIComponent(idElementoDaEliminare)}`
                 })
                     .then(r => r.json())
                     .then(res => {
@@ -482,9 +1092,14 @@
                         } else {
                             toastr.error(res.message || "Errore durante l'eliminazione.");
                         }
+                    })
+                    .catch(err => {
+                        console.error("❌ Errore fetch eliminazione:", err);
+                        toastr.error("Errore di comunicazione col server.");
                     });
             });
         });
+
 
     // Usa questa funzione nel listener globale per gestire il click sui bottoni .btn-elimina
     document.addEventListener('click', function (e) {
@@ -502,6 +1117,51 @@
 
     // 🔍 Filtro e paginazione Plafond
     document.addEventListener("DOMContentLoaded", function () {
+
+        // =====================================================
+        // 🔥 AGGANCIO SELECT ADMIN (COSTO / PRELIEVO)
+        // =====================================================
+
+        const selectCosto = document.getElementById("idUtenteCosto");
+        if (selectCosto) {
+            selectCosto.addEventListener("change", function () {
+                const idUtente = this.value;
+                if (!idUtente) {
+                    document.getElementById("plafondDisponibileInput").value = "";
+                    return;
+                }
+                caricaPlafondDisponibile(idUtente);
+            });
+        }
+
+        const selectPrelievo = document.getElementById("idUtentePrelievo");
+        if (selectPrelievo) {
+            selectPrelievo.addEventListener("change", function () {
+                const idUtente = this.value;
+                if (!idUtente) {
+                    document.getElementById("plafondDisponibilePrelievoInput").value = "";
+                    return;
+                }
+
+                fetch('/Pratiche/GetPlafondDisponibile?idUtente=' + encodeURIComponent(idUtente))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            document.getElementById("plafondDisponibilePrelievoInput").value = data.plafond;
+                        } else {
+                            document.getElementById("plafondDisponibilePrelievoInput").value = "Errore";
+                        }
+                    })
+                    .catch(() => {
+                        document.getElementById("plafondDisponibilePrelievoInput").value = "Errore";
+                    });
+            });
+        }
+
+        // =====================================================
+        // 🔍 FILTRO + PAGINAZIONE PLAFOND
+        // =====================================================
+
         const table = document.getElementById('plafondTable');
         if (!table) return;
 
@@ -578,7 +1238,7 @@
 
             let filteredRows = rows.filter(row => {
                 const text = row.innerText.toLowerCase();
-                const tipoCell = row.querySelector('td:nth-child(2)'); // 2° colonna = Tipo Plafond
+                const tipoCell = row.querySelector('td:nth-child(2)');
                 const tipo = tipoCell ? tipoCell.innerText.trim() : '';
                 const tipoMatch = (filtroTipo === 'Tutti' || tipo === filtroTipo);
                 return text.includes(keyword) && tipoMatch;
@@ -587,11 +1247,10 @@
             const totalPages = Math.ceil(filteredRows.length / pageSize);
             currentPage = Math.min(currentPage, totalPages || 1);
 
-            // Tabella desktop
             rows.forEach(r => r.style.display = 'none');
-            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
 
-            // Card mobile
             cards.forEach(c => c.style.display = 'none');
             filteredRows.forEach(row => {
                 const id = row.getAttribute('data-id');
@@ -599,7 +1258,6 @@
                 if (card) card.style.display = '';
             });
 
-            // Paginazione
             paginationContainer.innerHTML = '';
             paginationContainer.className = 'd-flex justify-content-end align-items-center gap-2';
 
@@ -623,7 +1281,6 @@
             paginationContainer.appendChild(nextBtn);
         }
 
-        // Eventi
         searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
         selectTipo.addEventListener('change', () => { currentPage = 1; renderTable(); });
         selectPageSize.addEventListener('change', () => {

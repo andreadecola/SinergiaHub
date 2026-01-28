@@ -97,68 +97,109 @@
     </div>
 
 
-    @* 🏢 BLOCCO ADMIN PER VEDERE GESTIONE UTILE E COSTI SINERGIA *@
+    @* 🏢 BLOCCO ADMIN PER KPI SINERGIA *@
     @if (Model.IsAdmin && (Model.ID_ClienteSelezionato == null || Model.ID_ClienteSelezionato == 0))
     {
         <hr class="my-4" />
 
-        <!-- 🏢 KPI SINERGIA + GRAFICO SINISTRA + LEGENDA DESTRA -->
-        <div class="row g-3 align-items-center text-center">
+        <!-- ========================= -->
+        <!-- 🏢 KPI SINERGIA (SINTESI) -->
+        <!-- ========================= -->
+        <div class="row g-3 align-items-center text-center mb-3">
 
-            <!-- 🔹 CARD 1 -->
-            <div class="col-md-2 col-sm-6">
-                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="entrate">
+            <!-- 1️⃣ Avvisi Parcella Totali -->
+            <div class="col-md-3 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="avvisi">
                     <div class="card-body p-3">
-                        <i class="bi bi-cash-stack fs-4 text-success"></i>
-                        <h6 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.EntrateTotaliSinergia)</h6>
-                        <p class="mb-0 small text-muted">Entrate</p>
+                        <i class="bi bi-receipt fs-4 text-primary"></i>
+                        <h6 class="mt-2 fw-bold">@Model.AvvisiTotaliSinergia</h6>
+                        <p class="mb-0 small text-muted">Avvisi Parcella Totali</p>
                     </div>
                 </div>
             </div>
 
-            <!-- 🔹 CARD 2 -->
+            <!-- 2️⃣ Fatturato Totale Generato -->
+            <div class="col-md-3 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="fatturato">
+                    <div class="card-body p-3">
+                        <i class="bi bi-currency-euro fs-4 text-success"></i>
+                        <h6 class="mt-2 fw-bold">
+                            @string.Format("{0:N2} €", Model.FatturatoTotaleGenerato)
+                        </h6>
+                        <p class="mb-0 small text-muted">Fatturato Totale (documentale)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3️⃣ Crediti / Netto Professionisti -->
+            <div class="col-md-3 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="crediti">
+                    <div class="card-body p-3">
+                        <i class="bi bi-file-earmark-text fs-4 text-warning"></i>
+                        <h6 class="mt-2 fw-bold">
+                            @string.Format("{0:N2} €", Model.CreditoTotaleProfessionisti)
+                        </h6>
+                        <p class="mb-0 small text-muted">Netto Prof. da Liquidare</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4️⃣ Disponibilità Sinergia (Margine) -->
+            <div class="col-md-3 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="disponibilita">
+                    <div class="card-body p-3">
+                        <i class="bi bi-piggy-bank fs-4 text-info"></i>
+                        <h6 class="mt-2 fw-bold">
+                            @string.Format("{0:N2} €", Model.DisponibilitaSinergia)
+                        </h6>
+                        <p class="mb-0 small text-muted">Disponibilità Sinergia (Margine)</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ========================= -->
+        <!-- 📊 KPI DETTAGLIO + GRAFICO -->
+        <!-- ========================= -->
+        <div class="row g-3 align-items-center text-center">
+
+            <!-- 🔹 CARD 1: ENTRATE (Trattenute) -->
+            <div class="col-md-2 col-sm-6">
+                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="entrate">
+                    <div class="card-body p-3">
+                        <i class="bi bi-cash-stack fs-4 text-success"></i>
+                        <h6 class="mt-2 fw-bold">
+                            @string.Format("{0:N2} €", Model.EntrateTotaliSinergia)
+                        </h6>
+                        <p class="mb-0 small text-muted">Entrate (Trattenute)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔹 CARD 2: USCITE -->
             <div class="col-md-2 col-sm-6">
                 <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="uscite">
                     <div class="card-body p-3">
                         <i class="bi bi-wallet2 fs-4 text-danger"></i>
-                        <h6 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.UsciteTotaliSinergia)</h6>
+                        <h6 class="mt-2 fw-bold">
+                            @string.Format("{0:N2} €", Model.UsciteTotaliSinergia)
+                        </h6>
                         <p class="mb-0 small text-muted">Uscite</p>
                     </div>
                 </div>
             </div>
 
-            <!-- 🔹 CARD 3 -->
-            <div class="col-md-2 col-sm-6">
-                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="trattenute">
-                    <div class="card-body p-3">
-                        <i class="bi bi-percent fs-4 text-warning"></i>
-                        <h6 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.TrattenuteSinergiaTotali)</h6>
-                        <p class="mb-0 small text-muted">Trattenute</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 🔹 CARD 4 -->
-            <div class="col-md-2 col-sm-6">
-                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="utile">
-                    <div class="card-body p-3">
-                        <i class="bi bi-bar-chart-line-fill fs-4 text-primary"></i>
-                        <h6 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.UtileAziendale)</h6>
-                        <p class="mb-0 small text-muted">Utile</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 📊 GRAFICO SINISTRA + LEGENDA DESTRA -->
-            <div class="col-md-4 col-sm-12">
+            <!-- 📊 GRAFICO + LEGENDA -->
+            <div class="col-md-8 col-sm-12">
                 <div class="card shadow-sm border-0 h-100 p-3 d-flex flex-row align-items-center justify-content-between">
 
-                    <!-- GRAFICO A SINISTRA -->
+                    <!-- GRAFICO -->
                     <div style="width: 50%; height: 140px;">
                         <canvas id="graficoTortaSinergia"></canvas>
                     </div>
 
-                    <!-- LEGENDA A DESTRA -->
+                    <!-- LEGENDA -->
                     <div class="text-start small text-muted ms-3" style="width: 45%;">
                         <h6 class="text-secondary mb-1">Ripartizione Sinergia</h6>
                         <p class="small text-muted mb-2">
@@ -168,22 +209,24 @@
                                 <span> · <strong id="lblSotto">@Model.SottoFiltro.ToUpper()</strong></span>
                             }
                         </p>
-                        <div><i class="bi bi-circle-fill text-success"></i> <strong>Entrate</strong> – Ricavi totali generati</div>
-                        <div><i class="bi bi-circle-fill text-danger"></i> <strong>Uscite</strong> – Costi e spese operative</div>
-                        <div><i class="bi bi-circle-fill text-warning"></i> <strong>Trattenute</strong> – Quote trattenute Sinergia</div>
-                        <div><i class="bi bi-circle-fill text-primary"></i> <strong>Utile</strong> – Margine netto finale</div>
+
+                        <div><i class="bi bi-circle-fill text-success"></i> <strong>Entrate</strong> – Trattenute Sinergia</div>
+                        <div><i class="bi bi-circle-fill text-danger"></i> <strong>Uscite</strong> – Costi Generali + Team</div>
+                        <div><i class="bi bi-circle-fill text-info"></i> <strong>Disponibilità</strong> – Margine (Entrate − Uscite)</div>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- ========================= -->
         <!-- 🌙 MODALE KPI SINERGIA -->
+        <!-- ========================= -->
         <div class="modal fade" id="modaleDettaglioKPI" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content shadow-lg">
                     <div class="modal-header bg-primary text-white">
                         <h5 class="modal-title" id="titoloModaleKPI">Dettaglio KPI</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body p-3" id="contenutoDettaglioKPI">
                         <div class="text-center text-muted py-4">
@@ -195,12 +238,12 @@
             </div>
         </div>
 
-
         <script>
         // ============================
-        // 🧩 GESTIONE GRAFICO SINERGIA
+        // 📊 GRAFICO TORTA SINERGIA
         // ============================
         let chartSinergia = null;
+
         const mapPeriodi = {
             "Q1": "1° Trimestre (Gen - Mar)",
             "Q2": "2° Trimestre (Apr - Giu)",
@@ -209,15 +252,31 @@
             "Anno": "Anno Completo"
         };
 
-        function aggiornaGraficoSinergia(entrate, uscite, trattenute, utile, trimestre, sottofiltro) {
-            const ctx = document.getElementById('graficoTortaSinergia').getContext('2d');
+        // 🔧 Helper: parse numeri Razor in modo sicuro
+        function parseEuro(val) {
+            if (!val) return 0;
+            // toglie separatori migliaia e normalizza la virgola
+            val = val.toString().replace(/\./g, "").replace(",", ".");
+            const n = parseFloat(val);
+            return isNaN(n) ? 0 : n;
+        }
+
+        function aggiornaGraficoSinergia(entrate, uscite, disponibilita, trimestre, sottofiltro) {
+
+            const canvas = document.getElementById('graficoTortaSinergia');
+            if (!canvas) {
+                console.warn("⚠️ Canvas graficoTortaSinergia non trovato.");
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
             if (chartSinergia) chartSinergia.destroy();
 
             const data = {
-                labels: ['Entrate', 'Uscite', 'Trattenute', 'Utile'],
+                labels: ['Entrate (Trattenute)', 'Uscite', 'Disponibilità (Margine)'],
                 datasets: [{
-                    data: [entrate, uscite, trattenute, utile],
-                    backgroundColor: ['#198754', '#dc3545', '#ffc107', '#0d6efd'],
+                    data: [entrate, uscite, disponibilita],
+                    backgroundColor: ['#198754', '#dc3545', '#0dcaf0'],
                     borderColor: '#fff',
                     borderWidth: 1
                 }]
@@ -234,9 +293,11 @@
                         tooltip: {
                             callbacks: {
                                 label: function (context) {
-                                    return context.label + ': ' + context.parsed.toLocaleString('it-IT', {
-                                        style: 'currency', currency: 'EUR'
-                                    });
+                                    return context.label + ': ' +
+                                        context.parsed.toLocaleString('it-IT', {
+                                            style: 'currency',
+                                            currency: 'EUR'
+                                        });
                                 }
                             }
                         }
@@ -244,28 +305,42 @@
                 }
             });
 
-            document.getElementById("lblPeriodo").innerText = mapPeriodi[trimestre] || trimestre;
+            const lbl = document.getElementById("lblPeriodo");
+            if (lbl) {
+                lbl.innerText = mapPeriodi[trimestre] || trimestre;
+            }
         }
 
         document.addEventListener("DOMContentLoaded", function () {
+
             const trimestre = "@Model.FiltroTrimestre" || "Anno";
             const sotto = "@Model.SottoFiltro" || "completo";
-            const entrate = parseFloat("@Model.EntrateTotaliSinergia".replace(",", ".") || 0);
-            const uscite = parseFloat("@Model.UsciteTotaliSinergia".replace(",", ".") || 0);
-            const trattenute = parseFloat("@Model.TrattenuteSinergiaTotali".replace(",", ".") || 0);
-            const utile = parseFloat("@Model.UtileAziendale".replace(",", ".") || 0);
-            aggiornaGraficoSinergia(entrate, uscite, trattenute, utile, trimestre, sotto);
+
+            const entrate = parseEuro("@Model.EntrateTotaliSinergia");
+            const uscite = parseEuro("@Model.UsciteTotaliSinergia");
+            const disponibilita = parseEuro("@Model.DisponibilitaSinergia");
+
+            console.log("📊 Grafico Sinergia:", { entrate, uscite, disponibilita, trimestre, sotto });
+
+            aggiornaGraficoSinergia(entrate, uscite, disponibilita, trimestre, sotto);
         });
 
         // ============================
-        // ⚡ GESTIONE MODALE DETTAGLIO
+        // 🧾 MODALE DETTAGLIO KPI
         // ============================
         document.addEventListener("click", function (e) {
+
             const card = e.target.closest(".kpi-card");
             if (!card) return;
 
             const tipo = card.getAttribute("data-tipo");
             const titolo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
+
+            const anno = "@annoSelezionato";
+            const trimestre = "@Model.FiltroTrimestre";
+            const sottoFiltro = "@Model.SottoFiltro";
+
+            console.log("📊 KPI cliccata:", { tipo, anno, trimestre, sottoFiltro });
 
             const modal = new bootstrap.Modal(document.getElementById("modaleDettaglioKPI"));
             document.getElementById("titoloModaleKPI").innerText = `Dettaglio KPI: ${titolo}`;
@@ -277,7 +352,16 @@
 
             modal.show();
 
-            fetch(`/Home/GetDettaglioKPISinergia?tipo=${tipo}`)
+            const url =
+                `/Home/GetDettaglioKPISinergia` +
+                `?tipo=${encodeURIComponent(tipo)}` +
+                `&anno=${encodeURIComponent(anno)}` +
+                `&trimestre=${encodeURIComponent(trimestre)}` +
+                `&sottoFiltro=${encodeURIComponent(sottoFiltro)}`;
+
+            console.log("➡️ URL KPI:", url);
+
+            fetch(url)
                 .then(res => res.text())
                 .then(html => {
                     document.getElementById("contenutoDettaglioKPI").innerHTML = html;
@@ -289,14 +373,16 @@
                 });
         });
         </script>
+
     }
+
 
 
     @if ((Model.ID_ClienteSelezionato == 0 || string.IsNullOrWhiteSpace(Model.NomeCliente))
         && (Model.ID_UtenteImpers == null || Model.ID_UtenteImpers == 0))
     {
         <div class="alert alert-warning mt-4">
-            Seleziona un cliente dal menu per visualizzare i dati.
+            Seleziona un professionista dal menu per visualizzare i dati.
         </div>
         return;
     }
@@ -306,15 +392,17 @@
         Cliente attivo: <strong>@Model.NomeCliente</strong> · Periodo: <strong>@Model.FiltroTrimestre</strong> @if (Model.SottoFiltro != "completo")
         {<span>– @Model.SottoFiltro.ToUpper()</span>}
     </p>
+    <!-- KPI principali PROFESSIONISTA + GRAFICO -->
+    <div class="row g-3 mb-4 text-center align-items-stretch">
 
-    <!-- KPI principali -->
-    <div class="row g-3 mb-4 text-center">
         <!-- Pratiche attive -->
         <div class="col-md-2 col-sm-6">
-            <div class="card shadow-sm border-0 h-100">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="pratiche">
                 <div class="card-body">
                     <i class="bi bi-kanban-fill fs-3 text-primary"></i>
-                    <h5 class="mt-2 fw-bold">@(Model.Pratiche?.Count() ?? 0)</h5>
+                    <h5 class="mt-2 fw-bold">
+                        @(Model.Pratiche?.Count(p => p.Stato != "Chiusa" && p.Stato != "Eliminato") ?? 0)
+                    </h5>
                     <p class="mb-0 small text-muted">Pratiche attive</p>
                 </div>
             </div>
@@ -322,21 +410,36 @@
 
         <!-- Avvisi emessi -->
         <div class="col-md-2 col-sm-6">
-            <div class="card shadow-sm border-0 h-100">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="avvisi">
                 <div class="card-body">
                     <i class="bi bi-receipt fs-3 text-success"></i>
-                    <h5 class="mt-2 fw-bold">@(Model.AvvisiParcella?.Count() ?? 0)</h5>
+                    <h5 class="mt-2 fw-bold">@Model.AvvisiEmessi</h5>
                     <p class="mb-0 small text-muted">Avvisi emessi</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fatturato lordo -->
+        <div class="col-md-2 col-sm-6">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="fatturato">
+                <div class="card-body">
+                    <i class="bi bi-file-earmark-text fs-3 text-secondary"></i>
+                    <h5 class="mt-2 fw-bold">
+                        @string.Format("{0:N2} €", Model.FatturatoLordo)
+                    </h5>
+                    <p class="mb-0 small text-muted">Fatturato lordo</p>
                 </div>
             </div>
         </div>
 
         <!-- Incassi totali -->
         <div class="col-md-2 col-sm-6">
-            <div class="card shadow-sm border-0 h-100">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="incassi">
                 <div class="card-body">
                     <i class="bi bi-cash-coin fs-3 text-info"></i>
-                    <h5 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.IncassiTotali)</h5>
+                    <h5 class="mt-2 fw-bold">
+                        @string.Format("{0:N2} €", Model.IncassiTotali)
+                    </h5>
                     <p class="mb-0 small text-muted">Incassi totali</p>
                 </div>
             </div>
@@ -344,57 +447,111 @@
 
         <!-- Costi totali -->
         <div class="col-md-2 col-sm-6">
-            <div class="card shadow-sm border-0 h-100">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="costi">
                 <div class="card-body">
                     <i class="bi bi-wallet2 fs-3 text-danger"></i>
-                    <h5 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.CostiTotali)</h5>
+                    <h5 class="mt-2 fw-bold">
+                        @string.Format("{0:N2} €", Model.CostiTotali)
+                    </h5>
                     <p class="mb-0 small text-muted">Costi totali</p>
                 </div>
             </div>
         </div>
 
-        <!-- Utile incassato -->
+        <!-- Disponibilità -->
         <div class="col-md-2 col-sm-6">
-            <div class="card shadow-sm border-0 h-100">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="disponibilita">
                 <div class="card-body">
-                    <i class="bi bi-graph-up-arrow fs-3 text-warning"></i>
-                    <h5 class="mt-2 fw-bold">@string.Format("{0:N2} €", Model.UtilePersonale ?? 0)</h5>
-                    <p class="mb-0 small text-muted">Utile incassato</p>
+                    <i class="bi bi-piggy-bank fs-3 text-success"></i>
+                    <h5 class="mt-2 fw-bold">
+                        @string.Format("{0:N2} €", Model.DisponibilitaFinanziaria)
+                    </h5>
+                    <p class="mb-0 small text-muted">Disponibilità</p>
                 </div>
             </div>
         </div>
 
-        <!-- GRAFICO A TORTA -->
+      
+
+    </div>
+
+    <!-- Seconda riga KPI PROF -->
+    <div class="row g-3 mb-4 text-center">
+
+        <!-- Credito fatturabile -->
+        <div class="col-md-3 col-sm-6">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="credito">
+                <div class="card-body">
+                    <i class="bi bi-cash-stack fs-3 text-dark"></i>
+                    <h5 class="mt-2 fw-bold">
+                        @string.Format("{0:N2} €", Model.CreditoFatturabile)
+                    </h5>
+                    <p class="mb-0 small text-muted">Credito fatturabile</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trattenute Sinergia -->
+        <div class="col-md-3 col-sm-6">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="trattenute">
+                <div class="card-body">
+                    <i class="bi bi-percent fs-3 text-danger"></i>
+                    <h5 class="mt-2 fw-bold">
+                        @string.Format("{0:N2} €", Model.TrattenuteSinergia)
+                    </h5>
+                    <p class="mb-0 small text-muted">Trattenute Sinergia</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fatturato netto -->
         <div class="col-md-2 col-sm-12">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="netto">
+                <div class="card-body">
+                    <i class="bi bi-currency-euro fs-3 text-primary"></i>
+                    <h5 class="mt-2 fw-bold">
+                        @string.Format("{0:N2} €", Model.FatturatoNetto)
+                    </h5>
+                    <p class="mb-0 small text-muted">Fatturato netto</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📊 GRAFICO PROFESSIONISTA (DENTRO LA STESSA ROW) -->
+        <div class="col-md-4 col-sm-12">
             <div class="card shadow-sm border-0 h-100 p-3">
-                <h6 class="text-secondary mb-2 text-center">📊 Ripartizione</h6>
-                <div class="chart-container" style="position: relative; height: 150px; width: 100%;">
+                <h6 class="text-secondary mb-2 text-center">📊 Ripartizione economica</h6>
+                <div class="chart-container" style="position: relative; height: 160px; width: 100%;">
                     <canvas id="graficoTortaPrincipale"></canvas>
                 </div>
             </div>
         </div>
+
     </div>
 
-    <!-- SCRIPT -->
+
+    <!-- SCRIPT GRAFICO -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
 document.addEventListener("DOMContentLoaded", function () {
     const ctx = document.getElementById('graficoTortaPrincipale').getContext('2d');
 
-    // Dati principali del professionista
-    const incassi = parseFloat("@(Model.IncassiTotali)".replace(",", "."));
-    const costi = parseFloat("@(Model.CostiTotali)".replace(",", "."));
-    const utile = parseFloat("@(Model.UtilePersonale ?? 0)".replace(",", "."));
+    const incassi = parseFloat("@Model.IncassiTotali".replace(",", "."));
+    const costi = parseFloat("@Model.CostiTotali".replace(",", "."));
+    const trattenute = parseFloat("@Model.TrattenuteSinergia".replace(",", "."));
+    const disponibilita = parseFloat("@Model.DisponibilitaFinanziaria".replace(",", "."));
 
-    console.log("📊 Dati grafico principale (professionista):", { incassi, costi, utile });
+    console.log("📊 Dati grafico principale (professionista):", {
+        incassi, costi, trattenute, disponibilita
+    });
 
     new Chart(ctx, {
         type: 'pie',
         data: {
-            labels: ['Incassi Totali', 'Costi Totali', 'Utile Incassato'],
+            labels: ['Incassi', 'Costi', 'Trattenute Sinergia', 'Disponibilità'],
             datasets: [{
-                data: [incassi, costi, utile],
-                backgroundColor: ['#198754', '#dc3545', '#0d6efd'],
+                data: [incassi, costi, trattenute, disponibilita],
+                backgroundColor: ['#198754', '#dc3545', '#ffc107', '#0d6efd'],
                 borderColor: '#fff',
                 borderWidth: 1
             }]
@@ -424,6 +581,80 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         }
     });
+});
+    </script>
+
+    <!-- ========================= -->
+    <!-- 🌙 MODALE KPI professionista -->
+    <!-- ========================= -->
+    <div class="modal fade" id="modaleDettaglioKPIProf" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="titoloModaleKPIProf">Dettaglio KPI</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3" id="contenutoDettaglioKPIProf">
+                    <div class="text-center text-muted py-4">
+                        <div class="spinner-border text-success"></div>
+                        <p class="mt-2 small">Caricamento in corso...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    document.querySelectorAll(".kpi-card").forEach(card => {
+
+        // evita che rientri nello script admin
+        if (card.closest(".kpi-admin")) return;
+
+        card.addEventListener("click", function () {
+
+            const tipo = this.dataset.tipo;
+            const titolo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
+
+            const anno = "@annoSelezionato";
+            const trimestre = "@Model.FiltroTrimestre";
+            const sottoFiltro = "@Model.SottoFiltro";
+
+            const modal = new bootstrap.Modal(
+                document.getElementById("modaleDettaglioKPIProf")
+            );
+
+            document.getElementById("titoloModaleKPIProf").innerText =
+                `Dettaglio KPI: ${titolo}`;
+
+            document.getElementById("contenutoDettaglioKPIProf").innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <div class="spinner-border text-success"></div>
+                    <p class="mt-2 small">Caricamento dati ${titolo}...</p>
+                </div>`;
+
+            modal.show();
+
+            const url =
+                `/Home/GetDettaglioKPIProfessionista` +
+                `?tipo=${encodeURIComponent(tipo)}` +
+                `&anno=${encodeURIComponent(anno)}` +
+                `&trimestre=${encodeURIComponent(trimestre)}` +
+                `&sottoFiltro=${encodeURIComponent(sottoFiltro)}`;
+
+            fetch(url)
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById("contenutoDettaglioKPIProf").innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById("contenutoDettaglioKPIProf").innerHTML =
+                        `<div class='alert alert-danger mb-0'>Errore: ${err.message}</div>`;
+                });
+        });
+    });
+
 });
     </script>
 
@@ -534,7 +765,7 @@ document.addEventListener("DOMContentLoaded", function () {
 </div>
 
 
-<script>
+@*<script>
     /*funzione per richiamare dettaglio per admin sinergia utile e */ 
     document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll(".kpi-card").forEach(card => {
@@ -545,4 +776,4 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         });
     });
-</script>
+</script>*@

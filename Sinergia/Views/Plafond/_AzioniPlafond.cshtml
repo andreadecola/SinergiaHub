@@ -16,6 +16,11 @@
     bool isDaIncasso =
         Model.TipoPlafond != null &&
         Model.TipoPlafond.Equals("Incasso", StringComparison.OrdinalIgnoreCase);
+
+    bool isPrelievo =
+    Model.TipoPlafond != null &&
+    Model.TipoPlafond.Equals("Prelievo Professionista", StringComparison.OrdinalIgnoreCase);
+
 }
 
 <div class="d-flex gap-1 justify-content-center align-items-center">
@@ -60,6 +65,16 @@
                 <i class="fa fa-trash-alt"></i>
             </button>
         }
+        else if (isPrelievo)
+        {
+            <button class="btn btn-outline-danger btn-sm btn-elimina"
+                    data-tipo="prelievo"
+                    data-id="@Model.ID_Plafond"
+                    title="Elimina prelievo professionista">
+                <i class="fa fa-trash-alt"></i>
+            </button>
+        }
+
         @* Se in futuro vuoi attivare la cancellazione dei pagamenti:
             else if (isPagamentoCosti)
             {

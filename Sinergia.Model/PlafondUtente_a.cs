@@ -18,7 +18,7 @@ namespace Sinergia.Model
         public decimal ImportoTotale { get; set; }
 
         [Required]
-        [StringLength(20)]
+        [StringLength(50)]
         public string TipoPlafond { get; set; }
 
         [Column(TypeName = "date")]
@@ -63,7 +63,7 @@ namespace Sinergia.Model
 
         public DateTime? DataCompetenzaFinanziaria { get; set; }
 
-        [StringLength(100)]
+        [StringLength(200)]
         public string Operazione { get; set; }
     }
 }

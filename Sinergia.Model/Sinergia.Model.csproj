@@ -248,6 +248,7 @@
     <Compile Include="Permessi_a.cs" />
     <Compile Include="PlafondUtente.cs" />
     <Compile Include="PlafondUtente_a.cs" />
+    <Compile Include="PlafondUtente_BACKUP_2026_01_21.cs" />
     <Compile Include="Pratiche.cs" />
     <Compile Include="Pratiche_a.cs" />
     <Compile Include="Previsione.cs" />

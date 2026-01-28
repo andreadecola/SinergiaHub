@@ -111,7 +111,7 @@
                         <td>@p.NomeOwner</td>
                         <td>@p.NomeUtenteResponsabile</td> <!-- 👈 nuova cella -->
                         <td class="stato">@p.Stato</td>
-                        <td>@p.Budget.ToString("N2")</td>
+                        <td class="text-end">@p.Budget.ToString("N2")</td>
                         <td>@(p.DataInizioAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</td>
                         <td>@(p.DataFineAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</td>
 
@@ -154,7 +154,7 @@
 
             <div class="small text-muted"><strong>Owner:</strong> @p.NomeOwner</div>
             <div class="small text-muted"><strong>Responsabile:</strong> @p.NomeUtenteResponsabile</div> <!-- 👈 nuova riga -->
-            <div class="small text-muted"><strong>Budget:</strong> @p.Budget.ToString("N2")</div>
+            <div class="small text-muted text-end"><strong>Budget:</strong> @p.Budget.ToString("N2")</div>
             <div class="small text-muted"><strong>Inizio:</strong> @(p.DataInizioAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</div>
             <div class="small text-muted"><strong>Fine:</strong> @(p.DataFineAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</div>
 
@@ -2023,7 +2023,7 @@
                     selectFornitore.innerHTML = '<option value="">-- Seleziona fornitore (opzionale) --</option>';
                     res.data.forEach(f => {
                         const opt = document.createElement('option');
-                        opt.value = f.ID_Cliente;
+                        opt.value = f.ID_Operatore; // ✅ ID GIUSTO
                         opt.textContent = f.Nome;
                         selectFornitore.appendChild(opt);
                     });
@@ -2061,54 +2061,103 @@
     }
 
 
-
     function salvaCostiPratica() {
+
         const container = document.getElementById('costiPraticaContainer');
-        const hiddenContainer = document.getElementById('hiddenCostiPraticaContainer'); // ✅ contenitore dedicato
+        const hiddenContainer = document.getElementById('hiddenCostiPraticaContainer');
 
         // 🔁 Pulisce gli hidden esistenti
         hiddenContainer.innerHTML = '';
 
         const righe = container.querySelectorAll('.riga-costo-pratica');
 
-        // 🧠 Reset array globale (per tooltip o anteprime)
+        // 🧠 Reset array globale (tooltip / riepilogo)
         costiPraticaCorrenti = [];
 
+        // 🧪 LOG HEADER
+        console.group("🧾 [salvaCostiPratica] DATI INVIATI AL FORM / DB");
+
         righe.forEach((row, index) => {
+
             const selectCosto = row.querySelector('.select-costo-pratica');
             const selectFornitore = row.querySelector('.select-fornitore-pratica');
             const inputImporto = row.querySelector('input[type="number"]');
 
-            const descrizione = selectCosto.selectedOptions[0]?.textContent?.trim() || '';
-            const importo = parseFloat(inputImporto.value || "0");
-            const idAnagrafica = selectCosto.value || null;
-            const idFornitore = selectFornitore?.value || null;
+            const descrizione = selectCosto?.selectedOptions[0]?.textContent?.trim() || '';
+
+            const importoRaw = parseFloat(inputImporto?.value || "0");
+
+            // ✅ FORMATO CORRETTO PER MVC (IT-IT)
+            const importoFormatted = !isNaN(importoRaw)
+                ? importoRaw.toFixed(2).replace('.', ',')
+                : "0,00";
+
+            const idAnagrafica = selectCosto?.value ? parseInt(selectCosto.value) : null;
+            const idFornitore = selectFornitore?.value ? parseInt(selectFornitore.value) : null;
             const nomeFornitore = selectFornitore?.selectedOptions[0]?.textContent?.trim() || '';
 
-            // ✅ Salva solo se ha una descrizione e importo valido
-            if (descrizione && !isNaN(importo) && importo > 0) {
+            // ============================
+            // 📌 LOG PER SINGOLA RIGA
+            // ============================
+            console.group(`➡️ CostoPratica[${index}]`);
+            console.log("ID_AnagraficaCosto:", idAnagrafica);
+            console.log("Descrizione:", descrizione);
+            console.log("Importo (raw):", importoRaw);
+            console.log("Importo (formatted):", importoFormatted);
+            console.log("ID_Fornitore:", idFornitore);
+            console.log("NomeFornitore:", nomeFornitore);
+            console.groupEnd();
+
+            // ✅ Salva per riepilogo UI (usa numero JS)
+            if (descrizione && !isNaN(importoRaw) && importoRaw > 0) {
                 costiPraticaCorrenti.push({
                     Descrizione: descrizione,
-                    Importo: importo,
+                    Importo: importoRaw,
                     ID_AnagraficaCosto: idAnagrafica,
                     ID_Fornitore: idFornitore,
-                    NomeFornitore: (nomeFornitore && nomeFornitore !== "-- Fornitore (opzionale) --")
-                        ? nomeFornitore
-                        : ""
+                    NomeFornitore:
+                        (nomeFornitore && nomeFornitore !== "-- Fornitore (opzionale) --")
+                            ? nomeFornitore
+                            : ""
                 });
             }
 
-            // 🧩 Hidden per salvataggio nel form
-            hiddenContainer.appendChild(creaHidden(`CostiPratica[${index}].ID_AnagraficaCosto`, idAnagrafica));
-            hiddenContainer.appendChild(creaHidden(`CostiPratica[${index}].Importo`, importo));
-            hiddenContainer.appendChild(creaHidden(`CostiPratica[${index}].ID_Fornitore`, idFornitore));
+            // ============================
+            // 🧩 HIDDEN INPUT (MVC BINDING)
+            // ============================
+            hiddenContainer.appendChild(
+                creaHidden(`CostiPratica[${index}].ID_AnagraficaCosto`, idAnagrafica)
+            );
+
+            hiddenContainer.appendChild(
+                creaHidden(`CostiPratica[${index}].Importo`, importoFormatted)
+            );
+
+            hiddenContainer.appendChild(
+                creaHidden(`CostiPratica[${index}].ID_Fornitore`, idFornitore)
+            );
         });
 
+        console.groupEnd(); // 🧾 fine gruppo log
+
+        // ============================
+        // 🔎 LOG FINALE HIDDEN INPUT
+        // ============================
+        console.group("📤 INPUT HIDDEN REALMENTE INVIATI AL FORM");
+        hiddenContainer.querySelectorAll('input').forEach(i => {
+            console.log(i.name, "=", i.value);
+        });
+        console.groupEnd();
+
         toastr.success("💾 Costi della Pratica inseriti correttamente.");
-        bootstrap.Modal.getInstance(document.getElementById('modaleCostiPratica')).hide();
+
+        bootstrap.Modal
+            .getInstance(document.getElementById('modaleCostiPratica'))
+            .hide();
 
         aggiornaStatoCostiCaricati();
     }
+
 
 
     // ✅ Funzione utility condivisa
@@ -2188,7 +2237,7 @@
 
     /*fine gestione costo pratica */
 
-    // gestione template
+/*    gestione template*/
 
     //function caricaTemplateIncarico(idProfessionista) {
     //    return fetch(`/Pratiche/GetTemplateByProfessionista?idProfessionista=${idProfessionista}`)
@@ -2253,8 +2302,6 @@
         });
     }
 
-
-
     // 🔹 Non serve più, ma la lasciamo "vuota" per compatibilità
     function caricaTemplateIncarico(idProfessionista) {
         return Promise.resolve(null);
@@ -2316,10 +2363,6 @@
         win.document.close();
         win.print();
     }
-
-
-
-
 
     function salvaFoglioIncaricoFirmato(idPratica) {
         const input = document.getElementById("inputFileIncarico");
@@ -2542,8 +2585,6 @@
   // 🎨 Impaginazione (solo grafica)
   setTimeout(suddividiInPagineA4, 300);
 }
-
-
 
   function suddividiInPagineA4() {
     const area = document.getElementById("anteprimaContenuto");
