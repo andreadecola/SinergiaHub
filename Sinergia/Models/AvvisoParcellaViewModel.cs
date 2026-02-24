@@ -14,6 +14,8 @@ namespace Sinergia.Models
 
         [Required(ErrorMessage = "La pratica è obbligatoria.")]
         public int ID_Pratiche { get; set; }
+        public string CodicePratica { get; set; }
+
 
         [Required(ErrorMessage = "La data dell'avviso è obbligatoria.")]
         [DataType(DataType.Date)]
@@ -71,6 +73,8 @@ namespace Sinergia.Models
         // ⚙️ Nuovi campi  per gestione completa avvisi
         [StringLength(50)]
         public string TipologiaAvviso { get; set; } // Fisso, A Ore, Giudiziale
+
+        public string RegimeFiscale { get; set; }
 
         [StringLength(255)]
         public string FaseGiudiziale { get; set; } // Esempio: "Fase introduttiva", "Discussione", ecc.

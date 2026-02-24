@@ -20,7 +20,7 @@
         <button class="btn btn-outline-primary btn-sm"
                 style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"
                 onclick="apriNuovoCostoProgetto()">
-            Nuovo Costo di Progetto
+            Nuovo Costo Di Pratica  
         </button>
     }
 </div>
@@ -135,7 +135,7 @@
         <form id="costoProgettoForm">
             <div class="modal-content">
                 <div class="modal-header text-black">
-                    <h5 class="modal-title" id="costoProgettoModalLabel">Nuovo Costo di Progetto</h5>
+                    <h5 class="modal-title" id="costoProgettoModalLabel">Nuovo Costo Di Pratica</h5>
                     <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
                 </div>
 
@@ -191,11 +191,11 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title">Elimina Costo di Progetto</h5>
+                <h5 class="modal-title">Elimina Costo Di Pratica</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                Confermi l’eliminazione definitiva di questo costo di progetto?
+                Confermi l’eliminazione definitiva di questo costo di pratica?
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
@@ -214,7 +214,7 @@
         const form = document.getElementById("costoProgettoForm");
         form.reset();
         form.querySelector('[name="ID_AnagraficaCosto"]').value = 0;
-        document.getElementById("costoProgettoModalLabel").textContent = "Nuovo Costo di Progetto";
+        document.getElementById("costoProgettoModalLabel").textContent = "Nuovo Costo Di Pratica";
         new bootstrap.Modal(document.getElementById("costoProgettoModal")).show();
     }
 
@@ -235,7 +235,7 @@
                 form.querySelector('[name="Stato"]').value = c.Stato;
                 form.querySelector('[name="Descrizione"]').value = c.Descrizione || '';
 
-                document.getElementById("costoProgettoModalLabel").textContent = "Modifica Costo di Progetto";
+                document.getElementById("costoProgettoModalLabel").textContent = "Modifica Costo Di Pratica";
                 new bootstrap.Modal(document.getElementById("costoProgettoModal")).show();
             });
     }

@@ -26,6 +26,10 @@
 <!-- 📥 Export Generazione Costi CSV/PDF -->
 <div class="d-flex justify-content-end mb-3">
     <form method="get" class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+        <small class="text-muted mb-1">
+            Date solo per esportazione
+        </small>
+
         <input type="date" name="dataDa" class="form-control form-control-sm w-auto"
                value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
         <input type="date" name="dataA" class="form-control form-control-sm w-auto"
@@ -36,10 +40,10 @@
             <i class="bi bi-file-earmark-excel"></i> Excel/CSV
         </button>
 
-        <button type="submit" formaction="@Url.Action("EsportaGenerazioneCostiPdf", "Pratiche")"
+        @*<button type="submit" formaction="@Url.Action("EsportaGenerazioneCostiPdf", "Pratiche")"
                 class="btn btn-outline-danger btn-sm">
             <i class="bi bi-file-earmark-pdf"></i> PDF
-        </button>
+        </button>*@
     </form>
 </div>
 
@@ -628,11 +632,12 @@
 
     // 🔍 Filtro e paginazione - Generazione Costi
     document.addEventListener("DOMContentLoaded", function () {
+
         const table = document.getElementById('generazioneCostiTable');
         if (!table) return;
 
         const rows = Array.from(table.querySelectorAll('tbody tr'));
-        const cards = Array.from(document.querySelectorAll('.card-costo')); // mobile
+        const cards = Array.from(document.querySelectorAll('.card-costo'));
 
         const controlliContainer = document.getElementById('controlliGenerazioneCosti');
         const paginationContainer = document.getElementById('paginazioneGenerazioneCosti');
@@ -640,17 +645,50 @@
         const searchInput = document.createElement('input');
         const selectPageSize = document.createElement('select');
         const selectProfessionista = document.createElement('select');
-        const selectCategoria = document.createElement('select');
+        const selectOrigine = document.createElement('select');
+        const dataDal = document.createElement('input');
+        const dataAl = document.createElement('input');
 
         let pageSize = 10;
         let currentPage = 1;
 
-        // 🔍 Ricerca
+        // ==========================================================
+        // 🔍 RICERCA
+        // ==========================================================
         searchInput.type = 'text';
         searchInput.placeholder = 'Cerca...';
         searchInput.className = 'form-control form-control-sm w-auto';
 
-        // 📄 Page Size
+        // ==========================================================
+        // 📅 DATE
+        // ==========================================================
+        dataDal.type = 'date';
+        dataDal.className = 'form-control form-control-sm w-auto';
+
+        dataAl.type = 'date';
+        dataAl.className = 'form-control form-control-sm w-auto';
+
+        // ==========================================================
+        // 📅 TRIMESTRE CORRENTE AUTOMATICO
+        // ==========================================================
+        const today = new Date();
+
+        function formatDateInput(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        const month = today.getMonth();
+        const quarterStartMonth = Math.floor(month / 3) * 3;
+
+        const trimestreStart = new Date(today.getFullYear(), quarterStartMonth, 1);
+        const trimestreEnd = new Date(today.getFullYear(), quarterStartMonth + 3, 0);
+
+        dataDal.value = formatDateInput(trimestreStart);
+        dataAl.value = formatDateInput(trimestreEnd);
+
+        // ==========================================================
+        // 📄 PAGE SIZE
+        // ==========================================================
         [10, 25, 50].forEach(num => {
             const option = document.createElement('option');
             option.value = num;
@@ -659,89 +697,146 @@
         });
         selectPageSize.className = 'form-select form-select-sm w-auto';
 
-        // 👤 Professionista
-        selectProfessionista.innerHTML = '<option value="">Tutti i professionisti</option>';
+        // ==========================================================
+        // 👤 PROFESSIONISTA
+        // ==========================================================
+        selectProfessionista.innerHTML = '<option value="">Tutti</option>';
         selectProfessionista.className = 'form-select form-select-sm w-auto';
 
-        // 🏷️ Categoria
-        selectCategoria.innerHTML = '<option value="">Tutte le categorie</option>';
-        selectCategoria.className = 'form-select form-select-sm w-auto';
+        // ==========================================================
+        // 🏷️ ORIGINE
+        // ==========================================================
+        selectOrigine.innerHTML = `
+        <option value="">Tutte</option>
+        <option value="Ricorrenza">Sistema</option>
+        <option value="Manuale">Manuale</option>
+    `;
+        selectOrigine.className = 'form-select form-select-sm w-auto';
 
-        // 🔄 Popolamento opzioni dinamiche (da tabella)
-        const professionisti = new Set();
-        const categorie = new Set();
+        // ==========================================================
+        // 🏷️ LABEL
+        // ==========================================================
+        const lblProf = document.createElement('span');
+        lblProf.textContent = 'Professionista:';
+        lblProf.className = 'small text-muted fw-semibold me-1';
+
+        const lblOrigine = document.createElement('span');
+        lblOrigine.textContent = 'Origine:';
+        lblOrigine.className = 'small text-muted fw-semibold ms-2 me-1';
+
+        const lblPeriodo = document.createElement('span');
+        lblPeriodo.textContent = 'Periodo:';
+        lblPeriodo.className = 'small text-muted fw-semibold ms-2 me-1';
+
+        // ==========================================================
+        // 🔄 POPOLAMENTO PROFESSIONISTI (NO DUPLICATI)
+        // ==========================================================
+        const professionistiMap = new Map();
+
         rows.forEach(row => {
             const cells = row.querySelectorAll('td');
-            if (cells.length >= 3) {
-                professionisti.add(cells[1].innerText.trim());
-                categorie.add(cells[2].innerText.trim());
+            if (cells.length >= 2) {
+
+                let nomeOriginale = cells[1].innerText.trim();
+
+                let chiaveNormalizzata = nomeOriginale
+                    .toLowerCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .replace(/\s+/g, " ")
+                    .trim();
+
+                if (!professionistiMap.has(chiaveNormalizzata)) {
+                    professionistiMap.set(chiaveNormalizzata, nomeOriginale);
+                }
             }
         });
 
-        Array.from(professionisti).sort().forEach(nome => {
-            const opt = document.createElement('option');
-            opt.value = nome;
-            opt.textContent = nome;
-            selectProfessionista.appendChild(opt);
-        });
-
-        Array.from(categorie).sort().forEach(cat => {
-            const opt = document.createElement('option');
-            opt.value = cat;
-            opt.textContent = cat;
-            selectCategoria.appendChild(opt);
-        });
-
-        // ➕ Inserisci controlli nella barra
-        controlliContainer.appendChild(searchInput);
-        controlliContainer.appendChild(selectProfessionista);
-        controlliContainer.appendChild(selectCategoria);
-        controlliContainer.appendChild(selectPageSize);
-
-        function renderTable() {
-            const keyword = searchInput.value.toLowerCase();
-            const filtroProf = selectProfessionista.value;
-            const filtroCat = selectCategoria.value;
-
-            // Filtra tabella desktop
-            let filteredRows = rows.filter(row => {
-                const text = row.innerText.toLowerCase();
-                const celle = row.querySelectorAll('td');
-
-                const matchText = text.includes(keyword);
-                const matchProf = !filtroProf || celle[1].innerText.trim() === filtroProf;
-                const matchCat = !filtroCat || celle[2].innerText.trim() === filtroCat;
-
-                return matchText && matchProf && matchCat;
+        Array.from(professionistiMap.values())
+            .sort()
+            .forEach(nome => {
+                const opt = document.createElement('option');
+                opt.value = nome;
+                opt.textContent = nome;
+                selectProfessionista.appendChild(opt);
             });
 
-            // Filtra card mobile
-            let filteredCards = cards.filter(card => {
-                const text = card.innerText.toLowerCase();
-                const profEl = card.querySelector('.small.text-muted:nth-child(3)'); // professionista
-                const catEl = card.querySelector('.small.text-muted:nth-child(4)'); // categoria
+        // ==========================================================
+        // ➕ INSERIMENTO CONTROLLI
+        // ==========================================================
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(lblProf);
+        controlliContainer.appendChild(selectProfessionista);
+        controlliContainer.appendChild(lblOrigine);
+        controlliContainer.appendChild(selectOrigine);
+        controlliContainer.appendChild(lblPeriodo);
+        controlliContainer.appendChild(dataDal);
+        controlliContainer.appendChild(dataAl);
+        controlliContainer.appendChild(selectPageSize);
 
-                const profText = profEl ? profEl.innerText.replace('Professionista:', '').trim() : '';
-                const catText = catEl ? catEl.innerText.replace('Categoria:', '').trim() : '';
+        // ==========================================================
+        // 🔎 RENDER
+        // ==========================================================
+        function renderTable() {
+
+            const keyword = searchInput.value.toLowerCase();
+            const filtroProf = selectProfessionista.value;
+            const filtroOrigine = selectOrigine.value;
+            const dal = dataDal.value ? new Date(dataDal.value) : null;
+            const al = dataAl.value ? new Date(dataAl.value) : null;
+
+            let filteredRows = rows.filter(row => {
+
+                const text = row.innerText.toLowerCase();
+                const cells = row.querySelectorAll('td');
 
                 const matchText = text.includes(keyword);
-                const matchProf = !filtroProf || profText === filtroProf;
-                const matchCat = !filtroCat || catText === filtroCat;
+                const matchProf = !filtroProf || cells[1].innerText.trim() === filtroProf;
 
-                return matchText && matchProf && matchCat;
+                const origineCell = cells[3].innerText.trim();
+                const matchOrigine =
+                    !filtroOrigine ||
+                    (filtroOrigine === "Ricorrenza"
+                        ? origineCell === "Ricorrenza"
+                        : origineCell !== "Ricorrenza");
+
+                // 📅 DATA REGISTRAZIONE (colonna 9)
+                const dataText = cells[9]?.innerText.trim();
+                let dataRow = null;
+
+                if (dataText && dataText !== "-") {
+                    const parts = dataText.split('/');
+                    dataRow = new Date(parts[2], parts[1] - 1, parts[0]);
+                }
+
+                const matchDal = !dal || (dataRow && dataRow >= dal);
+                const matchAl = !al || (dataRow && dataRow <= al);
+
+                return matchText && matchProf && matchOrigine && matchDal && matchAl;
             });
 
             const totalPages = Math.ceil(filteredRows.length / pageSize);
             currentPage = Math.min(currentPage, totalPages || 1);
 
+            // 🖥️ DESKTOP
             rows.forEach(r => r.style.display = 'none');
-            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
 
+            // 📱 MOBILE
             cards.forEach(c => c.style.display = 'none');
-            filteredCards.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(c => c.style.display = '');
+            filteredRows.forEach(row => {
+                const id = row.getAttribute('data-id');
+                const card = document.querySelector(`.card-costo[data-id="${id}"]`);
+                if (card) card.style.display = '';
+            });
 
-            // 🔄 Paginazione
+            // ==========================================================
+            // 🔄 PAGINAZIONE
+            // ==========================================================
             paginationContainer.innerHTML = '';
+
             const pageInfo = document.createElement('span');
             pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
             pageInfo.className = 'me-2';
@@ -749,23 +844,30 @@
 
             const prevBtn = document.createElement('button');
             prevBtn.textContent = '← Indietro';
-            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.className = 'btn btn-sm ' +
+                (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
             prevBtn.disabled = currentPage === 1;
             prevBtn.onclick = () => { currentPage--; renderTable(); };
             paginationContainer.appendChild(prevBtn);
 
             const nextBtn = document.createElement('button');
             nextBtn.textContent = 'Prossima →';
-            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.className = 'btn btn-sm ' +
+                (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
             nextBtn.disabled = currentPage === totalPages;
             nextBtn.onclick = () => { currentPage++; renderTable(); };
             paginationContainer.appendChild(nextBtn);
         }
 
-        // Eventi
+        // ==========================================================
+        // 🎯 EVENTI
+        // ==========================================================
         searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
         selectProfessionista.addEventListener('change', () => { currentPage = 1; renderTable(); });
-        selectCategoria.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectOrigine.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        dataDal.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        dataAl.addEventListener('change', () => { currentPage = 1; renderTable(); });
+
         selectPageSize.addEventListener('change', () => {
             pageSize = parseInt(selectPageSize.value);
             currentPage = 1;
@@ -774,6 +876,4 @@
 
         renderTable();
     });
-
-
 </script>

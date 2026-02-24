@@ -794,8 +794,24 @@
             .then(r => r.json())
             .then(res => {
                 if (res.success) {
+
                     toastr.success(res.message);
-                    location.reload(); // 🔁 aggiorna la lista
+
+                    // 🔁 Se siamo dentro la gestione Fornitori → ricarico pagina
+                    if (window.location.pathname.toLowerCase().includes("fornitori")
+                        || window.location.pathname.toLowerCase().includes("utenti")) {
+
+                        location.reload();
+                        return;
+                    }
+
+                    // 🔥 Se siamo dentro Pratiche → trigger evento custom
+                    $(document).trigger("fornitoreCreato");
+
+                    // Chiudo modale
+                    bootstrap.Modal
+                        .getInstance(document.getElementById('aziendaModal'))
+                        .hide();
                 } else {
                     toastr.error(res.message);
                 }
@@ -1001,139 +1017,6 @@
                 toastr.error("Errore nel caricamento dei settori fornitori.");
             });
     }
-
-    // 🔍 Filtro e paginazione Aziende (Fornitori)
-    document.addEventListener("DOMContentLoaded", function () {
-        const table = document.getElementById('aziendeTable');
-        if (!table) return;
-
-        const rows = Array.from(table.querySelectorAll('tbody tr'));
-        const cards = document.querySelectorAll('.card-fornitore');
-
-        const controlliContainer = document.getElementById('controlliAziende');
-        const paginationContainer = document.getElementById('paginazioneAziende');
-
-        // Elementi filtro
-        const searchInput = document.createElement('input');
-        const selectStato = document.createElement('select');
-        const selectRuolo = document.createElement('select');
-        const selectPageSize = document.createElement('select');
-
-        let pageSize = 10;
-        let currentPage = 1;
-
-        // 🔍 Ricerca
-        searchInput.type = 'text';
-        searchInput.placeholder = 'Cerca...';
-        searchInput.className = 'form-control form-control-sm w-auto';
-
-        // ⚙️ Stato
-        ['Tutti', 'Attivo', 'Inattivo'].forEach(stato => {
-            const option = document.createElement('option');
-            option.value = stato;
-            option.textContent = stato;
-            selectStato.appendChild(option);
-        });
-        selectStato.className = 'form-select form-select-sm w-auto';
-
-        // 🧾 Ruolo
-        ['Tutti', 'Fornitore', 'N/D'].forEach(ruolo => {
-            const option = document.createElement('option');
-            option.value = ruolo;
-            option.textContent = ruolo;
-            selectRuolo.appendChild(option);
-        });
-        selectRuolo.className = 'form-select form-select-sm w-auto';
-        // ✅ Default su "Attivo"
-        selectStato.value = "Attivo";
-
-        // 📄 Righe per pagina
-        [10, 25, 50].forEach(num => {
-            const option = document.createElement('option');
-            option.value = num;
-            option.textContent = `${num} per pagina`;
-            selectPageSize.appendChild(option);
-        });
-        selectPageSize.className = 'form-select form-select-sm w-auto';
-
-        // ➕ Aggiungi controlli alla barra
-        controlliContainer.appendChild(searchInput);
-        controlliContainer.appendChild(selectStato);
-        controlliContainer.appendChild(selectRuolo);
-        controlliContainer.appendChild(selectPageSize);
-
-        function renderTable() {
-            const keyword = searchInput.value.toLowerCase();
-            const filtroStato = selectStato.value;
-            const filtroRuolo = selectRuolo.value;
-
-            let filteredRows = rows.filter(row => {
-                const stato = (row.querySelector('td.stato')?.innerText.trim()) || '';
-                const ruolo = (row.querySelector('td.ruolo')?.innerText.trim()) || '';
-                const testo = row.innerText.toLowerCase();
-
-                const statoMatch = (filtroStato === 'Tutti' || stato === filtroStato);
-                const ruoloMatch = (filtroRuolo === 'Tutti' || ruolo === filtroRuolo);
-                const ricercaMatch = (!keyword || testo.includes(keyword));
-
-                return statoMatch && ruoloMatch && ricercaMatch;
-            });
-
-            const totalPages = Math.ceil(filteredRows.length / pageSize);
-            currentPage = Math.min(currentPage, totalPages || 1);
-
-            // 🖥️ Tabella desktop
-            rows.forEach(r => r.style.display = 'none');
-            filteredRows
-                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-                .forEach(r => r.style.display = '');
-
-            // 📱 Card mobile (se presenti)
-            if (cards.length) {
-                cards.forEach(c => c.style.display = 'none');
-                filteredRows.forEach(row => {
-                    const id = row.querySelector('td.id')?.innerText.trim(); // usa <td class="id">
-                    if (!id) return;
-                    const card = document.querySelector(`.card-fornitore[data-id="${id}"]`);
-                    if (card) card.style.display = '';
-                });
-            }
-
-            // 🔄 Paginazione
-            paginationContainer.innerHTML = '';
-            const pageInfo = document.createElement('span');
-            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
-            pageInfo.className = 'me-2';
-            paginationContainer.appendChild(pageInfo);
-
-            const prevBtn = document.createElement('button');
-            prevBtn.textContent = '← Indietro';
-            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
-            prevBtn.disabled = currentPage === 1;
-            prevBtn.onclick = () => { currentPage--; renderTable(); };
-            paginationContainer.appendChild(prevBtn);
-
-            const nextBtn = document.createElement('button');
-            nextBtn.textContent = 'Prossima →';
-            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
-            nextBtn.disabled = currentPage === totalPages;
-            nextBtn.onclick = () => { currentPage++; renderTable(); };
-            paginationContainer.appendChild(nextBtn);
-        }
-
-        // 🎯 Eventi
-        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
-        selectStato.addEventListener('change', () => { currentPage = 1; renderTable(); });
-        selectRuolo.addEventListener('change', () => { currentPage = 1; renderTable(); });
-        selectPageSize.addEventListener('change', () => {
-            pageSize = parseInt(selectPageSize.value);
-            currentPage = 1;
-            renderTable();
-        });
-
-        renderTable();
-    });
-
 
     // gestione assegnazione fornitore a professionista 
     let aziendaSelezionataId = null;
@@ -1354,8 +1237,6 @@
 
         document.getElementById("listaTeamAzienda").appendChild(row);
     }
-
-
 
     function salvaAssegnazioni() {
 
@@ -1635,7 +1516,7 @@
     //document.getElementById("aggiungiAssegnazioniModal")
     //    .addEventListener("shown.bs.modal", abilitaSelezioneMultipla);
 
-// fine gestione assegnazione fornitore a professionista 
+    // fine gestione assegnazione fornitore a professionista 
 
 
     function selezionaECaricaDocumenti(idAzienda) {
@@ -1844,6 +1725,141 @@
             });
         });
     });
+
+    // 🔍 Filtro e paginazione Aziende (Fornitori)
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById('aziendeTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const cards = document.querySelectorAll('.card-fornitore');
+
+        const controlliContainer = document.getElementById('controlliAziende');
+        const paginationContainer = document.getElementById('paginazioneAziende');
+
+        // Elementi filtro
+        const searchInput = document.createElement('input');
+        const selectStato = document.createElement('select');
+        const selectRuolo = document.createElement('select');
+        const selectPageSize = document.createElement('select');
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        // 🔍 Ricerca
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Cerca...';
+        searchInput.className = 'form-control form-control-sm w-auto';
+
+        // ⚙️ Stato
+        ['Tutti', 'Attivo', 'Inattivo'].forEach(stato => {
+            const option = document.createElement('option');
+            option.value = stato;
+            option.textContent = stato;
+            selectStato.appendChild(option);
+        });
+        selectStato.className = 'form-select form-select-sm w-auto';
+
+        // 🧾 Ruolo
+        ['Tutti', 'Fornitore', 'N/D'].forEach(ruolo => {
+            const option = document.createElement('option');
+            option.value = ruolo;
+            option.textContent = ruolo;
+            selectRuolo.appendChild(option);
+        });
+        selectRuolo.className = 'form-select form-select-sm w-auto';
+        // ✅ Default su "Attivo"
+        selectStato.value = "Attivo";
+
+        // 📄 Righe per pagina
+        [10, 25, 50].forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `${num} per pagina`;
+            selectPageSize.appendChild(option);
+        });
+        selectPageSize.className = 'form-select form-select-sm w-auto';
+
+        // ➕ Aggiungi controlli alla barra
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectStato);
+        controlliContainer.appendChild(selectRuolo);
+        controlliContainer.appendChild(selectPageSize);
+
+        function renderTable() {
+            const keyword = searchInput.value.toLowerCase();
+            const filtroStato = selectStato.value;
+            const filtroRuolo = selectRuolo.value;
+
+            let filteredRows = rows.filter(row => {
+                const stato = (row.querySelector('td.stato')?.innerText.trim()) || '';
+                const ruolo = (row.querySelector('td.ruolo')?.innerText.trim()) || '';
+                const testo = row.innerText.toLowerCase();
+
+                const statoMatch = (filtroStato === 'Tutti' || stato === filtroStato);
+                const ruoloMatch = (filtroRuolo === 'Tutti' || ruolo === filtroRuolo);
+                const ricercaMatch = (!keyword || testo.includes(keyword));
+
+                return statoMatch && ruoloMatch && ricercaMatch;
+            });
+
+            const totalPages = Math.ceil(filteredRows.length / pageSize);
+            currentPage = Math.min(currentPage, totalPages || 1);
+
+            // 🖥️ Tabella desktop
+            rows.forEach(r => r.style.display = 'none');
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
+
+            // 📱 Card mobile (se presenti)
+            if (cards.length) {
+                cards.forEach(c => c.style.display = 'none');
+                filteredRows.forEach(row => {
+                    const id = row.querySelector('td.id')?.innerText.trim(); // usa <td class="id">
+                    if (!id) return;
+                    const card = document.querySelector(`.card-fornitore[data-id="${id}"]`);
+                    if (card) card.style.display = '';
+                });
+            }
+
+            // 🔄 Paginazione
+            paginationContainer.innerHTML = '';
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
+            pageInfo.className = 'me-2';
+            paginationContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Indietro';
+            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+            paginationContainer.appendChild(prevBtn);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Prossima →';
+            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // 🎯 Eventi
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
+        selectStato.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectRuolo.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener('change', () => {
+            pageSize = parseInt(selectPageSize.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+    });
+
+
+  
 
 
 </script>

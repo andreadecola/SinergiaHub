@@ -27,20 +27,23 @@
     {
         <button class="btn btn-outline-primary btn-sm rounded-circle"
                 title="Visualizza dettaglio incasso"
-                onclick="apriDettaglioIncasso(@Model.ID_Incasso)">
+                onclick="apriIncassoSalvato(@Model.ID_Incasso)">
             <i class="fa-regular fa-eye"></i>
         </button>
     }
 
+
     @* 🗑️ ELIMINA — SEMPRE ATTIVO se l’utente ha permesso *@
-    @if (puoEliminare)
+    @if (puoEliminare && Model.ID_Incasso > 0)
     {
         <button class="btn btn-outline-danger btn-sm rounded-circle"
-                title="Elimina incasso (ripristina l’avviso come da pagare)"
+                title="Elimina incasso"
                 onclick="confermaEliminazioneIncasso(@Model.ID_Incasso)">
             <i class="fa-regular fa-trash-can"></i>
         </button>
     }
+
+
 
     @* 📁 APRI PRATICA *@
     <a class="btn btn-outline-info btn-sm rounded-circle"

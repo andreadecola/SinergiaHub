@@ -67,5 +67,8 @@ namespace Sinergia.Model
 
         [StringLength(200)]
         public string TitoloAvviso { get; set; }
+
+        [StringLength(50)]
+        public string RegimeFiscale { get; set; }
     }
 }

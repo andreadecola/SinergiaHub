@@ -76,6 +76,10 @@ namespace Sinergia.Model
         public virtual DbSet<OperatoriSinergia_a> OperatoriSinergia_a { get; set; }
         public virtual DbSet<OrdiniFornitori> OrdiniFornitori { get; set; }
         public virtual DbSet<OrdiniFornitori_a> OrdiniFornitori_a { get; set; }
+        public virtual DbSet<PagamentiProfessionista> PagamentiProfessionista { get; set; }
+        public virtual DbSet<PagamentiProfessionista_a> PagamentiProfessionista_a { get; set; }
+        public virtual DbSet<PagamentiProfessionistaDettaglio> PagamentiProfessionistaDettaglio { get; set; }
+        public virtual DbSet<PagamentiProfessionistaDettaglio_a> PagamentiProfessionistaDettaglio_a { get; set; }
         public virtual DbSet<Permessi> Permessi { get; set; }
         public virtual DbSet<Permessi_a> Permessi_a { get; set; }
         public virtual DbSet<PermessiDelegabiliPerProfessionista> PermessiDelegabiliPerProfessionista { get; set; }
@@ -110,6 +114,7 @@ namespace Sinergia.Model
         public virtual DbSet<TipoRagioneSociale_a> TipoRagioneSociale_a { get; set; }
         public virtual DbSet<Utenti> Utenti { get; set; }
         public virtual DbSet<Utenti_a> Utenti_a { get; set; }
+        public virtual DbSet<AvvisiParcella_Backup_20260201_Errati> AvvisiParcella_Backup_20260201_Errati { get; set; }
         public virtual DbSet<PlafondUtente_BACKUP_2026_01_21> PlafondUtente_BACKUP_2026_01_21 { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
@@ -930,6 +935,26 @@ namespace Sinergia.Model
             modelBuilder.Entity<Utenti_a>()
                 .Property(e => e.Note)
                 .IsUnicode(false);
+
+            modelBuilder.Entity<AvvisiParcella_Backup_20260201_Errati>()
+                .Property(e => e.ContributoIntegrativoPercentuale)
+                .HasPrecision(5, 2);
+
+            modelBuilder.Entity<AvvisiParcella_Backup_20260201_Errati>()
+                .Property(e => e.ContributoIntegrativoImporto)
+                .HasPrecision(10, 2);
+
+            modelBuilder.Entity<AvvisiParcella_Backup_20260201_Errati>()
+                .Property(e => e.AliquotaIVA)
+                .HasPrecision(5, 2);
+
+            modelBuilder.Entity<AvvisiParcella_Backup_20260201_Errati>()
+                .Property(e => e.RimborsoSpesePercentuale)
+                .HasPrecision(5, 2);
+
+            modelBuilder.Entity<AvvisiParcella_Backup_20260201_Errati>()
+                .Property(e => e.ImportoAcconto)
+                .HasPrecision(10, 2);
 
             modelBuilder.Entity<PlafondUtente_BACKUP_2026_01_21>()
                 .Property(e => e.ImportoTotale)

@@ -49,5 +49,7 @@ namespace Sinergia.Model
         public DateTime? DataCompetenzaEconomica { get; set; }
 
         public DateTime? DataCompetenzaFinanziaria { get; set; }
+
+        public decimal ImportoPagato { get; set; }
     }
 }

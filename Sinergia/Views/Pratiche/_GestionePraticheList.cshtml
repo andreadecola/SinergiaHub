@@ -37,6 +37,9 @@
 <div class="d-flex justify-content-end mb-3">
     <form method="get" id="exportPraticheForm"
           class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+        <small class="text-muted mb-1">
+            Date solo per esportazione
+        </small>
 
         <input type="date" name="da" class="form-control form-control-sm w-auto"
                value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
@@ -73,7 +76,7 @@
         <table class="table table-striped table-bordered" id="praticheTable">
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th>Pratica</th>
                     <th>Titolo</th>
                     @*<th>Tipologia</th>*@
                     <th>Cliente</th>
@@ -92,36 +95,40 @@
             <tbody>
                 @foreach (var p in Model)
                 {
-                    <tr data-id="@p.ID_Pratiche">
-                        <td>@p.ID_Pratiche</td>
-                        <td>@p.Titolo</td>
-                        @*<td>@p.Tipologia</td>*@
-                        <td>
-                            @if (!string.IsNullOrEmpty(p.ClienteRagioneSociale))
-                            {
-                                <div>@p.ClienteRagioneSociale</div>
-                                <div class="text-muted small">@p.ClienteNomeCompleto</div>
-                            }
-                            else
-                            {
-                                <div>@p.ClienteNomeCompleto</div>
-                            }
-                        </td>
+                  <tr data-id="@p.ID_Pratiche"
+                     data-creazione="@(p.DataCreazione.HasValue  ? p.DataCreazione.Value.ToString("yyyy-MM-dd")  : "")">
+                      <td>
+                          <strong>@p.CodicePratica</strong>
+                          <div class="text-muted small">#@p.ID_Pratiche</div>
+                      </td>
+                      <td>@p.Titolo</td>
+                      @*<td>@p.Tipologia</td>*@
+                      <td>
+                          @if (!string.IsNullOrEmpty(p.ClienteRagioneSociale))
+                          {
+                              <div>@p.ClienteRagioneSociale</div>
+                              <div class="text-muted small">@p.ClienteNomeCompleto</div>
+                          }
+                          else
+                          {
+                              <div>@p.ClienteNomeCompleto</div>
+                          }
+                      </td>
 
-                        <td>@p.NomeOwner</td>
-                        <td>@p.NomeUtenteResponsabile</td> <!-- 👈 nuova cella -->
-                        <td class="stato">@p.Stato</td>
-                        <td class="text-end">@p.Budget.ToString("N2")</td>
-                        <td>@(p.DataInizioAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</td>
-                        <td>@(p.DataFineAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</td>
+                      <td>@p.NomeOwner</td>
+                      <td>@p.NomeUtenteResponsabile</td> <!-- 👈 nuova cella -->
+                      <td class="stato">@p.Stato</td>
+                      <td class="text-end">@p.Budget.ToString("N2")</td>
+                      <td>@(p.DataInizioAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</td>
+                      <td>@(p.DataFineAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</td>
 
-                        @if (mostraAzioni)
-                        {
-                            <td class="text-center">
-                                @Html.Partial("~/Views/Pratiche/_AzioniPratica.cshtml", p)
-                            </td>
-                        }
-                    </tr>
+                      @if (mostraAzioni)
+                      {
+                          <td class="text-center">
+                              @Html.Partial("~/Views/Pratiche/_AzioniPratica.cshtml", p)
+                          </td>
+                      }
+                  </tr>
                 }
             </tbody>
         </table>
@@ -132,39 +139,46 @@
 <div class="d-block d-md-none mt-3 px-2">
     @foreach (var p in Model)
     {
-        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-pratica" data-id="@p.ID_Pratiche">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-bold text-primary">@p.Titolo</span>
-                <span class="badge bg-@(p.Stato == "Conclusa" ? "success" : p.Stato == "Archiviata" ? "secondary" : "primary")">@p.Stato</span>
-            </div>
-            <div class="small text-muted"><strong>ID:</strong> @p.ID_Pratiche</div>
-            @*<div class="small text-muted"><strong>Tipologia:</strong> @p.Tipologia</div>*@
-            <div class="small text-muted">
-                <strong>Cliente:</strong>
-                @if (!string.IsNullOrEmpty(p.ClienteRagioneSociale))
-                {
-                    <div>@p.ClienteRagioneSociale</div>
-                    <div class="text-muted small">@p.ClienteNomeCompleto</div>
-                }
-                else
-                {
-                    <div>@p.ClienteNomeCompleto</div>
-                }
-            </div>
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white card-pratica"
+     data-id="@p.ID_Pratiche"
+     data-creazione="@(p.DataCreazione.HasValue
+         ? p.DataCreazione.Value.ToString("yyyy-MM-dd")
+         : "")">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-bold text-primary">@p.Titolo</span>
+        <span class="badge bg-@(p.Stato == "Conclusa" ? "success" : p.Stato == "Archiviata" ? "secondary" : "primary")">@p.Stato</span>
+    </div>
+    <div class="small text-muted">
+        <strong>Pratica:</strong> @p.CodicePratica
+        <span class="text-muted">(#@p.ID_Pratiche)</span>
+    </div>
+    @*<div class="small text-muted"><strong>Tipologia:</strong> @p.Tipologia</div>*@
+    <div class="small text-muted">
+        <strong>Cliente:</strong>
+        @if (!string.IsNullOrEmpty(p.ClienteRagioneSociale))
+        {
+            <div>@p.ClienteRagioneSociale</div>
+            <div class="text-muted small">@p.ClienteNomeCompleto</div>
+        }
+        else
+        {
+            <div>@p.ClienteNomeCompleto</div>
+        }
+    </div>
 
-            <div class="small text-muted"><strong>Owner:</strong> @p.NomeOwner</div>
-            <div class="small text-muted"><strong>Responsabile:</strong> @p.NomeUtenteResponsabile</div> <!-- 👈 nuova riga -->
-            <div class="small text-muted text-end"><strong>Budget:</strong> @p.Budget.ToString("N2")</div>
-            <div class="small text-muted"><strong>Inizio:</strong> @(p.DataInizioAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</div>
-            <div class="small text-muted"><strong>Fine:</strong> @(p.DataFineAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</div>
+    <div class="small text-muted"><strong>Owner:</strong> @p.NomeOwner</div>
+    <div class="small text-muted"><strong>Responsabile:</strong> @p.NomeUtenteResponsabile</div> <!-- 👈 nuova riga -->
+    <div class="small text-muted text-end"><strong>Budget:</strong> @p.Budget.ToString("N2")</div>
+    <div class="small text-muted"><strong>Inizio:</strong> @(p.DataInizioAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</div>
+    <div class="small text-muted"><strong>Fine:</strong> @(p.DataFineAttivitaStimata?.ToString("dd/MM/yyyy") ?? "-")</div>
 
-            @if (mostraAzioni)
-            {
-                <div class="d-flex flex-wrap gap-2 mt-2">
-                    @Html.Partial("~/Views/Pratiche/_AzioniPratica.cshtml", p)
-                </div>
-            }
+    @if (mostraAzioni)
+    {
+        <div class="d-flex flex-wrap gap-2 mt-2">
+            @Html.Partial("~/Views/Pratiche/_AzioniPratica.cshtml", p)
         </div>
+    }
+</div>
     }
 </div>
 
@@ -602,24 +616,51 @@
     </div>
 </div>
 
-
 @* 🧾 MODALE COSTI DELLA PRATICA *@
-<div class="modal fade" id="modaleCostiPratica" tabindex="-1" aria-labelledby="modaleCostiPraticaLabel" aria-hidden="true">
+<div class="modal fade" id="modaleCostiPratica" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
+
             <div class="modal-header bg-light border-bottom">
                 <h5 class="modal-title">
                     <i class="bi bi-cash-stack me-1"></i> Costi della Pratica
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
             <div class="modal-body">
-                <div id="costiPraticaContainer" class="mb-3"></div>
 
-                <button type="button" class="btn btn-outline-primary btn-sm" onclick="aggiungiCostoPratica()">
-                    <i class="bi bi-plus-circle"></i> Aggiungi Costo Pratica
-                </button>
+                <!-- 🔹 BOTTONI AZIONE VELOCE -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+
+                    <button type="button"
+                            class="btn btn-outline-primary btn-sm"
+                            onclick="aggiungiCostoPratica()">
+                        <i class="bi bi-plus-circle"></i>
+                        Carica Costo Di Pratica
+                    </button>
+
+                    <div class="d-flex gap-2">
+                        <button type="button"
+                                class="btn btn-outline-success btn-sm"
+                                onclick="apriNuovoCostoProgetto()">
+                            <i class="bi bi-journal-plus"></i>
+                            Nuovo Costo Di Pratica
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-outline-secondary btn-sm"
+                                onclick="apriNuovaAzienda(window.ID_UtenteAttivo)">
+                            <i class="bi bi-building-add"></i>
+                            Nuovo Fornitore
+                        </button>
+                    </div>
+
+                </div>
+
+                <!-- 🔹 RIGHE DINAMICHE -->
+                <div id="costiPraticaContainer"></div>
+
             </div>
 
             <div class="modal-footer">
@@ -630,6 +671,7 @@
                     <i class="bi bi-x-circle"></i> Chiudi
                 </button>
             </div>
+
         </div>
     </div>
 </div>
@@ -731,6 +773,336 @@
     </div>
 </div>
 
+<!-- Modale Nuova/Modifica Azienda -->
+<div class="modal fade" id="aziendaModal" tabindex="-1" aria-labelledby="aziendaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="AziendaForm" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="aziendaModalLabel">Gestione Fornitori</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="ID_Azienda" />
+
+                    <!-- ✅ TOGGLE MOSTRA VERSIONE PRECEDENTE -->
+                    <div class="row mb-2" id="toggleVersioniWrapperAzienda">
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="toggleVersioniAzienda">
+                                <label class="form-check-label fw-bold" for="toggleVersioniAzienda">
+                                    Mostra versione precedente
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 1 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Nome *</label>
+                            <input type="text" name="Nome" class="form-control form-control-sm" required />
+                            <small class="text-muted d-none" data-prev="Nome"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Tipo Ragione Sociale *</label>
+                            <select name="TipoRagioneSociale" class="form-control form-control-sm" required>
+                                <option value="">Seleziona tipo...</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="TipoRagioneSociale"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Partita IVA</label>
+                            <input type="text" name="PartitaIVA" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="PIVA"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 2 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Codice Fiscale</label>
+                            <input type="text" name="CodiceFiscale" class="form-control form-control-sm codice-fiscale-input" maxlength="255" />
+                            <small id="erroreCodiceFiscale" class="text-danger d-none">
+                                ⚠️ Il Codice Fiscale deve contenere 16 caratteri (solo per persone fisiche)
+                            </small>
+                            <small class="text-muted d-none" data-prev="CodiceFiscale"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Codice Univoco</label>
+                            <input type="text" name="CodiceUnivoco" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="CodiceUnivoco"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Telefono</label>
+                            <input type="text" name="Telefono" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Telefono"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 3 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Email</label>
+                            <input type="email" name="Email" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="MAIL1"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Sito Web</label>
+                            <input type="text" name="SitoWEB" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="SitoWEB"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Carica Documenti</label>
+                            <input type="file" name="Documenti" multiple class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Documento"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 4 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label>Nazione</label>
+                            <select id="Nazione" name="ID_Nazione" class="form-control form-control-sm"></select>
+                            <small class="text-muted d-none" data-prev="Nazione"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label>Città</label>
+                            <select id="Citta" name="ID_CittaResidenza" class="form-control form-control-sm"></select>
+                            <small class="text-muted d-none" data-prev="Città"></small>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Indirizzo</label>
+                            <input type="text" name="Indirizzo" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Indirizzo"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 5 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Descrizione Attività</label>
+                            <input type="text" name="DescrizioneAttivita" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="DescrizioneAttivita"></small>
+                        </div>
+
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Settore Merceologico</label>
+                            <select name="ID_SettoreFornitore" id="ID_SettoreFornitore" class="form-control form-control-sm">
+                                <option value="">Seleziona settore...</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="SettoreFornitore"></small>
+                        </div>
+
+                        <!-- 🆕 NUOVO CAMPO: CATEGORIA SERVIZI -->
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Categoria Servizi</label>
+                            <select name="ID_CategoriaServizi" id="ID_CategoriaServizi" class="form-control form-control-sm">
+                                <option value="">Seleziona categoria...</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="CategoriaServizi"></small>
+                        </div>
+                    </div>
+
+                    <!-- RIGA 6 -->
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label">Stato Azienda *</label>
+                            <select name="Stato" class="form-control form-control-sm" required>
+                                <option value="Attivo">Attivo</option>
+                                <option value="Inattivo">Inattivo</option>
+                            </select>
+                            <small class="text-muted d-none" data-prev="Stato"></small>
+                        </div>
+                        <div class="col-md-8 mb-2">
+                            <label class="form-label">Note</label>
+                            <input type="text" name="Note" class="form-control form-control-sm" />
+                            <small class="text-muted d-none" data-prev="Note"></small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FOOTER -->
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="chiudiAziendaModal()">Chiudi</button>
+                    <button type="button" id="btnSalvaAzienda" class="btn btn-primary btn-sm" onclick="salvaAzienda()">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 🧾 Modale Nuovo / Modifica Costo di Pratica -->
+<div class="modal fade" id="costoProgettoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form id="costoProgettoForm">
+            <div class="modal-content">
+                <div class="modal-header text-black">
+                    <h5 class="modal-title" id="costoProgettoModalLabel">Nuovo Costo Di Pratica</h5>
+                    <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="ID_AnagraficaCosto" />
+
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Nome</label>
+                            <input name="Nome" type="text" class="form-control form-control-sm" required />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Categoria</label>
+                            <select name="ID_Categoria" class="form-select form-select-sm" required>
+                                <option value="">-- Seleziona categoria --</option>
+                                @foreach (var cat in ViewBag.CategorieCosti as List<SelectListItem>)
+                                {
+                                    <option value="@cat.Value">@cat.Text</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mt-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Stato</label>
+                            <select name="Stato" class="form-select form-select-sm">
+                                <option value="Attivo">Attivo</option>
+                                <option value="Inattivo">Inattivo</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Descrizione</label>
+                            <textarea name="Descrizione" rows="3" class="form-control form-control-sm"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="submit" class="btn btn-success btn-sm">Salva</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- ======================================================
+     📊 MODALE ECONOMIA PRATICA
+     ====================================================== -->
+<div class="modal fade" id="modalEconomiaPratica" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+
+            <!-- ================= HEADER ================= -->
+            <div class="modal-header text-white"
+                 style="background-color:#1f2d3d;">
+
+                <h5 class="modal-title">
+                    <i class="fa fa-chart-line me-2"></i>
+                    <span id="ecoTitoloPratica"></span>
+                </h5>
+
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal"></button>
+            </div>
+
+            <!-- ================= BODY ================= -->
+            <div class="modal-body">
+
+                <!-- ======================================================
+                     💰 RIEPILOGO ECONOMICO
+                     ====================================================== -->
+                <div class="row text-center mb-4">
+
+                    <div class="col-md-4">
+                        <h6>💰 Fatturato Lordo</h6>
+                        <h3 id="ecoFatturato" class="fw-bold text-dark">€ 0</h3>
+                    </div>
+
+                    <div class="col-md-4">
+                        <h6>💳 Totale Incassato</h6>
+                        <h3 id="ecoTotaleIncassato" class="fw-bold text-success">€ 0</h3>
+                    </div>
+
+                    <div class="col-md-4">
+                        <h6>👑 Owner Fee Maturata</h6>
+                        <h3 id="ecoOwner" class="fw-bold text-primary">€ 0</h3>
+                    </div>
+
+                </div>
+
+                <hr />
+
+                <!-- ======================================================
+                     📄 AVVISI PARCELLA
+                     ====================================================== -->
+                <h5 class="mb-3">📄 Avvisi Parcella</h5>
+
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-bordered table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Data</th>
+                                <th>Titolo</th>
+                                <th>Tipologia</th>
+                                <th>Totale</th>
+                                <th>Stato</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="ecoAvvisiBody">
+                            <!-- Popolato via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ======================================================
+                     💳 INCASSI
+                     ====================================================== -->
+                <h5 class="mb-3">💳 Incassi Pagati</h5>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID Incasso</th>
+                                <th>Importo Netto</th>
+                                <th>Data Incasso</th>
+                                <th>ID Avviso</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ecoIncassiBody">
+                            <!-- Popolato via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@*MODALE COMPENSI DA FATTURARE*@ 
+<div class="modal fade" id="modalCompensiResidui" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title">
+                    <i class="fa fa-exclamation-triangle text-danger"></i>
+                    Compensi da Fatturare
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="contenutoCompensiResidui">
+            </div>
+        </div>
+    </div>
+</div>
+
 
 
 <script>
@@ -819,9 +1191,6 @@
         // 🔥 Mostra modale SOLO dopo avere popolato tutto
         new bootstrap.Modal(document.getElementById('praticaModal')).show();
     }
-
-
-
 
      // Imposta la variabile JS globale da backend
     window.ID_UtenteAttivo = @UserManager.GetIDUtenteAttivo();
@@ -1256,11 +1625,15 @@
         }
     });
 
-
-
     // salvataggio modali crea e modifica
     $('#PraticaForm').on('submit', function (e) {
         e.preventDefault();
+        const metodoAOre = document.querySelector('[name="MetodoCompenso"]')?.value === 'A ore';
+
+        if (metodoAOre) {
+            console.log("🟢 [A ORE] Submit partito");
+        }
+
 
         const form = this;
 
@@ -1268,8 +1641,16 @@
         document.querySelectorAll('[data-submit="true"]').forEach(el => {
             el.removeAttribute('readonly'); // momentaneamente lo tolgo
         });
+        if (metodoAOre) {
+            const budgetInput = document.querySelector('[name="Budget"]');
+            console.log("🟢 [A ORE] BudgetInput.value =", budgetInput ? budgetInput.value : "NON TROVATO");
+        }
+
 
         const formData = new FormData(form);
+        if (metodoAOre) {
+            console.log("🟢 [A ORE] Budget preso dal FormData iniziale =", formData.get("Budget"));
+        }
 
         // 📌 1. Controllo stato "In lavorazione" → serve incarico
         const stato = formData.get("Stato");
@@ -1303,6 +1684,10 @@
                 if (compensi.length > 0) {
                     try {
                         aggiornaValoreStimato(compensi);
+                        if (metodoAOre) {
+                            console.log("🟢 [A ORE] Compensi dopo aggiornaValoreStimato:", compensi);
+                        }
+
                     } catch (err) {
                         console.warn("⚠️ Errore calcolo budget:", err);
                     }
@@ -1358,6 +1743,10 @@
             let valore = inputBudget.value || "0";
             valore = valore.replace('.', ','); // 🔹 forza formato italiano
             formData.set("Budget", valore);
+            if (metodoAOre) {
+                console.log("🟢 [A ORE] Budget dentro FormData DOPO set =", formData.get("Budget"));
+            }
+
             console.log("💰 Budget inviato normalizzato:", valore); // debug
         }
 
@@ -1374,6 +1763,14 @@
         const url = idPratica && parseInt(idPratica) > 0
             ? '/Pratiche/ModificaPratica'
             : '/Pratiche/CreaPratica';
+        if (metodoAOre) {
+            console.group("🟢 [A ORE] FORMDATA FINALE");
+            for (let pair of formData.entries()) {
+                console.log(pair[0], "=", pair[1]);
+            }
+            console.groupEnd();
+        }
+
 
         fetch(url, {
             method: 'POST',
@@ -2237,7 +2634,323 @@
 
     /*fine gestione costo pratica */
 
-/*    gestione template*/
+    /*inzio gestione aggiunta fornitore da pratica */
+
+    function apriNuovaAzienda() {
+        const form = document.getElementById('AziendaForm');
+        form.reset();
+
+        // ✅ Forza il flag Fornitore di Servizi attivo
+        //document.getElementById("checkFornitore").checked = true;
+        //document.getElementById("checkCliente").checked = false;
+
+        $('#aziendaModalLabel').text('Nuovo Fornitore');
+        caricaTipiRagioneSociale();
+        caricaCittaENazioni();
+        caricaSettoriMerceologiciFornitori();
+        caricaCategorieServizi();
+
+        // Nascondo toggle versioni
+        $("#toggleVersioniWrapperAzienda").addClass("d-none");
+        $("#infoStoricoAzienda").remove();
+        $("[data-prev]").addClass("d-none").text("");
+
+        const nomeAzienda = form.querySelector('input[name="Nome"]');
+        if (nomeAzienda) {
+            nomeAzienda.addEventListener("blur", () => {
+                nomeAzienda.value = nomeAzienda.value.toUpperCase();
+            });
+        }
+
+        const codiceFiscale = form.querySelector('input[name="CodiceFiscale"]');
+        if (codiceFiscale) {
+            codiceFiscale.addEventListener("input", () => {
+                codiceFiscale.value = codiceFiscale.value.toUpperCase().substring(0, 16);
+            });
+        }
+
+        new bootstrap.Modal(document.getElementById('aziendaModal')).show();
+    }
+
+    function salvaAzienda() {
+        const form = document.getElementById('AziendaForm');
+        const formData = new FormData(form);
+
+        const idAzienda = formData.get('ID_Azienda');
+        const idNazione = formData.get("ID_Nazione");
+        const idCitta = formData.get("ID_CittaResidenza");
+
+
+        // ✅ Controlli obbligatori
+        if (!idNazione || idNazione === "") {
+            toastr.warning("⚠️ Seleziona una nazione.");
+            return;
+        }
+
+        if (!idCitta || idCitta === "") {
+            toastr.warning("⚠️ Seleziona una città.");
+            return;
+        }
+        // gestione cliente e fornitore
+        //const èCliente = document.getElementById("checkCliente").checked;
+        //const èFornitore = document.getElementById("checkFornitore").checked;
+
+        //if (!èCliente && !èFornitore) {
+        //    toastr.warning("⚠️ Seleziona almeno 'È Cliente' o 'È Fornitore'.");
+        //    return;
+        //}
+
+        //formData.set("ÈCliente", èCliente);
+        //formData.set("ÈFornitore", èFornitore);
+
+
+        // 💳 Se è una nuova azienda e ci sono dati bancari temporanei → aggiungili
+        //if ((!idAzienda || idAzienda === "0") && datiBancariTemporanei) {
+        //    formData.append("IBAN", datiBancariTemporanei.IBAN || "");
+        //    formData.append("Intestatario", datiBancariTemporanei.Intestatario || "");
+        //    formData.append("NomeBanca", datiBancariTemporanei.NomeBanca || "");
+        //    formData.append("BIC_SWIFT", datiBancariTemporanei.BIC_SWIFT || "");
+        //    formData.append("Note", datiBancariTemporanei.Note || "");
+        //}
+
+        // 📤 Endpoint corretto: crea o modifica
+        const url = idAzienda && idAzienda !== "0" ? '/Utenti/ModificaAzienda' : '/Utenti/CreaAzienda';
+        // 🔥 Se siamo dentro pratica passo il professionista corrente
+        if (window.IDProfessioneCorrente && parseInt(window.IDProfessioneCorrente) > 0) {
+            formData.append("idProfessionista", window.IDProfessioneCorrente);
+        }
+
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+
+                    toastr.success(res.message);
+
+                    if (window.location.pathname.toLowerCase().includes("fornitori")
+                        || window.location.pathname.toLowerCase().includes("utenti")) {
+
+                        // niente reload
+                        bootstrap.Modal
+                            .getInstance(document.getElementById('aziendaModal'))
+                            .hide();
+
+                        return;
+                    }
+
+                    // 🔥 Se siamo dentro Pratiche → trigger evento custom
+                    $(document).trigger("fornitoreCreato");
+
+                    // Chiudo modale
+                    bootstrap.Modal
+                        .getInstance(document.getElementById('aziendaModal'))
+                        .hide();
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                console.error("Errore:", err);
+                toastr.error("Errore durante il salvataggio.");
+            });
+    }
+
+    function caricaTipiRagioneSociale() {
+        const select = document.querySelector('select[name="TipoRagioneSociale"]');
+        select.innerHTML = '<option value="">Seleziona tipo...</option>'; // resetta prima
+
+        fetch('/Utenti/GetTipiRagioneSociale')
+            .then(response => response.json())
+            .then(tipi => {
+                tipi.forEach(tipo => {
+                    const option = document.createElement('option');
+                    option.value = tipo.NomeTipo;
+                    option.textContent = tipo.NomeTipo;
+                    select.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Errore caricamento tipi:', error);
+                toastr.error('Errore durante il caricamento dei tipi di ragione sociale.');
+            });
+    }
+    function caricaCittaENazioni() {
+        fetch('/Utenti/GetCittaENazioni')
+            .then(response => response.json())
+            .then(data => {
+                const selectCitta = document.getElementById('Citta');
+                const selectNazione = document.getElementById('Nazione');
+
+                selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                data.nazioni.forEach(n => {
+                    const opt = document.createElement("option");
+                    opt.value = n.ID_BPCittaDN;
+                    opt.textContent = n.NameNazione;
+                    selectNazione.appendChild(opt);
+
+                    if (n.NameNazione.toLowerCase() === "italia") {
+                        selectNazione.value = n.ID_BPCittaDN;
+                    }
+                });
+
+                data.citta.forEach(c => {
+                    const opt = document.createElement("option");
+                    opt.value = c.ID_BPCitta;
+                    opt.textContent = c.NameLocalita;
+                    selectCitta.appendChild(opt);
+
+                    if (c.NameLocalita.toLowerCase() === "roma") {
+                        selectCitta.value = c.ID_BPCitta;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error("❌ Errore nel caricamento di città e nazioni:", error);
+            });
+    }
+
+    // tooltip
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+            new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+
+    // GESTIONE CODICE FISCALE
+    document.addEventListener("DOMContentLoaded", function () {
+        const cfInputs = document.querySelectorAll(".codice-fiscale-input");
+
+        cfInputs.forEach(input => {
+            input.addEventListener("input", function () {
+                this.value = this.value.toUpperCase();
+            });
+
+            input.addEventListener("blur", function () {
+                const form = this.closest("form");
+                const tipo = form?.querySelector("[name='TipoCliente']")?.value || "";
+
+                const errore = this.parentElement.querySelector("#erroreCodiceFiscale");
+
+                if (!this.value.trim()) {
+                    this.classList.remove("is-valid", "is-invalid");
+                    if (errore) errore.classList.add("d-none");
+                    return;
+                }
+
+                if (tipo === "Professionista" && this.value.length !== 16) {
+                    this.classList.add("is-invalid");
+                    this.classList.remove("is-valid");
+                    if (errore) errore.classList.remove("d-none");
+                } else {
+                    this.classList.add("is-valid");
+                    this.classList.remove("is-invalid");
+                    if (errore) errore.classList.add("d-none");
+                }
+            });
+        });
+    });
+    function caricaSettoriMerceologiciFornitori() {
+        fetch('/Utenti/GetSettoriFornitori')
+            .then(r => r.json())
+            .then(settori => {
+                const select = document.getElementById("ID_SettoreFornitore");
+                select.innerHTML = '<option value="">Seleziona settore...</option>';
+
+                if (Array.isArray(settori)) {
+                    settori.forEach(s => {
+                        const option = document.createElement("option");
+                        option.value = s.ID_Settore;
+                        option.text = s.Nome;
+                        select.appendChild(option);
+                    });
+                }
+            })
+            .catch(err => {
+                console.error("Errore caricamento settori fornitori:", err);
+                toastr.error("Errore nel caricamento dei settori fornitori.");
+            });
+    }
+    // 🔽 Carica le categorie servizi nella select
+    function caricaCategorieServizi(idSelezionata = null) {
+        fetch('/Utenti/GetCategorieServizi')
+            .then(r => r.json())
+            .then(data => {
+                const select = document.getElementById('ID_CategoriaServizi');
+                if (!select) return;
+                select.innerHTML = '<option value="">Seleziona categoria...</option>';
+
+                data.forEach(cat => {
+                    const opt = document.createElement('option');
+                    opt.value = cat.ID_Categoria;
+                    opt.textContent = cat.Nome;
+                    select.appendChild(opt);
+                });
+
+                // ✅ imposta la categoria salvata sull'azienda (se presente)
+                if (idSelezionata) {
+                    select.value = idSelezionata;
+                }
+            })
+            .catch(err => console.error("Errore caricamento categorie:", err));
+    }
+
+
+    // Esegui il caricamento ogni volta che si apre la modale
+    $('#aziendaModal').on('show.bs.modal', function () {
+        caricaCategorieServizi();
+    });
+
+    function chiudiAziendaModal() {
+        bootstrap.Modal.getInstance(document.getElementById('aziendaModal')).hide();
+    }
+    /*fine gestione fornitore aggiunto da pratica */
+
+    /* inizio gestione caricamento costo di pratica dall modale pratiche */
+    // ➕ Nuovo
+    function apriNuovoCostoProgetto() {
+        const form = document.getElementById("costoProgettoForm");
+        form.reset();
+        form.querySelector('[name="ID_AnagraficaCosto"]').value = 0;
+        document.getElementById("costoProgettoModalLabel").textContent = "Nuovo Costo di Progetto";
+        new bootstrap.Modal(document.getElementById("costoProgettoModal")).show();
+    }
+    // 💾 Submit
+    $('#costoProgettoForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+        const id = formData.get("ID_AnagraficaCosto");
+
+        const url = id && parseInt(id) > 0
+            ? '/Utenti/ModificaCostoProgetto'
+            : '/Utenti/CreaCostoProgetto';
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    toastr.success(res.message);
+                    bootstrap.Modal
+                        .getInstance(document.getElementById("costoProgettoModal"))
+                        .hide();
+                } else {
+                    toastr.error(res.message);
+                }
+            });
+    });
+    /*fine gestione aggiunta costo di pratica in anagrafica*/
+
+    /* gestione template*/
 
     //function caricaTemplateIncarico(idProfessionista) {
     //    return fetch(`/Pratiche/GetTemplateByProfessionista?idProfessionista=${idProfessionista}`)
@@ -2878,7 +3591,7 @@
 
     // 🔹 Variabile globale (accessibile ovunque)
     window.intestatariGlobali = [];
-    // mi serve quando creo nuova pratica che non ho dati nel db 
+    // mi serve quando creo nuova pratica che non ho dati nel db
     window.compensiTemp = [];
 
 
@@ -2983,8 +3696,13 @@
             const tbody = document.querySelector('#tabellaCompensi tbody');
             tbody.innerHTML = "";
 
-            // 🔄 Prima ricarico gli intestatari (normale)
+            // 🔒 sicurezza: inizializzo se undefined
+            if (!window.compensiTemp)
+                window.compensiTemp = [];
+
+            // 🔄 Prima ricarico gli intestatari
             const idCliente = $('#selectCliente').val();
+
             fetch(`/Pratiche/GetIntestatariPratica?idCliente=${idCliente}`)
                 .then(r => r.json())
                 .then(json => {
@@ -2992,21 +3710,22 @@
                     window.intestatariGlobali = json.intestatari || [];
                     aggiornaIntestatariDisponibili();
 
-                    // 🔥 ECCO LA PARTE IMPORTANTE:
-                    // Se ho compensi già inseriti in questa nuova pratica → li ricarico
-                    if (window.compensiTemp.length > 0) {
+                    // =========================================================
+                    // 🔍 Carico SOLO le righe del metodo corrente
+                    // =========================================================
+                    let righeMetodo = window.compensiTemp
+                        .filter(x => x.Metodo === metodo);
 
-                        window.compensiTemp
-                            .filter(x => x.Metodo === metodo)
-                            .forEach(r => aggiungiRigaDaJSON(r, metodo));
+                    if (righeMetodo.length > 0) {
 
-                    } else {
+                        righeMetodo.forEach(r => aggiungiRigaDaJSON(r, metodo));
 
-                        // ⚖️ fallback giudiziale se nulla inserito
-                        if (metodo === 'Giudiziale') {
-                            ['Fase di Studio', 'Fase Introduttiva', 'Fase Istruttoria', 'Fase Decisionale']
-                                .forEach(f => aggiungiRigaCompenso(f, true));
-                        }
+                    }
+                    else if (metodo === 'Giudiziale') {
+
+                        // ⚖️ Fallback standard per Giudiziale
+                        ['Fase di Studio', 'Fase Introduttiva', 'Fase Istruttoria', 'Fase Decisionale']
+                            .forEach(f => aggiungiRigaCompenso(f, true));
                     }
 
                     new bootstrap.Modal('#compensoModal').show();
@@ -3014,7 +3733,6 @@
 
             return;
         }
-
 
         // ============================================================
         // 🟨 CASO B — MODIFICA PRATICA
@@ -3037,7 +3755,7 @@
                 let cumulativo = Array.isArray(jsonComp.raw) ? jsonComp.raw : [];
 
                 // 2️⃣ Salvo in memoria globale (fonte unica)
-                window.CompensiCorrenti = JSON.parse(JSON.stringify(cumulativo));
+                window.compensiCorrenti = JSON.parse(JSON.stringify(cumulativo));
 
                 // 3️⃣ Aggiorno l’hidden in modo sicuro
                 document.querySelector('#hiddenCompensiContainer').innerHTML =
@@ -3423,6 +4141,8 @@
     function aggiornaValoreStimato(compensi) {
         let totale = 0;
 
+        const haAOre = compensi.some(c => c.Metodo === "A ore");
+
         compensi.forEach(c => {
             if (c.Metodo === "Fisso") {
                 const importo = parseFloat(c.Importo) || 0;
@@ -3434,20 +4154,26 @@
                 totale += importo;
             }
             else if (c.Metodo === "A ore") {
-                // 👇 Se esiste BudgetManuale nel JSON, usalo senza ricalcolare
-                if (c.BudgetManuale) {
-                    totale += parseFloat(c.BudgetManuale) || 0;
+
+                // 👉 calcolo SOLO interno, NON tocca il BudgetInput
+                if (c.BudgetManuale && parseFloat(c.BudgetManuale) > 0) {
+                    c.ValoreStimato = +parseFloat(c.BudgetManuale).toFixed(2);
+                } else {
+                    const ore = parseFloat(c.OrePreviste) || 0;
+                    const tariffa = parseFloat(c.Tariffa) || parseFloat(c.Importo) || 0;
+                    c.ValoreStimato = +(ore * tariffa).toFixed(2);
                 }
             }
         });
 
         const budgetInput = document.getElementById("BudgetInput");
 
-        if (budgetInput) {
-            // 🔹 formato italiano → con virgola
+        // ✅ SOLO se NON è "A ore" aggiorno automaticamente il Budget
+        if (budgetInput && !haAOre) {
             budgetInput.value = totale.toFixed(2).replace('.', ',');
         }
     }
+
 
     // 🔹 Formatta numeri in stile italiano con due decimali e virgola
     function formattaImportoItaliano(valore) {
@@ -3880,7 +4606,7 @@
         const hidden = document.querySelector('#hiddenCompensiContainer input[name="CompensiJSON"]');
         if (!hidden) return;
 
-        hidden.value = encodeURIComponent(JSON.stringify(window.CompensiCorrenti || []));
+        hidden.value = encodeURIComponent(JSON.stringify(window.compensiCorrenti || []));
     }
 
 
@@ -3916,8 +4642,249 @@
 
     // fine trattenuta
 
+    /* ======================================================
+       📊 SCRIPT ECONOMIA PRATICA
+       ====================================================== */
+
+    function apriEconomiaPratica(idPratica) {
+
+        $.get('/Pratiche/GetPratica', { id: idPratica }, function (response) {
+
+            if (!response.success) {
+                alert(response.message);
+                return;
+            }
+
+            // ======================================================
+            // 📌 TITOLO MODALE (Codice + Titolo pratica)
+            // ======================================================
+
+            var anno = response.data.AnnoProgressivo || 0;
+            var progressivo = response.data.ProgressivoAnno || 0;
+            var titolo = response.data.Titolo || "";
+
+            var codiceFormattato = anno > 0
+                ? anno + "/" + progressivo
+                : idPratica;
+
+            $('#ecoTitoloPratica').text(
+                "Andamento Pratica – " + codiceFormattato + " | " + titolo
+            );
+
+            // ======================================================
+            // 💰 RIEPILOGO GENERALE
+            // ======================================================
+
+            $('#ecoFatturato').text(formatCurrency(response.fatturatoLordo));
+            $('#ecoTotaleIncassato').text(formatCurrency(response.totaleIncassato));
+            $('#ecoOwner').text(formatCurrency(response.ownerFeeTotale));
+
+            // ======================================================
+            // 📄 POPOLAMENTO AVVISI
+            // ======================================================
+
+            var htmlAvvisi = "";
+
+            if (response.avvisi && response.avvisi.length > 0) {
+                response.avvisi.forEach(function (a) {
+
+                    htmlAvvisi += `
+                        <tr>
+                            <td>#${a.ID_AvvisoParcelle}</td>
+                            <td>${a.DataAvviso || ""}</td>
+                            <td>${a.TitoloAvviso || ""}</td>
+                            <td>${a.TipologiaAvviso || ""}</td>
+                            <td><strong>${formatCurrency(a.Totale)}</strong></td>
+                            <td>
+                                ${getStatoBadge(a.Stato)}
+                            </td>
+                        </tr>
+                        `;
+                });
+            } else {
+
+                htmlAvvisi = `
+                <tr>
+                    <td colspan="6" class="text-center text-muted">
+                        Nessun avviso presente
+                    </td>
+                </tr>
+            `;
+            }
+
+            $('#ecoAvvisiBody').html(htmlAvvisi);
+
+            // ======================================================
+            // 💳 POPOLAMENTO INCASSI (IMPORTO NETTO)
+            // ======================================================
+
+            var htmlIncassi = "";
+
+            if (response.incassi && response.incassi.length > 0) {
+
+                response.incassi.forEach(function (i) {
+
+                    htmlIncassi += `
+                    <tr>
+                        <td>#${i.ID_Incasso}</td>
+                        <td>${formatCurrency(i.ImportoNetto)}</td>
+                        <td>${i.DataIncasso}</td>
+                        <td>${i.ID_AvvisoParcella ?? ""}</td>
+                    </tr>
+                `;
+                });
+
+            } else {
+
+                htmlIncassi = `
+                <tr>
+                    <td colspan="4" class="text-center text-muted">
+                        Nessun incasso presente
+                    </td>
+                </tr>
+            `;
+            }
+
+            $('#ecoIncassiBody').html(htmlIncassi);
+
+            // ======================================================
+            // 🪟 APERTURA MODALE
+            // ======================================================
+
+            $('#modalEconomiaPratica').modal('show');
+        });
+    }
+
+
+    /* ======================================================
+       💶 FORMATTAZIONE VALUTA EURO
+       ====================================================== */
+
+    function formatCurrency(value) {
+        return new Intl.NumberFormat('it-IT', {
+            style: 'currency',
+            currency: 'EUR'
+        }).format(value || 0);
+    }
+
+    function getStatoBadge(stato) {
+
+        if (!stato) return "";
+
+        switch (stato.toLowerCase()) {
+            case "pagato":
+                return '<span class="badge bg-success">Pagato</span>';
+            case "inviato":
+                return '<span class="badge bg-warning text-dark">Inviato</span>';
+            case "in attesa":
+                return '<span class="badge bg-danger">In Attesa</span>';
+            default:
+                return `<span class="badge bg-secondary">${stato}</span>`;
+        }
+    }
+
+
+    //FUNZIONE PER MODALE COMPENSI DA FATTURARE 
+    function apriCompensiResidui(idPratica) {
+
+        fetch('/Pratiche/GetCompensiResiduiPratica?idPratica=' + idPratica)
+            .then(r => r.json())
+            .then(data => {
+
+                if (!data.success) return;
+
+                let html = `
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Descrizione</th>
+                            <th class="text-end">Residuo</th>
+                            <th class="text-center">Stato</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+                data.compensi.forEach(c => {
+
+                    let badgeClass = "";
+                    let buttonHtml = "";
+
+                    // 🔥 GESTIONE STATI ALLINEATA AL BACKEND
+                    if (c.Stato === "Pagato") {
+
+                        badgeClass = "bg-success";
+                        buttonHtml = `
+                        <button class="btn btn-sm btn-success" disabled>
+                            Pagato
+                        </button>`;
+
+                    }
+                    else if (c.Stato === "Fatturato (in attesa pagamento)") {
+
+                        badgeClass = "bg-warning text-dark";
+                        buttonHtml = `
+                        <a href="/Pratiche/GestioneParcelle?compenso=${c.ID_RigaCompenso}"
+                           class="btn btn-sm btn-outline-primary">
+                            Nuovo Avviso
+                        </a>`;
+
+                    }
+                    else { // Da Fatturare
+
+                        badgeClass = "bg-danger";
+                        buttonHtml = `
+                        <a href="/Pratiche/GestioneParcelle?compenso=${c.ID_RigaCompenso}"
+                           class="btn btn-sm btn-primary">
+                            Crea Avviso
+                        </a>`;
+                    }
+
+                    html += `
+                    <tr>
+                        <td>
+                            <strong>${c.Descrizione}</strong>
+                            <div class="small text-muted mt-1">
+                                Totale: € ${c.ImportoTotale.toFixed(2)} |
+                                Fatturato: € ${c.ImportoFatturato.toFixed(2)} |
+                                Pagato: € ${c.ImportoPagato.toFixed(2)} |
+                                Avvisi creati: ${c.NumeroAvvisiCreati}
+                            </div>
+                        </td>
+                        <td class="text-end fw-bold">
+                            € ${c.Residuo.toFixed(2)}
+                        </td>
+                        <td class="text-center">
+                            <span class="badge ${badgeClass}">
+                                ${c.Stato}
+                            </span>
+                        </td>
+                        <td class="text-end">
+                            ${buttonHtml}
+                        </td>
+                    </tr>
+                `;
+                });
+
+                html += `
+                    </tbody>
+                </table>
+            `;
+
+                document.getElementById('contenutoCompensiResidui').innerHTML = html;
+
+                new bootstrap.Modal(
+                    document.getElementById('modalCompensiResidui')
+                ).show();
+            });
+    }
+
+    // fine modale economia pratica
+
     // 🔍 Filtro e paginazione pratiche
     document.addEventListener("DOMContentLoaded", function () {
+
         const table = document.getElementById('praticheTable');
         const rows = Array.from(table.querySelectorAll('tbody tr'));
         const cards = document.querySelectorAll('.card-pratica');
@@ -3928,6 +4895,8 @@
         const searchInput = document.createElement('input');
         const selectPageSize = document.createElement('select');
         const selectStato = document.createElement('select');
+        const dataDal = document.createElement('input');
+        const dataAl = document.createElement('input');
 
         let pageSize = 10;
         let currentPage = 1;
@@ -3936,6 +4905,33 @@
         searchInput.type = 'text';
         searchInput.placeholder = 'Cerca...';
         searchInput.className = 'form-control form-control-sm w-auto';
+
+        // 📅 FILTRO DATE
+        dataDal.type = 'date';
+        dataDal.className = 'form-control form-control-sm w-auto';
+
+        dataAl.type = 'date';
+        dataAl.className = 'form-control form-control-sm w-auto';
+
+        // 🔥 TRIMESTRE AUTOMATICO IN CORSO
+        const today = new Date();
+
+        function formatDateInput(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        // Calcolo trimestre
+        const month = today.getMonth(); // 0-11
+        const quarterStartMonth = Math.floor(month / 3) * 3;
+
+        // Inizio trimestre
+        const trimestreStart = new Date(today.getFullYear(), quarterStartMonth, 1);
+
+        // Fine trimestre (ultimo giorno del terzo mese)
+        const trimestreEnd = new Date(today.getFullYear(), quarterStartMonth + 3, 0);
+
+        dataDal.value = formatDateInput(trimestreStart);
+        dataAl.value = formatDateInput(trimestreEnd);
 
         // 📄 Page Size
         [10, 25, 50].forEach(num => {
@@ -3946,6 +4942,7 @@
         });
         selectPageSize.className = 'form-select form-select-sm w-auto';
 
+        // 🏷️ Stato
         ['Tutte', 'Contrattualizzazione', 'In lavorazione', 'Conclusa']
             .forEach(stato => {
                 const option = document.createElement('option');
@@ -3956,45 +4953,88 @@
 
         selectStato.className = 'form-select form-select-sm w-auto';
 
-        // Aggiungi i controlli alla barra
+        // ===============================
+        // AGGIUNTA CONTROLLI
+        // ===============================
+
         controlliContainer.appendChild(searchInput);
-        // 🏷️ Etichetta "Stato pratiche:" in formato piccolo
+
+        // Periodo
+        const dateWrapper = document.createElement('div');
+        dateWrapper.className = 'd-flex align-items-center gap-2';
+
+        const dateLabel = document.createElement('span');
+        dateLabel.textContent = 'Periodo';
+        dateLabel.className = 'text-muted small';
+
+        dateWrapper.appendChild(dateLabel);
+        dateWrapper.appendChild(dataDal);
+        dateWrapper.appendChild(dataAl);
+
+        controlliContainer.appendChild(dateWrapper);
+
+        // Stato
+        const statoWrapper = document.createElement('div');
+        statoWrapper.className = "d-flex align-items-center";
+
         const labelStato = document.createElement('label');
         labelStato.innerText = "Stato pratiche:";
         labelStato.className = "me-1 fw-bold small align-self-center";
 
-        // Contenitore per etichetta + select
-        const statoWrapper = document.createElement('div');
-        statoWrapper.className = "d-flex align-items-center me-3";
         statoWrapper.appendChild(labelStato);
         statoWrapper.appendChild(selectStato);
 
-        // Aggiungi nella barra dei controlli
         controlliContainer.appendChild(statoWrapper);
-
 
         controlliContainer.appendChild(selectPageSize);
 
+        // ===============================
+        // RENDER TABLE
+        // ===============================
         function renderTable() {
+
             const keyword = searchInput.value.toLowerCase();
             const filtroStato = selectStato.value;
 
+            const dal = dataDal.value ? new Date(dataDal.value) : null;
+            const al = dataAl.value ? new Date(dataAl.value) : null;
+
             let filteredRows = rows.filter(row => {
+
                 const text = row.innerText.toLowerCase();
+
+                // 🔹 Stato
                 const statoCell = row.querySelector('td.stato');
                 const stato = statoCell ? statoCell.innerText.trim() : '';
                 const statoMatch = (filtroStato === 'Tutte' || stato === filtroStato);
-                return text.includes(keyword) && statoMatch;
+
+                // 🔹 DATA CREAZIONE da attributo (NON da colonna)
+                const dataAttr = row.getAttribute('data-creazione');
+                let dataRow = dataAttr ? new Date(dataAttr) : null;
+
+                let dataMatch = true;
+
+                if (dal && dataRow) {
+                    dataMatch = dataRow >= dal;
+                }
+
+                if (al && dataRow) {
+                    dataMatch = dataMatch && dataRow <= al;
+                }
+
+                return text.includes(keyword) && statoMatch && dataMatch;
             });
 
             const totalPages = Math.ceil(filteredRows.length / pageSize);
             currentPage = Math.min(currentPage, totalPages || 1);
 
-            // Tabella desktop
+            // Desktop
             rows.forEach(r => r.style.display = 'none');
-            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
 
-            // Card mobile
+            // Mobile
             cards.forEach(c => c.style.display = 'none');
             filteredRows.forEach(row => {
                 const id = row.getAttribute('data-id');
@@ -4004,6 +5044,7 @@
 
             // Paginazione
             paginationContainer.innerHTML = '';
+
             const pageInfo = document.createElement('span');
             pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
             pageInfo.className = 'me-2';
@@ -4023,8 +5064,9 @@
             nextBtn.onclick = () => { currentPage++; renderTable(); };
             paginationContainer.appendChild(nextBtn);
         }
-
-        // Eventi
+        // ===============================
+        // EVENTI
+        // ===============================
         searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
         selectStato.addEventListener('change', () => { currentPage = 1; renderTable(); });
         selectPageSize.addEventListener('change', () => {
@@ -4033,9 +5075,11 @@
             renderTable();
         });
 
+        dataDal.addEventListener('change', () => { currentPage = 1; renderTable(); });
+        dataAl.addEventListener('change', () => { currentPage = 1; renderTable(); });
+
         renderTable();
     });
-
 
 
 </script>

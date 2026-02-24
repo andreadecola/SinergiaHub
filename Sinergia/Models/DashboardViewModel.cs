@@ -45,8 +45,13 @@ namespace Sinergia.Models
         public decimal UtileIncassato { get; set; }          // Incassi - Costi pagati
         public decimal DisponibilitaFinanziaria { get; set; } // (Incassi + Finanziamenti) - (Costi personali + Costi pagati)
         public decimal CreditoFatturabile { get; set; }      // Incassi - Costi totali - Trattenute
+                                                          
+        // Credito fatturabile relativo al periodo selezionato (trimestre/mese)
+        public decimal CreditoPeriodo { get; set; }
+
         public decimal TrattenuteSinergia { get; set; }      // Trattenute nel periodo
         public decimal FatturatoNetto { get; set; }          // Incassi - Costi totali - Trattenute
+        public decimal CompensoOwner { get; set; }
 
 
         // ==========================================================
@@ -61,6 +66,10 @@ namespace Sinergia.Models
         public decimal FatturatoTotaleGenerato { get; set; }
         public decimal DisponibilitaSinergia { get; set; }       // Entrate - Uscite
 
+        public decimal TotaleCompensiDocumentale { get; set; }
+        public decimal TotaleRimborsiAnticipatiDocumentale { get; set; }
+        public decimal TotaleRimborsiUrgentiDocumentale { get; set; }
+
 
         // 📈 Serie temporale per grafico andamento utile mensile
         public List<string> MesiUtile { get; set; }             // Etichette mesi (es. ["Mag 2025", "Giu 2025", "Lug 2025", ...])
@@ -68,7 +77,10 @@ namespace Sinergia.Models
 
         public bool IsAdmin { get; set; }
 
-
+        // ci servono per il plafond e il credito fatturabile per lo spostamento dei soldi 
+        public int ID_Professionista { get; set; }
+        public int? ID_UtenteProfessionista { get; set; }
+        public decimal PlafondDisponibile { get; set; }
 
         // 📅 Filtro temporale
         public int AnnoCorrente { get; set; }

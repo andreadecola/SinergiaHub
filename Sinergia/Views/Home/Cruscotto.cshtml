@@ -107,57 +107,101 @@
         <!-- ========================= -->
         <div class="row g-3 align-items-center text-center mb-3">
 
-            <!-- 1️⃣ Avvisi Parcella Totali -->
-            <div class="col-md-3 col-sm-6">
-                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="avvisi">
-                    <div class="card-body p-3">
-                        <i class="bi bi-receipt fs-4 text-primary"></i>
-                        <h6 class="mt-2 fw-bold">@Model.AvvisiTotaliSinergia</h6>
-                        <p class="mb-0 small text-muted">Avvisi Parcella Totali</p>
-                    </div>
+        <!-- 1️⃣ Avvisi Parcella Totali -->
+        <div class="col-md-3 col-sm-6">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="avvisi">
+                <div class="card-body p-3">
+                    <i class="bi bi-receipt fs-4 text-primary"></i>
+                    <h6 class="mt-2 fw-bold">@Model.AvvisiTotaliSinergia</h6>
+                    <p class="mb-0 small text-muted">Avvisi Parcella Totali</p>
                 </div>
             </div>
-
-            <!-- 2️⃣ Fatturato Totale Generato -->
-            <div class="col-md-3 col-sm-6">
-                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="fatturato">
-                    <div class="card-body p-3">
-                        <i class="bi bi-currency-euro fs-4 text-success"></i>
-                        <h6 class="mt-2 fw-bold">
-                            @string.Format("{0:N2} €", Model.FatturatoTotaleGenerato)
-                        </h6>
-                        <p class="mb-0 small text-muted">Fatturato Totale (documentale)</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 3️⃣ Crediti / Netto Professionisti -->
-            <div class="col-md-3 col-sm-6">
-                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="crediti">
-                    <div class="card-body p-3">
-                        <i class="bi bi-file-earmark-text fs-4 text-warning"></i>
-                        <h6 class="mt-2 fw-bold">
-                            @string.Format("{0:N2} €", Model.CreditoTotaleProfessionisti)
-                        </h6>
-                        <p class="mb-0 small text-muted">Netto Prof. da Liquidare</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 4️⃣ Disponibilità Sinergia (Margine) -->
-            <div class="col-md-3 col-sm-6">
-                <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="disponibilita">
-                    <div class="card-body p-3">
-                        <i class="bi bi-piggy-bank fs-4 text-info"></i>
-                        <h6 class="mt-2 fw-bold">
-                            @string.Format("{0:N2} €", Model.DisponibilitaSinergia)
-                        </h6>
-                        <p class="mb-0 small text-muted">Disponibilità Sinergia (Margine)</p>
-                    </div>
-                </div>
-            </div>
-
         </div>
+
+        <!-- 2️⃣ Fatturato Totale Generato -->
+        <div class="col-md-3 col-sm-6">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="fatturato">
+                <div class="card-body p-3">
+
+                    <i class="bi bi-currency-euro fs-4 text-success"></i>
+
+                    <!-- TOTALE -->
+                    <h6 class="mt-2 fw-bold">
+                        @string.Format("{0:N2} €", Model.FatturatoTotaleGenerato)
+                    </h6>
+
+                    <p class="mb-2 small text-muted">
+                        Fatturato Totale (documentale)
+                    </p>
+
+                    <hr class="my-2" />
+
+                    <!-- 🔎 SUDDIVISIONE -->
+                    <div class="small text-start">
+
+                        <div class="d-flex justify-content-between">
+                            <span>
+                                <span class="badge bg-primary me-1">Comp.</span>
+                                Prof. + Giud.
+                            </span>
+                            <span>
+                                @string.Format("{0:N2} €", Model.TotaleCompensiDocumentale)
+                            </span>
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-1">
+                            <span>
+                                <span class="badge bg-secondary me-1">Rimb.</span>
+                                Anticipate
+                            </span>
+                            <span>
+                                @string.Format("{0:N2} €", Model.TotaleRimborsiAnticipatiDocumentale)
+                            </span>
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-1">
+                            <span>
+                                <span class="badge bg-warning text-dark me-1">Rimb.</span>
+                                Urgenti
+                            </span>
+                            <span>
+                                @string.Format("{0:N2} €", Model.TotaleRimborsiUrgentiDocumentale)
+                            </span>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    <!-- 3️⃣ Crediti / Netto Professionisti -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="crediti">
+            <div class="card-body p-3">
+                <i class="bi bi-file-earmark-text fs-4 text-warning"></i>
+                <h6 class="mt-2 fw-bold">
+                    @string.Format("{0:N2} €", Model.CreditoTotaleProfessionisti)
+                </h6>
+                <p class="mb-0 small text-muted">Netto Prof. da Liquidare</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4️⃣ Disponibilità Sinergia (Margine) -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="disponibilita">
+            <div class="card-body p-3">
+                <i class="bi bi-piggy-bank fs-4 text-info"></i>
+                <h6 class="mt-2 fw-bold">
+                    @string.Format("{0:N2} €", Model.DisponibilitaSinergia)
+                </h6>
+                <p class="mb-0 small text-muted">Disponibilità Sinergia (Margine)</p>
+            </div>
+        </div>
+    </div>
+
+</div>
 
         <!-- ========================= -->
         <!-- 📊 KPI DETTAGLIO + GRAFICO -->
@@ -466,36 +510,112 @@
                     <h5 class="mt-2 fw-bold">
                         @string.Format("{0:N2} €", Model.DisponibilitaFinanziaria)
                     </h5>
-                    <p class="mb-0 small text-muted">Disponibilità</p>
+                    <p class="mb-0 small text-muted">Plafond</p>
+                    <div class="mt-2">
+                        <button class="btn btn-sm"
+                                style="
+                                    background:#f5f6f8;
+                                    color:#444;
+                                    border:1px solid #e0e3e8;
+                                    border-radius:18px;
+                                    padding:5px 12px;
+                                    font-weight:500;
+                                    box-shadow:0 2px 6px rgba(0,0,0,0.08);
+                                "
+                                onclick="event.stopPropagation(); apriModaleOperazionePlafond('prelievo')">
+                            <i class="bi bi-arrow-down-circle"></i>
+                            Preleva dal plafond
+                        </button>
+
+                    </div>
                 </div>
             </div>
         </div>
-
-      
-
     </div>
 
     <!-- Seconda riga KPI PROF -->
     <div class="row g-3 mb-4 text-center">
 
-        <!-- Credito fatturabile -->
+        <!-- 💰 CREDITO FATTURABILE -->
         <div class="col-md-3 col-sm-6">
             <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="credito">
                 <div class="card-body">
-                    <i class="bi bi-cash-stack fs-3 text-dark"></i>
-                    <h5 class="mt-2 fw-bold">
+
+                    <div class="d-flex justify-content-between align-items-start">
+                        <i class="bi bi-cash-stack fs-3 text-dark"></i>
+
+                        <span class="badge bg-light text-dark small">
+                            Aggiornato al @DateTime.Now.ToString("dd/MM/yyyy")
+                        </span>
+                    </div>
+
+                    <!-- 💰 CREDITO TOTALE -->
+                    <h4 class="mt-3 fw-bold @(Model.CreditoFatturabile >= 0 ? "text-success" : "text-danger")">
                         @string.Format("{0:N2} €", Model.CreditoFatturabile)
-                    </h5>
-                    <p class="mb-0 small text-muted">Credito fatturabile</p>
+                    </h4>
+                    <p class="mb-2 small text-muted">
+                        Credito fatturabile totale
+                    </p>
+
+                    <hr class="my-2" />
+
+                    <!-- 📆 CREDITO PERIODO -->
+                    <div class="small text-muted">
+                        <div>
+                            Periodo selezionato:
+                        </div>
+
+                        <div class="fw-bold @(Model.CreditoPeriodo >= 0 ? "text-success" : "text-danger")">
+                            @string.Format("{0:N2} €", Model.CreditoPeriodo)
+                        </div>
+
+                        <div class="text-secondary mt-1">
+                            @Model.FiltroTrimestre
+                            @if (Model.SottoFiltro != "completo")
+                            {
+                                <span> · @Model.SottoFiltro.ToUpper()</span>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- 🔘 Bottone solo se credito totale > 0 -->
+                    @if (Model.CreditoFatturabile > 0)
+                    {
+                        <div class="mt-3">
+                            <button class="btn btn-sm w-100"
+                                    style="
+                                background:#eef4ff;
+                                color:#2c5cff;
+                                border:1px solid #d6e2ff;
+                                border-radius:18px;
+                                padding:6px 12px;
+                                font-weight:500;
+                                box-shadow:0 2px 6px rgba(0,0,0,0.08);
+                            "
+                                    onclick="event.stopPropagation(); apriModaleOperazionePlafond('versamento')">
+                                <i class="bi bi-arrow-up-circle"></i>
+                                Versa in plafond
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="mt-3 small text-danger text-center">
+                            Nessun credito disponibile
+                        </div>
+                    }
+
                 </div>
             </div>
         </div>
+
+
 
         <!-- Trattenute Sinergia -->
         <div class="col-md-3 col-sm-6">
             <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="trattenute">
                 <div class="card-body">
-                    <i class="bi bi-percent fs-3 text-danger"></i>
+                    <i class="bi bi-receipt fs-3 text-danger"></i>
                     <h5 class="mt-2 fw-bold">
                         @string.Format("{0:N2} €", Model.TrattenuteSinergia)
                     </h5>
@@ -504,18 +624,19 @@
             </div>
         </div>
 
-        <!-- Fatturato netto -->
+        <!-- Compenso Owner -->
         <div class="col-md-2 col-sm-12">
-            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="netto">
+            <div class="card shadow-sm border-0 h-100 kpi-card" data-tipo="owner">
                 <div class="card-body">
-                    <i class="bi bi-currency-euro fs-3 text-primary"></i>
+                    <i class="bi bi-person-badge fs-3 text-primary"></i>
                     <h5 class="mt-2 fw-bold">
-                        @string.Format("{0:N2} €", Model.FatturatoNetto)
+                        @string.Format("{0:N2} €", Model.CompensoOwner)
                     </h5>
-                    <p class="mb-0 small text-muted">Fatturato netto</p>
+                    <p class="mb-0 small text-muted">Compenso Owner</p>
                 </div>
             </div>
         </div>
+
 
         <!-- 📊 GRAFICO PROFESSIONISTA (DENTRO LA STESSA ROW) -->
         <div class="col-md-4 col-sm-12">
@@ -604,6 +725,172 @@ document.addEventListener("DOMContentLoaded", function () {
         </div>
     </div>
 
+    <!-- 💰 Modale Versamento da Credito Fatturabile a Plafond -->
+    <div class="modal fade" id="modalVersaPlafond" tabindex="-1">
+        <div class="modal-dialog">
+            <form id="formVersaPlafond">
+                <input type="hidden" name="ID_Cliente" value="@Model.ID_ClienteSelezionato" />
+
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            Versa in Plafond
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+
+                        <!-- 👤 PROFESSIONISTA -->
+                        <div class="mb-2">
+                            <label>Professionista</label>
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   value="@Model.NomeCliente"
+                                   readonly />
+                        </div>
+
+                        <!-- 💳 CREDITO DISPONIBILE -->
+                        <div class="mb-2">
+                            <label>Credito fatturabile disponibile (€)</label>
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   value="@Model.CreditoFatturabile.ToString("N2")"
+                                   readonly />
+                        </div>
+
+                        <!-- 💰 IMPORTO -->
+                        <div class="mb-2">
+                            <label>Importo da versare (€)</label>
+                            <input type="number"
+                                   step="0.01"
+                                   min="0"
+                                   name="Importo"
+                                   class="form-control form-control-sm"
+                                   required />
+                        </div>
+
+                        <!-- 📝 NOTE -->
+                        <div class="mb-2">
+                            <label>Note</label>
+                            <input type="text"
+                                   name="Note"
+                                   maxlength="200"
+                                   class="form-control form-control-sm"
+                                   placeholder="Es. Versamento per copertura spese" />
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-success btn-sm">
+                            Conferma Versamento
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                            Annulla
+                        </button>
+                    </div>
+
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 🏦 Modale Prelievo da Plafond -->
+    <div class="modal fade" id="modalPrelevaPlafond" tabindex="-1">
+        <div class="modal-dialog">
+            <form id="formPrelevaPlafond">
+                <input type="hidden" name="ID_Cliente" value="@Model.ID_ClienteSelezionato" />
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            Preleva dal Plafond
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+
+                        <!-- 👤 PROFESSIONISTA -->
+                        <div class="mb-2">
+                            <label>Professionista</label>
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   value="@Model.NomeCliente"
+                                   readonly />
+                        </div>
+
+                        <!-- 💰 PLAFOND DISPONIBILE -->
+                        <div class="mb-2">
+                            <label>Plafond disponibile (€)</label>
+                            <input type="text"
+                                   id="plafondDisponibilePrelievo"
+                                   class="form-control form-control-sm"
+                                   readonly />
+                        </div>
+
+                        <!-- 💸 IMPORTO -->
+                        <div class="mb-2">
+                            <label>Importo da prelevare (€)</label>
+                            <input type="number"
+                                   step="0.01"
+                                   min="0"
+                                   name="Importo"
+                                   class="form-control form-control-sm"
+                                   required />
+                        </div>
+
+                        <!-- 📝 MOTIVAZIONE -->
+                        <div class="mb-2">
+                            <label>Motivazione</label>
+                            <input type="text"
+                                   name="Note"
+                                   maxlength="200"
+                                   class="form-control form-control-sm"
+                                   placeholder="Es. Prelievo per liquidazione" />
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-danger btn-sm">
+                            Conferma Prelievo
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                            Annulla
+                        </button>
+                    </div>
+
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+       function apriModaleOperazionePlafond(tipo) {
+
+            if (tipo === 'versamento') {
+                new bootstrap.Modal(
+                    document.getElementById('modalVersaPlafond')
+                ).show();
+            }
+
+            if (tipo === 'prelievo') {
+
+                // 🔴 QUI STA IL PROBLEMA: il campo non veniva valorizzato
+                document.getElementById("plafondDisponibilePrelievo").value =
+                    "@Model.PlafondDisponibile.ToString("N2")";
+
+                new bootstrap.Modal(
+                    document.getElementById('modalPrelevaPlafond')
+                ).show();
+            }
+        }
+
+    </script>
+
     <script>
 document.addEventListener("DOMContentLoaded", function () {
 
@@ -657,6 +944,60 @@ document.addEventListener("DOMContentLoaded", function () {
 
 });
     </script>
+
+    <script>
+        // ===============================
+        // 💰 VERSAMENTO → Credito → Plafond
+        // ===============================
+        document.getElementById("formVersaPlafond")
+            ?.addEventListener("submit", function (e) {
+
+                e.preventDefault();
+
+                const formData = new FormData(this);
+
+                fetch('/Home/VersaDaCreditoFatturabile', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            location.reload();
+                        } else {
+                            alert(res.message);
+                        }
+                    })
+                    .catch(() => alert("Errore versamento"));
+            });
+
+
+        // ===============================
+        // 🏦 PRELIEVO → Plafond → Credito
+        // ===============================
+        document.getElementById("formPrelevaPlafond")
+            ?.addEventListener("submit", function (e) {
+
+                e.preventDefault();
+
+                const formData = new FormData(this);
+
+                fetch('/Home/PrelevaVersoCreditoFatturabile', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            location.reload();
+                        } else {
+                            alert(res.message);
+                        }
+                    })
+                    .catch(() => alert("Errore prelievo"));
+            });
+    </script>
+
 
 
 

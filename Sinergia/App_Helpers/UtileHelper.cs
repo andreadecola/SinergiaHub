@@ -144,14 +144,14 @@ namespace Sinergia.App_Helpers
                                 ID_Utente = idResponsabile,
                                 ImportoTotale = quotaTrattenuta,
                                 Importo = quotaTrattenuta,
-                                TipoPlafond = "Accantonamento Incasso",
+                                TipoPlafond = "Accantonamento Incasso – Trattenuta Sinergia",
                                 DataVersamento = oggi,
                                 DataInserimento = oggi,
                                 DataCompetenzaFinanziaria = oggi,
                                 ID_Incasso = idIncasso,
                                 ID_Pratiche = idPratica,
-                                Operazione = "Accantonamento da incasso",
-                                Note = $"➕ Accantonamento {quotaTrattenuta:N2} € - {descrBase}",
+                                Operazione = "Accantonamento incasso per Trattenuta Sinergia",
+                                Note = $"➕ Accantonamento incasso per Trattenuta Sinergia {percTrattenutaSinergia:N1}% | Avviso #{idAvvisoParcella} | Incasso #{idIncasso}",
                                 ID_UtenteCreatore = idUtenteInserimento,
                                 ID_UtenteInserimento = idUtenteInserimento
                             };
@@ -167,14 +167,14 @@ namespace Sinergia.App_Helpers
                                 ID_Utente = idResponsabile,
                                 ImportoTotale = -quotaTrattenuta,
                                 Importo = -quotaTrattenuta,
-                                TipoPlafond = "Trattenuta Sinergia",
+                                TipoPlafond = "Pagamento Trattenuta Sinergia",
                                 DataVersamento = oggi,
                                 DataInserimento = oggi,
                                 DataCompetenzaFinanziaria = oggi,
                                 ID_Incasso = idIncasso,
                                 ID_Pratiche = idPratica,
-                                Operazione = "Trattenuta Sinergia su incasso",
-                                Note = $"➖ Trattenuta Sinergia {quotaTrattenuta:N2} € - {descrBase}",
+                                Operazione = "Storno incasso per pagamento Trattenuta Sinergia",
+                                Note = $"➖ Pagamento Trattenuta Sinergia {percTrattenutaSinergia:N1}% | Avviso #{idAvvisoParcella} | Incasso #{idIncasso}",
                                 ID_UtenteCreatore = idUtenteInserimento,
                                 ID_UtenteInserimento = idUtenteInserimento
                             };
@@ -433,109 +433,124 @@ namespace Sinergia.App_Helpers
                     System.Diagnostics.Trace.WriteLine("──────────────────────────────────────────────────────────────");
 
                     // ==========================================================
-                    // 9️⃣ BIS — TRATTENUTA PLAFOND (NUOVA)
+                    // ❌ 9️⃣ BIS — TRATTENUTA PLAFOND (DISMESSA)
+                    // 
+                    // ⚠️ MOTIVO:
+                    // La trattenuta / accantonamento in plafond NON è più gestita
+                    // automaticamente in fase di ripartizione dell’incasso.
+                    //
+                    // 👉 Il versamento in plafond avviene ESCLUSIVAMENTE:
+                    //   - tramite scelta esplicita del professionista ("Sì / No" su incasso)
+                    //   - oppure tramite verifiche dedicate post-incasso
+                    // 📌 Questo metodo deve occuparsi SOLO della
+                    //    ripartizione economico-finanziaria dell’incasso
+                    //    (BilancioProfessionista), senza effetti sul plafond.
                     // ==========================================================
-                    decimal percTrattenutaPlafond = 0m;
 
-                    var ricPlafond = db.RicorrenzeCosti.FirstOrDefault(r =>
-                        r.Categoria == "Trattenuta Plafond" &&
-                        r.Attivo == true &&
-                        r.TipoValore == "Percentuale");
+                    //// ==========================================================
+                    //// 9️⃣ BIS — TRATTENUTA PLAFOND (NUOVA)
+                    //// ==========================================================
+                    //decimal percTrattenutaPlafond = 0m;
 
-                    if (ricPlafond != null)
-                        percTrattenutaPlafond = ricPlafond.Valore;
+                    //var ricPlafond = db.RicorrenzeCosti.FirstOrDefault(r =>
+                    //    r.Categoria == "Trattenuta Plafond" &&
+                    //    r.Attivo == true &&
+                    //    r.TipoValore == "Percentuale");
 
-                    decimal importoTrattenutaPlafond = Math.Round(
-                        nettoResponsabile * (percTrattenutaPlafond / 100m),
-                        2
-                    );
+                    //if (ricPlafond != null)
+                    //    percTrattenutaPlafond = ricPlafond.Valore;
 
-                    System.Diagnostics.Trace.WriteLine($"🏦 Trattenuta Plafond {percTrattenutaPlafond:N1}% = {importoTrattenutaPlafond:N2} €");
+                    //decimal importoTrattenutaPlafond = Math.Round(
+                    //    nettoResponsabile * (percTrattenutaPlafond / 100m),
+                    //    2
+                    //);
 
-                    if (importoTrattenutaPlafond > 0 && idIncasso.HasValue)
-                    {
-                        bool esisteGiaPlafondAccantonamento = db.PlafondUtente.Any(p =>
-                            p.ID_Incasso == idIncasso &&
-                            p.ID_Pratiche == idPratica &&
-                            p.TipoPlafond == "Trattenuta Plafond");
+                    //System.Diagnostics.Trace.WriteLine($"🏦 Trattenuta Plafond {percTrattenutaPlafond:N1}% = {importoTrattenutaPlafond:N2} €");
 
-                        if (!esisteGiaPlafondAccantonamento)
-                        {
-                            // ➖ scala dal netto responsabile
-                            nettoResponsabile -= importoTrattenutaPlafond;
+                    //if (importoTrattenutaPlafond > 0 && idIncasso.HasValue)
+                    //{
+                    //    bool esisteGiaPlafondAccantonamento = db.PlafondUtente.Any(p =>
+                    //        p.ID_Incasso == idIncasso &&
+                    //        p.ID_Pratiche == idPratica &&
+                    //        p.TipoPlafond == "Trattenuta Plafond");
 
-                            // 💾 voce bilancio (solo tracciamento, NON costo vero)
-                            voci.Add(new BilancioProfessionista
-                            {
-                                ID_Professionista = idResponsabile,
-                                ID_Pratiche = idPratica,
-                                ID_Incasso = idIncasso,
-                                TipoVoce = "Costo",
-                                Categoria = "Trattenuta Plafond",
-                                Descrizione = $"Accantonamento plafond {percTrattenutaPlafond:N1}%",
-                                Importo = importoTrattenutaPlafond,
-                                Stato = "Finanziario",
-                                Origine = "Incasso",
-                                DataRegistrazione = oggi,
-                                ID_UtenteInserimento = idUtenteInserimento,
-                                DataInserimento = DateTime.Now
-                            });
+                    //    if (!esisteGiaPlafondAccantonamento)
+                    //    {
+                    //        // ➖ scala dal netto responsabile
+                    //        nettoResponsabile -= importoTrattenutaPlafond;
 
-                            // 💰 versamento automatico in plafond
-                            var plafond = new PlafondUtente
-                            {
-                                ID_Utente = idResponsabile,
-                                ImportoTotale = importoTrattenutaPlafond,
-                                Importo = importoTrattenutaPlafond,
-                                TipoPlafond = "Trattenuta Plafond",
-                                DataVersamento = oggi,
-                                DataInserimento = oggi,
-                                DataCompetenzaFinanziaria = oggi,
-                                ID_Incasso = idIncasso,
-                                ID_Pratiche = idPratica,
-                                Operazione = "Accantonamento automatico da incasso",
-                                Note = $"Accantonamento {percTrattenutaPlafond}% da incasso pratica #{idPratica}",
-                                ID_UtenteCreatore = idUtenteInserimento,
-                                ID_UtenteInserimento = idUtenteInserimento
-                            };
+                    //        // 💾 voce bilancio (solo tracciamento, NON costo vero)
+                    //        voci.Add(new BilancioProfessionista
+                    //        {
+                    //            ID_Professionista = idResponsabile,
+                    //            ID_Pratiche = idPratica,
+                    //            ID_Incasso = idIncasso,
+                    //            TipoVoce = "Costo",
+                    //            Categoria = "Trattenuta Plafond",
+                    //            Descrizione = $"Accantonamento plafond {percTrattenutaPlafond:N1}%",
+                    //            Importo = importoTrattenutaPlafond,
+                    //            Stato = "Finanziario",
+                    //            Origine = "Incasso",
+                    //            DataRegistrazione = oggi,
+                    //            ID_UtenteInserimento = idUtenteInserimento,
+                    //            DataInserimento = DateTime.Now
+                    //        });
 
-                            db.PlafondUtente.Add(plafond);
-                            db.SaveChanges();
+                    //        // 💰 versamento automatico in plafond
+                    //        var plafond = new PlafondUtente
+                    //        {
+                    //            ID_Utente = idResponsabile,
+                    //            ImportoTotale = importoTrattenutaPlafond,
+                    //            Importo = importoTrattenutaPlafond,
+                    //            TipoPlafond = "Trattenuta Plafond",
+                    //            DataVersamento = oggi,
+                    //            DataInserimento = oggi,
+                    //            DataCompetenzaFinanziaria = oggi,
+                    //            ID_Incasso = idIncasso,
+                    //            ID_Pratiche = idPratica,
+                    //            Operazione = "Accantonamento automatico da incasso",
+                    //            Note = $"Accantonamento {percTrattenutaPlafond}% da incasso pratica #{idPratica}",
+                    //            ID_UtenteCreatore = idUtenteInserimento,
+                    //            ID_UtenteInserimento = idUtenteInserimento
+                    //        };
 
-                            // 🗂️ archivio plafond
-                            db.PlafondUtente_a.Add(new PlafondUtente_a
-                            {
-                                ID_PlannedPlafond_Originale = plafond.ID_PlannedPlafond,
-                                ID_Utente = plafond.ID_Utente,
-                                ImportoTotale = plafond.ImportoTotale,
-                                Importo = plafond.Importo,
-                                TipoPlafond = plafond.TipoPlafond,
-                                DataVersamento = plafond.DataVersamento,
-                                DataInserimento = plafond.DataInserimento,
-                                DataCompetenzaFinanziaria = plafond.DataCompetenzaFinanziaria,
-                                ID_Incasso = plafond.ID_Incasso,
-                                ID_Pratiche = plafond.ID_Pratiche,
-                                Operazione = plafond.Operazione,
-                                Note = plafond.Note,
-                                NumeroVersione = 1,
-                                DataArchiviazione = DateTime.Now,
-                                ID_UtenteArchiviazione = idUtenteInserimento
-                            });
+                    //        db.PlafondUtente.Add(plafond);
+                    //        db.SaveChanges();
 
-                            db.SaveChanges();
+                    //        // 🗂️ archivio plafond
+                    //        db.PlafondUtente_a.Add(new PlafondUtente_a
+                    //        {
+                    //            ID_PlannedPlafond_Originale = plafond.ID_PlannedPlafond,
+                    //            ID_Utente = plafond.ID_Utente,
+                    //            ImportoTotale = plafond.ImportoTotale,
+                    //            Importo = plafond.Importo,
+                    //            TipoPlafond = plafond.TipoPlafond,
+                    //            DataVersamento = plafond.DataVersamento,
+                    //            DataInserimento = plafond.DataInserimento,
+                    //            DataCompetenzaFinanziaria = plafond.DataCompetenzaFinanziaria,
+                    //            ID_Incasso = plafond.ID_Incasso,
+                    //            ID_Pratiche = plafond.ID_Pratiche,
+                    //            Operazione = plafond.Operazione,
+                    //            Note = plafond.Note,
+                    //            NumeroVersione = 1,
+                    //            DataArchiviazione = DateTime.Now,
+                    //            ID_UtenteArchiviazione = idUtenteInserimento
+                    //        });
 
-                            System.Diagnostics.Trace.WriteLine(
-                                $"🏦 [Plafond] Accantonamento Trattenuta Plafond inserito: {importoTrattenutaPlafond:N2} €");
-                        }
-                        else
-                        {
-                            System.Diagnostics.Trace.WriteLine(
-                                "⚠️ [Plafond] Trattenuta Plafond già presente, salto inserimento.");
-                        }
-                    }
+                    //        db.SaveChanges();
+
+                    //        System.Diagnostics.Trace.WriteLine(
+                    //            $"🏦 [Plafond] Accantonamento Trattenuta Plafond inserito: {importoTrattenutaPlafond:N2} €");
+                    //    }
+                    //    else
+                    //    {
+                    //        System.Diagnostics.Trace.WriteLine(
+                    //            "⚠️ [Plafond] Trattenuta Plafond già presente, salto inserimento.");
+                    //    }
+                    //}
 
 
-                    System.Diagnostics.Trace.WriteLine($"✅ Netto responsabile DOPO Trattenuta Plafond = {nettoResponsabile:N2} €");
+                    //System.Diagnostics.Trace.WriteLine($"✅ Netto responsabile DOPO Trattenuta Plafond = {nettoResponsabile:N2} €");
 
 
                     voci.Add(new BilancioProfessionista
@@ -546,7 +561,7 @@ namespace Sinergia.App_Helpers
                         TipoVoce = "Ricavo",
                         Categoria = "Netto Effettivo Responsabile",
                         Descrizione = "Ricavo netto effettivo post-ripartizione",
-                        Importo = nettoResponsabile,   // 🔥 già scalato del plafond
+                        Importo = nettoResponsabile,   // netto effettivo post ripartizione (NO plafond)
                         Stato = "Finanziario",
                         Origine = "Incasso",
                         DataRegistrazione = oggi,

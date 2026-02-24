@@ -84,7 +84,7 @@
                 <tr>
                     <th>Professionista</th>
                     <th>Tipo Plafond</th>
-
+                    <th> Cod.</th> 
                     <!-- 🆕 -->
                     <th>Pratica</th>
                     <th>Avviso</th>
@@ -111,20 +111,35 @@
                         <td>@p.NomeProfessionista</td>
                         <td>@p.TipoPlafond</td>
 
-                        <!-- 🆕 PRATICA -->
+                        <!-- 🔹 CODICE PRATICA -->
+                        <td class="text-center">
+                            @if (!string.IsNullOrWhiteSpace(p.CodicePratica))
+                            {
+                                <span class="badge bg-light text-dark border">
+                                    @p.CodicePratica
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </td>
+
+                        <!-- 🔹 PRATICA -->
                         <td>
                             @if (p.ID_Pratiche.HasValue)
                             {
-                                <a class="badge bg-info text-decoration-none"
+                                <a class="text-decoration-none fw-semibold"
                                    href="@Url.Action("GestionePratiche", "Pratiche", new { id = p.ID_Pratiche })"
                                    title="Apri pratica">
-                                    @(!string.IsNullOrWhiteSpace(p.NomePratica) ? p.NomePratica : $"#{p.ID_Pratiche}")
+                                    @p.NomePratica
                                 </a>
                             }
                             else
-                            { <span class="text-muted">-</span>}
+                            {
+                                <span class="text-muted">-</span>
+                            }
                         </td>
-
 
                         <!-- 🆕 AVVISO -->
                         <td class="text-center">
@@ -189,27 +204,49 @@
              data-id-avviso="@p.ID_AvvisoParcella"
              data-id-incasso="@p.ID_Incasso">
 
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-bold text-primary">@p.NomeProfessionista</span>
-                <span class="badge bg-secondary">@p.TipoPlafond</span>
+            <div class="d-flex justify-content-between align-items-start mb-2">
+
+                <div>
+                    <div class="fw-bold text-primary">
+                        @p.NomeProfessionista
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(p.CodicePratica))
+                    {
+                        <div class="small mt-1">
+                            <span class="badge bg-light text-dark border">
+                                @p.CodicePratica
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                <span class="badge bg-secondary">
+                    @p.TipoPlafond
+                </span>
+
             </div>
 
-            <!-- 🆕 PRATICA -->
             @if (p.ID_Pratiche.HasValue)
             {
-                <div class="small text-muted">
+                <div class="small text-muted mt-1">
                     <strong>Pratica:</strong>
-                    @if (p.ID_Pratiche.HasValue)
-                    {
-                        <a class="badge bg-info text-decoration-none"
-                           href="@Url.Action("GestionePratiche", "Pratiche", new { id = p.ID_Pratiche })">
-                            @(!string.IsNullOrWhiteSpace(p.NomePratica) ? p.NomePratica : $"#{p.ID_Pratiche}")
-                        </a>
-                    }
-                    else
-                    { <span>-</span>}
+
+                    <a class="text-decoration-none fw-semibold"
+                       href="@Url.Action("GestionePratiche", "Pratiche", new { id = p.ID_Pratiche })">
+
+                        @if (!string.IsNullOrWhiteSpace(p.CodicePratica))
+                        {
+                            <span class="badge bg-light text-dark border me-1">
+                                @p.CodicePratica
+                            </span>
+                        }
+
+                        @p.NomePratica
+                    </a>
                 </div>
             }
+
 
             <!-- 🆕 AVVISO -->
 

@@ -78,42 +78,44 @@
     </div>
 </div>
 
+
+
 @section scripts {
     <script>
-    function CaricaDocumentiPratica(idPratica) {
-        fetch('/Pratiche/GetDocumentiPratica?idPratica=' + idPratica)
-            .then(r => r.text())
-            .then(html => {
-                document.getElementById('contenutoDocumentiPratica').innerHTML = html;
-                const modal = new bootstrap.Modal(document.getElementById('documentiPraticaModal'));
-                modal.show();
-            })
-            .catch(err => {
-                toastr.error("Errore durante il caricamento dei documenti.");
-                console.error(err);
-            });
-    }
+        function CaricaDocumentiPratica(idPratica) {
+            fetch('/Pratiche/GetDocumentiPratica?idPratica=' + idPratica)
+                .then(r => r.text())
+                .then(html => {
+                    document.getElementById('contenutoDocumentiPratica').innerHTML = html;
+                    const modal = new bootstrap.Modal(document.getElementById('documentiPraticaModal'));
+                    modal.show();
+                })
+                .catch(err => {
+                    toastr.error("Errore durante il caricamento dei documenti.");
+                    console.error(err);
+                });
+        }
 
-    function EliminaDocumentoPratica(idDocumento) {
-        if (!confirm('Sei sicuro di voler eliminare questo documento?')) return;
+        function EliminaDocumentoPratica(idDocumento) {
+            if (!confirm('Sei sicuro di voler eliminare questo documento?')) return;
 
-        fetch('/Pratiche/EliminaDocumentoPratica?id=' + idDocumento, {
-            method: 'POST'
-        })
-            .then(r => r.json())
-            .then(res => {
-                if (res.success) {
-                    toastr.success(res.message);
-                    setTimeout(() => location.reload(), 500);
-                } else {
-                    toastr.error(res.message);
-                }
+            fetch('/Pratiche/EliminaDocumentoPratica?id=' + idDocumento, {
+                method: 'POST'
             })
-            .catch(err => {
-                toastr.error("Errore durante l'eliminazione del documento.");
-                console.error(err);
-            });
-    }
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        toastr.success(res.message);
+                        setTimeout(() => location.reload(), 500);
+                    } else {
+                        toastr.error(res.message);
+                    }
+                })
+                .catch(err => {
+                    toastr.error("Errore durante l'eliminazione del documento.");
+                    console.error(err);
+                });
+        }
     </script>
 }
 

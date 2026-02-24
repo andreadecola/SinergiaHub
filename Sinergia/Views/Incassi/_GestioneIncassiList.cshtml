@@ -27,6 +27,9 @@
 <div class="d-flex justify-content-end mb-3">
     <form method="get" id="exportForm"
           class="d-flex flex-wrap flex-md-nowrap gap-2 align-items-center">
+        <small class="text-muted mb-1">
+            Date solo per esportazione
+        </small>
 
         <input type="date" name="da" class="form-control form-control-sm w-auto"
                value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
@@ -54,10 +57,10 @@
                 <tr>
                     <th class="text-center">#</th>
                     <th>Pratica</th>
+                    <th>Titolo Avviso</th>
                     <th>Data Competenza</th>
                     <th>Data Incasso</th>
                     <th>Importo</th>
-                    <th>Metodo Pagamento</th>
                     <th>Plafond</th>
                     <th class="text-center">Stato</th>
 
@@ -106,38 +109,52 @@
                                 break;
                         }
 
-                        <tr class="@(stato == "Pagato" ? "table-success" :
-                                    stato == "Parziale" ? "table-info" :
-                                    stato == "Da incassare" ? "table-warning" :
-                                    "table-light")"
-                            data-id="@i.ID_Incasso">
+            <tr class="@(stato == "Pagato" ? "table-success" :
+              stato == "Parziale" ? "table-info" :
+              stato == "Da incassare" ? "table-warning" :
+              "table-light")"
+                data-id="@i.ID_Incasso"
+                data-incasso="@(i.DataIncasso.HasValue
+                ? i.DataIncasso.Value.ToString("yyyy-MM-dd")
+                : "")">
 
-                            <td class="text-center">@index</td>
-                            <td>@i.NomePratica</td>
-                            <td>@(i.DataCompetenza?.ToString("dd/MM/yyyy") ?? "-")</td>
-                            <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
-                            <td class="text-end"> @(i.Importo.ToString("C") ?? "-")</td>
-                            <td>@(i.MetodoPagamento ?? "-")</td>
-                            <td>@(i.VersaInPlafond == true ? "Sì" : "No")</td>
-                            <td class="text-center">
-                                <span class="@statoClasse">@statoBadge</span>
-                            </td>
+                <td class="text-center">
+                    <span class="badge bg-light text-dark border">
+                        @i.CodicePratica
+                    </span>
+                </td>
 
-                            @if (mostraAzioni)
-                            {
-                                <td class="text-center">
-                                    @Html.Partial(
-                                        "~/Views/Incassi/_AzioniIncasso.cshtml",
-                                        i,
-                                        new ViewDataDictionary {
-                                            { "PuoModificare", ViewBag.PuoModificare },
-                                            { "PuoEliminare", ViewBag.PuoEliminare },
-                                            { "TipoUtente", ViewBag.TipoUtente }
-                                        }
-                                    )
-                                </td>
+                <td class="fw-semibold">
+                    @i.NomePratica
+                </td>
+
+                <td>
+                    @(i.TitoloAvviso ?? "-")
+                </td>
+
+                <td>@(i.DataCompetenza?.ToString("dd/MM/yyyy") ?? "-")</td>
+                <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
+                <td class="text-end"> @(i.Importo.ToString("C") ?? "-")</td>
+                <td>@(i.VersaInPlafond == true ? "Sì" : "No")</td>
+                <td class="text-center">
+                    <span class="@statoClasse">@statoBadge</span>
+                </td>
+
+                @if (mostraAzioni)
+                {
+                    <td class="text-center">
+                        @Html.Partial(
+                            "~/Views/Incassi/_AzioniIncasso.cshtml",
+                            i,
+                            new ViewDataDictionary {
+                                { "PuoModificare", ViewBag.PuoModificare },
+                                { "PuoEliminare", ViewBag.PuoEliminare },
+                                { "TipoUtente", ViewBag.TipoUtente }
                             }
-                        </tr>
+                        )
+                    </td>
+                }
+            </tr>
 
                         index++;
                     }
@@ -185,12 +202,34 @@
                     break;
             }
 
-            <div class="border rounded shadow-sm p-3 mb-3 bg-white card-incasso" data-id="@i.ID_Incasso">
+            <div class="border rounded shadow-sm p-3 mb-3 bg-white card-incasso"
+                 data-id="@i.ID_Incasso"
+                 data-incasso="@(i.DataIncasso.HasValue
+                     ? i.DataIncasso.Value.ToString("yyyy-MM-dd")
+                     : "")">
                 <!-- 🔹 Header card -->
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-bold text-primary">@i.NomePratica</span>
-                    <span class="@statoClasse">@statoBadge</span>
+                <div class="d-flex justify-content-between align-items-start mb-2">
+
+                    <div>
+                        <div class="fw-bold text-primary">
+                            @i.NomePratica
+                        </div>
+
+                        <div class="small text-muted">
+                            Codice: <span class="fw-semibold">@i.CodicePratica</span>
+                        </div>
+
+                        <div class="small">
+                            <strong>Avviso:</strong> @(i.TitoloAvviso ?? "-")
+                        </div>
+                    </div>
+
+                    <span class="@statoClasse">
+                        @statoBadge
+                    </span>
+
                 </div>
+
 
                 <!-- 🔹 Dati principali -->
                 <div class="small text-muted">
@@ -201,9 +240,6 @@
                 </div>
                 <div class="small text-muted text-end">
                     <strong>Importo:</strong> @(i.Importo.ToString("C") ?? "-")
-                </div>
-                <div class="small text-muted">
-                    <strong>Metodo pagamento:</strong> @(i.MetodoPagamento ?? "-")
                 </div>
                 <div class="small text-muted">
                     <strong>Plafond:</strong> @(i.VersaInPlafond == true ? "Sì" : "No")
@@ -225,9 +261,9 @@
                     </div>
                 }
             </div>
-        }
-    }
-</div>
+                            }
+                        }
+                    </div>
 
 
 <!-- 🔄 Paginazione -->
@@ -519,6 +555,13 @@
     // 💰 CREA INCASSO DIRETTAMENTE DA AVVISO PARCELLA (senza riaccredito)
     // ============================================================
     function apriNuovoIncasso(idAvvisoParcella) {
+        // 🔓 RESET MODALITÀ EDIT
+        $('#incassoForm input, #incassoForm select, #incassoForm textarea')
+            .prop('disabled', false);
+
+        $('#incassoForm button[type="submit"]').show();
+
+        $('#incassoModalLabel').text("Nuovo Incasso da Avviso Parcella");
         fetch(`/Pratiche/GetDatiIncassoDaAvviso?idAvviso=${idAvvisoParcella}`)
             .then(res => res.json())
             .then(data => {
@@ -1100,10 +1143,42 @@
         return "-";
     }
 
+    // mi serve per la visualizzazione del incasso con la stessa modale di registrazione 
 
+    function apriIncassoSalvato(idIncasso) {
+
+        fetch(`/Pratiche/GetDatiIncassoSalvato?idIncasso=${idIncasso}`)
+            .then(res => res.json())
+            .then(data => {
+
+                if (!data.success) {
+                    toastr.error(data.message);
+                    return;
+                }
+
+                // 🔁 Riusa la funzione che già popola la modale
+                apriNuovoIncasso(data.dati.ID_AvvisoParcelle);
+
+                setTimeout(() => {
+
+                    // 🔒 Disabilita tutti i campi
+                    $('#incassoForm input, #incassoForm select, #incassoForm textarea')
+                        .prop('disabled', true);
+
+                    // 🔴 Nasconde il bottone salva
+                    $('#incassoForm button[type="submit"]').hide();
+
+                    // 🔄 Cambia titolo
+                    $('#incassoModalLabel').text("Dettaglio Incasso (solo lettura)");
+
+                }, 300);
+
+            });
+    }
 
     // 🔍 Filtro e paginazione Incassi
     document.addEventListener("DOMContentLoaded", function () {
+
         const table = document.getElementById('tabellaIncassi');
         if (!table) return;
 
@@ -1116,21 +1191,31 @@
         const searchInput = document.createElement('input');
         const selectPageSize = document.createElement('select');
         const selectStato = document.createElement('select');
-
-        // 👉 LABEL VISIVA
-        const labelStato = document.createElement('span');
-        labelStato.textContent = 'Filtro incassi:';
-        labelStato.className = 'small fw-semibold text-muted';
+        const dataDal = document.createElement('input');
+        const dataAl = document.createElement('input');
 
         let pageSize = 10;
         let currentPage = 1;
 
-        // 🔍 Ricerca
+        // ==========================================================
+        // 🔍 RICERCA
+        // ==========================================================
         searchInput.type = 'text';
         searchInput.placeholder = 'Cerca...';
         searchInput.className = 'form-control form-control-sm w-auto';
 
-        // 📄 Page Size
+        // ==========================================================
+        // 📅 DATE
+        // ==========================================================
+        dataDal.type = 'date';
+        dataDal.className = 'form-control form-control-sm w-auto';
+
+        dataAl.type = 'date';
+        dataAl.className = 'form-control form-control-sm w-auto';
+
+        // ==========================================================
+        // 📄 PAGE SIZE
+        // ==========================================================
         [10, 25, 50].forEach(num => {
             const option = document.createElement('option');
             option.value = num;
@@ -1139,7 +1224,9 @@
         });
         selectPageSize.className = 'form-select form-select-sm w-auto';
 
-        // 💰 Filtro Stato Incasso
+        // ==========================================================
+        // 💰 FILTRO STATO
+        // ==========================================================
         [
             { value: 'tutti', label: 'Tutti' },
             { value: 'incassati', label: 'Incassati' },
@@ -1152,33 +1239,82 @@
         });
         selectStato.className = 'form-select form-select-sm w-auto';
 
-        // ➕ Aggiunta controlli (ordine corretto)
+        // ==========================================================
+        // 🏷️ LABEL
+        // ==========================================================
+        const labelStato = document.createElement('span');
+        labelStato.textContent = 'Stato:';
+        labelStato.className = 'small fw-semibold text-muted me-1';
+
+        const labelPeriodo = document.createElement('span');
+        labelPeriodo.textContent = 'Periodo:';
+        labelPeriodo.className = 'small fw-semibold text-muted ms-3 me-1';
+
+        // ==========================================================
+        // ➕ AGGIUNTA CONTROLLI
+        // ==========================================================
         controlliContainer.appendChild(searchInput);
-        controlliContainer.appendChild(labelStato);   // 👈 SOLO TESTO
+        controlliContainer.appendChild(labelStato);
         controlliContainer.appendChild(selectStato);
+        controlliContainer.appendChild(labelPeriodo);
+        controlliContainer.appendChild(dataDal);
+        controlliContainer.appendChild(dataAl);
         controlliContainer.appendChild(selectPageSize);
 
+        // ==========================================================
+        // 📅 TRIMESTRE CORRENTE AUTOMATICO
+        // ==========================================================
+        const today = new Date();
+
+        function formatDateInput(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        const month = today.getMonth(); // 0-11
+        const quarterStartMonth = Math.floor(month / 3) * 3;
+
+        const trimestreStart = new Date(today.getFullYear(), quarterStartMonth, 1);
+        const trimestreEnd = new Date(today.getFullYear(), quarterStartMonth + 3, 0);
+
+        dataDal.value = formatDateInput(trimestreStart);
+        dataAl.value = formatDateInput(trimestreEnd);
+
+        // ==========================================================
+        // 🔎 RENDER
+        // ==========================================================
         function renderTable() {
+
             const keyword = searchInput.value.toLowerCase();
             const statoFiltro = selectStato.value;
+            const dal = dataDal.value ? new Date(dataDal.value) : null;
+            const al = dataAl.value ? new Date(dataAl.value) : null;
 
             let filteredRows = rows.filter(row => {
-                const testo = row.innerText.toLowerCase();
 
-                // 🔍 filtro testo
+                const testo = row.innerText.toLowerCase();
                 if (!testo.includes(keyword)) return false;
 
-                // 💰 filtro stato
+                // 💰 FILTRO STATO
                 if (statoFiltro !== 'tutti') {
-                    const badge = row.querySelector('span.badge');
-                    const stato = badge ? badge.innerText.toLowerCase() : '';
+
+                    const celle = row.querySelectorAll('td');
+                    const statoCell = celle[7]; // colonna Stato
+
+                    const stato = statoCell ? statoCell.innerText.toLowerCase() : '';
 
                     const isIncassato = stato.includes('pagato');
-                    const isDaIncassare = !isIncassato;
+                    const isDaIncassare = stato.includes('da incassare');
 
                     if (statoFiltro === 'incassati' && !isIncassato) return false;
                     if (statoFiltro === 'da-incassare' && !isDaIncassare) return false;
                 }
+
+                // 📅 FILTRO DATA
+                const dataAttr = row.getAttribute('data-incasso');
+                const dataRow = dataAttr ? new Date(dataAttr) : null;
+
+                if (dal && dataRow && dataRow < dal) return false;
+                if (al && dataRow && dataRow > al) return false;
 
                 return true;
             });
@@ -1186,13 +1322,13 @@
             const totalPages = Math.ceil(filteredRows.length / pageSize);
             currentPage = Math.min(currentPage, totalPages || 1);
 
-            // 🖥️ Tabella desktop
+            // 🖥️ DESKTOP
             rows.forEach(r => r.style.display = 'none');
             filteredRows
                 .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                 .forEach(r => r.style.display = '');
 
-            // 📱 Card mobile
+            // 📱 MOBILE
             cards.forEach(c => c.style.display = 'none');
             filteredRows.forEach(row => {
                 const id = row.getAttribute('data-id');
@@ -1200,7 +1336,9 @@
                 if (card) card.style.display = '';
             });
 
-            // 🔄 Paginazione
+            // ==========================================================
+            // 🔄 PAGINAZIONE
+            // ==========================================================
             paginationContainer.innerHTML = '';
 
             const pageInfo = document.createElement('span');
@@ -1210,30 +1348,25 @@
 
             const prevBtn = document.createElement('button');
             prevBtn.textContent = '← Indietro';
-            prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
+            prevBtn.className = 'btn btn-sm ' +
+                (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
             prevBtn.disabled = currentPage === 1;
-            prevBtn.onclick = () => {
-                currentPage--;
-                renderTable();
-            };
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
             paginationContainer.appendChild(prevBtn);
 
             const nextBtn = document.createElement('button');
             nextBtn.textContent = 'Prossima →';
-            nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
+            nextBtn.className = 'btn btn-sm ' +
+                (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
             nextBtn.disabled = currentPage === totalPages;
-            nextBtn.onclick = () => {
-                currentPage++;
-                renderTable();
-            };
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
             paginationContainer.appendChild(nextBtn);
         }
 
-        // 🎯 Eventi
-        searchInput.addEventListener('input', () => {
-            currentPage = 1;
-            renderTable();
-        });
+        // ==========================================================
+        // 🎯 EVENTI
+        // ==========================================================
+        searchInput.addEventListener('input', () => { currentPage = 1; renderTable(); });
 
         selectPageSize.addEventListener('change', () => {
             pageSize = parseInt(selectPageSize.value);
@@ -1246,8 +1379,16 @@
             renderTable();
         });
 
+        dataDal.addEventListener('change', () => {
+            currentPage = 1;
+            renderTable();
+        });
+
+        dataAl.addEventListener('change', () => {
+            currentPage = 1;
+            renderTable();
+        });
+
         renderTable();
     });
-
-
 </script>

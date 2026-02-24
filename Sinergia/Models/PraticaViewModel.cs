@@ -13,6 +13,29 @@ namespace Sinergia.Models
         public int ID_Pratiche { get; set; }
         public int? ID_Pratica_Originale { get; set; }
 
+        public int NumeroCompensiResidui { get; set; }
+
+        // ================================
+        // 🆔 Codice pratica (UI / PDF)
+        // ================================
+
+        public int? AnnoProgressivo { get; set; }   // 2025 / 2026 (logico salvato a DB)
+        public int? ProgressivoAnno { get; set; }   // 1..N salvato a DB
+
+
+        public string CodicePratica
+        {
+            get
+            {
+                if (!AnnoProgressivo.HasValue || !ProgressivoAnno.HasValue
+                    || AnnoProgressivo <= 0 || ProgressivoAnno <= 0)
+                    return ID_Pratiche.ToString();   // fallback sicurezza
+
+                return $"{AnnoProgressivo.Value % 100}{ProgressivoAnno.Value:D3}";
+            }
+        }
+
+
         // ================================
         // 📋 Dati generali
         // ================================

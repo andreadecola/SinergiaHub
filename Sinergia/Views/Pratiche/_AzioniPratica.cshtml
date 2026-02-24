@@ -29,6 +29,30 @@
         </button>
     }
 
+    @* 📊 Economia pratica *@
+    <button type="button"
+            class="btn btn-info"
+            title="Economia pratica"
+            onclick="apriEconomiaPratica(@Model.ID_Pratiche)">
+        <i class="fa fa-chart-line"></i>
+    </button>
+
+    @if (Model.NumeroCompensiResidui > 0)
+    {
+        <button type="button"
+                class="btn btn-danger position-relative"
+                title="Compensi da fatturare"
+                onclick="apriCompensiResidui(@Model.ID_Pratiche)">
+
+            <i class="fa fa-exclamation-triangle"></i>
+
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-dark">
+                @Model.NumeroCompensiResidui
+            </span>
+        </button>
+    }
+
+
     @* 📑 Visualizza incarichi generati *@
     @if (Model.ID_IncaricoFisso.HasValue || Model.ID_IncaricoAOre.HasValue || Model.ID_IncaricoGiudiziale.HasValue)
     {

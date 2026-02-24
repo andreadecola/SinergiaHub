@@ -215,6 +215,7 @@
   <ItemGroup>
     <Compile Include="ActionFilter\PermissionsActionFilter.cs" />
     <Compile Include="App_Helpers\ArchiviazioneHelper.cs" />
+    <Compile Include="App_Helpers\AvvisiCompensiHelper.cs" />
     <Compile Include="App_Helpers\AziendaHelper.cs" />
     <Compile Include="App_Helpers\CategorieCostiHelper.cs" />
     <Compile Include="App_Helpers\CostiHelper.cs" />
@@ -222,6 +223,7 @@
     <Compile Include="App_Helpers\DashRouteHandler.cs" />
     <Compile Include="App_Helpers\DatabaseMaintenanceHelper.cs" />
     <Compile Include="App_Helpers\FatturaHelper.cs" />
+    <Compile Include="App_Helpers\FiscaleHelper.cs" />
     <Compile Include="App_Helpers\FotoProfiloHelper.cs" />
     <Compile Include="App_Helpers\GiornaliHelper.cs" />
     <Compile Include="App_Helpers\HtmlHelperExtensions.cs" />

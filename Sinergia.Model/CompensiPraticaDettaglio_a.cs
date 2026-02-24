@@ -65,5 +65,7 @@ namespace Sinergia.Model
         public DateTime? DataCompetenzaEconomica { get; set; }
 
         public int? ID_AvvisoParcella { get; set; }
+
+        public bool IsAttivo { get; set; }
     }
 }

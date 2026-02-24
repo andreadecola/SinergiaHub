@@ -75,5 +75,9 @@ namespace Sinergia.Model
 
         [StringLength(300)]
         public string OggettoPratica { get; set; }
+
+        public int? AnnoProgressivo { get; set; }
+
+        public int? ProgressivoAnno { get; set; }
     }
 }

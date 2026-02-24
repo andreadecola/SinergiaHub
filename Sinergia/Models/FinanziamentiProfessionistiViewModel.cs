@@ -45,6 +45,8 @@ namespace Sinergia.Models
         public DateTime? DataFine { get; set; }
 
         public int? ID_Pratiche { get; set; }
+        public string CodicePratica { get; set; }
+
         public int? ID_Incasso { get; set; }
         public int? ID_AvvisoParcella { get; set; }
 

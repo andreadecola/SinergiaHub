@@ -15,6 +15,10 @@ namespace Sinergia.Models
 
         public string StatoAvviso { get; set; }  // Es: "Inviato", "Pagato", "Da incassare"
 
+        public string CodicePratica { get; set; }
+        public string TitoloAvviso { get; set; }
+
+
 
         // 📅 Date
         [Display(Name = "Data Incasso")]

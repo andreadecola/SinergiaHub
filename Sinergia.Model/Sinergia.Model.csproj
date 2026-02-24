@@ -188,6 +188,7 @@
     <Compile Include="AnagraficaCostiTeam_a.cs" />
     <Compile Include="AvvisiParcella.cs" />
     <Compile Include="AvvisiParcella_a.cs" />
+    <Compile Include="AvvisiParcella_Backup_20260201_Errati.cs" />
     <Compile Include="BilancioProfessionista.cs" />
     <Compile Include="CategorieCosti.cs" />
     <Compile Include="Citta.cs" />
@@ -242,6 +243,10 @@
     <Compile Include="OperatoriSinergia_a.cs" />
     <Compile Include="OrdiniFornitori.cs" />
     <Compile Include="OrdiniFornitori_a.cs" />
+    <Compile Include="PagamentiProfessionista.cs" />
+    <Compile Include="PagamentiProfessionistaDettaglio.cs" />
+    <Compile Include="PagamentiProfessionistaDettaglio_a.cs" />
+    <Compile Include="PagamentiProfessionista_a.cs" />
     <Compile Include="Permessi.cs" />
     <Compile Include="PermessiDelegabiliPerProfessionista.cs" />
     <Compile Include="PermessiDelegabiliPerProfessionista_a.cs" />

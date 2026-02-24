@@ -1163,9 +1163,8 @@ namespace SinergiaMvc.Controllers
         }
 
 
-
         [HttpPost]
-        public ActionResult CreaAzienda()
+        public ActionResult CreaAzienda(int? idProfessionista)
         {
             int utenteId = UserManager.GetIDUtenteCollegato();
             if (utenteId <= 0)
@@ -1176,21 +1175,22 @@ namespace SinergiaMvc.Controllers
                 int? idOwner = null;
                 var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == utenteId);
 
-                // 🔒 Impostazioni forzate per tutti: Cliente = false, Fornitore = true
+                // 🔒 Impostazioni forzate
                 bool eCliente = false;
                 bool eFornitore = true;
 
-                // 🔍 Recupero Owner se è un professionista
+                // 🔍 Recupero Owner se professionista
                 if (utente?.TipoUtente == "Professionista")
                 {
                     var clienteProfessionista = db.OperatoriSinergia
                         .FirstOrDefault(c => c.ID_UtenteCollegato == utenteId && c.TipoCliente == "Professionista");
+
                     if (clienteProfessionista != null)
                         idOwner = clienteProfessionista.ID_Operatore;
                 }
 
                 // =====================================================
-                // 🏢 CREA MODELLO OPERATORE (Azienda/Fornitore)
+                // 🏢 CREA MODELLO OPERATORE (Fornitore)
                 // =====================================================
                 var model = new OperatoriSinergia
                 {
@@ -1204,12 +1204,9 @@ namespace SinergiaMvc.Controllers
                     ID_Citta = string.IsNullOrEmpty(Request.Form["ID_Citta"]) ? (int?)null : int.Parse(Request.Form["ID_Citta"]),
                     ID_Nazione = string.IsNullOrEmpty(Request.Form["ID_Nazione"]) ? (int?)null : int.Parse(Request.Form["ID_Nazione"]),
                     ID_SettoreFornitore = string.IsNullOrEmpty(Request.Form["ID_SettoreFornitore"]) ? (int?)null : int.Parse(Request.Form["ID_SettoreFornitore"]),
-
-                    // 🆕 Categoria Servizi collegata (da CategorieCosti)
                     ID_CategoriaServizi = string.IsNullOrEmpty(Request.Form["ID_CategoriaServizi"])
                         ? (int?)null
                         : int.Parse(Request.Form["ID_CategoriaServizi"]),
-
                     Telefono = Request.Form["Telefono"],
                     MAIL1 = Request.Form["Email"],
                     MAIL2 = Request.Form["MAIL2"],
@@ -1228,6 +1225,32 @@ namespace SinergiaMvc.Controllers
                 db.SaveChanges();
 
                 // =====================================================
+                // 🔗 ASSEGNAZIONE AUTOMATICA AL PROFESSIONISTA (opzionale)
+                // =====================================================
+                if (idProfessionista.HasValue && idProfessionista.Value > 0)
+                {
+                    bool relazioneEsiste = db.RelazioneUtenti.Any(r =>
+                        r.ID_Utente == idProfessionista.Value &&
+                        r.ID_UtenteAssociato == model.ID_Operatore);
+
+                    if (!relazioneEsiste)
+                    {
+                        var nuovaRelazione = new RelazioneUtenti
+                        {
+                            ID_Utente = idProfessionista.Value,
+                            ID_UtenteAssociato = model.ID_Operatore,
+                            TipoRelazione = "Fornitore",
+                            Stato = "Attivo",
+                            DataInizio = DateTime.Now,
+                            ID_UtenteCreatore = utenteId
+                        };
+
+                        db.RelazioneUtenti.Add(nuovaRelazione);
+                        db.SaveChanges();
+                    }
+                }
+
+                // =====================================================
                 // 🗃️ ARCHIVIA VERSIONE INIZIALE
                 // =====================================================
                 var archivio = new OperatoriSinergia_a
@@ -1243,7 +1266,7 @@ namespace SinergiaMvc.Controllers
                     ID_Citta = model.ID_Citta,
                     ID_Nazione = model.ID_Nazione,
                     ID_SettoreFornitore = model.ID_SettoreFornitore,
-                    ID_CategoriaServizi = model.ID_CategoriaServizi, // ✅ archiviamo anche la categoria
+                    ID_CategoriaServizi = model.ID_CategoriaServizi,
                     Telefono = model.Telefono,
                     MAIL1 = model.MAIL1,
                     MAIL2 = model.MAIL2,
@@ -1280,6 +1303,7 @@ namespace SinergiaMvc.Controllers
                         DataInserimento = DateTime.Now,
                         ID_UtenteCreatore = utenteId
                     };
+
                     db.DatiBancari.Add(datiBancari);
                     db.SaveChanges();
                 }
@@ -1315,13 +1339,20 @@ namespace SinergiaMvc.Controllers
                     db.SaveChanges();
                 }
 
-                return Json(new { success = true, message = "✅ Azienda creata con successo!" });
+                return Json(new
+                {
+                    success = true,
+                    message = "✅ Azienda creata con successo!",
+                    idAzienda = model.ID_Operatore,
+                    nome = model.Nome
+                });
             }
             catch (DbEntityValidationException ex)
             {
                 var errorMessages = ex.EntityValidationErrors
                     .SelectMany(e => e.ValidationErrors)
                     .Select(e => $"Campo: {e.PropertyName} → Errore: {e.ErrorMessage}");
+
                 string fullError = string.Join(" | ", errorMessages);
                 return Json(new { success = false, message = "Errore nella creazione: " + fullError });
             }
@@ -1329,9 +1360,11 @@ namespace SinergiaMvc.Controllers
             {
                 string msg = ex.Message;
                 if (ex.InnerException != null) msg += " → " + ex.InnerException.Message;
+
                 return Json(new { success = false, message = "Errore inatteso: " + msg });
             }
         }
+
 
 
         [HttpPost]

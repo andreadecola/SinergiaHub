@@ -6,12 +6,10 @@ namespace Sinergia.Model
     using System.ComponentModel.DataAnnotations.Schema;
     using System.Data.Entity.Spatial;
 
-    public partial class AvvisiParcella_a
+    public partial class AvvisiParcella_Backup_20260201_Errati
     {
         [Key]
-        public int ID_Archivio { get; set; }
-
-        public int? ID_AvvisoParcellaOriginale { get; set; }
+        public int ID_AvvisoParcelle { get; set; }
 
         public int? ID_Pratiche { get; set; }
 
@@ -23,14 +21,6 @@ namespace Sinergia.Model
         public string Note { get; set; }
 
         public int? ID_UtenteCreatore { get; set; }
-
-        public DateTime? DataArchiviazione { get; set; }
-
-        public int? ID_UtenteArchiviazione { get; set; }
-
-        public int NumeroVersione { get; set; }
-
-        public string ModificheTestuali { get; set; }
 
         [StringLength(250)]
         public string MetodoPagamento { get; set; }
