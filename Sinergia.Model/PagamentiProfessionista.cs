@@ -26,10 +26,6 @@ namespace Sinergia.Model
         public string ModalitaPagamento { get; set; }
 
         [Required]
-        [StringLength(200)]
-        public string RiferimentoPagamento { get; set; }
-
-        [Required]
         [StringLength(500)]
         public string Note { get; set; }
 

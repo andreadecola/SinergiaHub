@@ -1,20 +1,21 @@
-﻿using Sinergia.Model;
-using Sinergia.ActionFilters;
-using System;
-using System.Data.Entity;
-using System.Linq;
-using System.Web.Mvc;
+﻿using Sinergia.ActionFilters;
 using Sinergia.App_Helpers;
+using Sinergia.Model;
 using Sinergia.Models;
+using System;
+using System.Collections.Generic;
+using System.Data.Entity;
+using System.Data.Entity.Infrastructure;
+using System.Data.Entity.Validation;
 using System.Diagnostics;
 using System.EnterpriseServices;
-using System.Data.Entity.Validation;
-using System.Collections.Generic;
-using System.IO;
-using System.Web;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
+using System.Web;
+using System.Web.Mvc;
 
 namespace SinergiaMvc.Controllers
 {
@@ -318,8 +319,6 @@ namespace SinergiaMvc.Controllers
                 return Json(new { success = false, message = "Errore: " + ex.Message });
             }
         }
-
-
 
 
         [HttpPost]
@@ -6411,5 +6410,739 @@ namespace SinergiaMvc.Controllers
 
         #endregion
 
+        #region PAGAMENTO PROFESSIONISTA
+        public ActionResult GestionePagamentoProfessionista()
+        {
+            return View("~/Views/PagamentiProfessionista/GestionePagamentoProfessionista.cshtml");
+           
+        }
+
+        [HttpGet]
+        public ActionResult GestionePagamentoProfessionistaList(int? idProfessionistaSelezionato = null)
+        {
+            try
+            {
+                int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+
+                var utenteCorrente = db.Utenti
+                    .FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
+
+                if (utenteCorrente == null)
+                    return new HttpStatusCodeResult(HttpStatusCode.Unauthorized);
+
+                // ====================================================
+                // 👑 DETERMINAZIONE PROFESSIONISTA
+                // ====================================================
+
+                int? idUtenteProfessionista = null;     // Netto Effettivo
+                int? idOperatoreProfessionista = null;  // Owner Fee
+
+                if (utenteCorrente.TipoUtente == "Admin")
+                {
+                    ViewBag.ListaProfessionisti = db.Utenti
+                        .Where(u => u.TipoUtente == "Professionista")
+                        .OrderBy(u => u.Cognome)
+                        .ThenBy(u => u.Nome)
+                        .ToList();
+
+                    if (idProfessionistaSelezionato.HasValue)
+                    {
+                        idUtenteProfessionista = idProfessionistaSelezionato.Value;
+
+                        idOperatoreProfessionista = db.OperatoriSinergia
+                            .Where(o => o.ID_UtenteCollegato == idUtenteProfessionista
+                                     && o.TipoCliente == "Professionista")
+                            .Select(o => (int?)o.ID_Operatore)
+                            .FirstOrDefault();
+                    }
+                }
+                else if (utenteCorrente.TipoUtente == "Professionista")
+                {
+                    idUtenteProfessionista = idUtenteCorrente;
+
+                    idOperatoreProfessionista = db.OperatoriSinergia
+                        .Where(o => o.ID_UtenteCollegato == idUtenteCorrente
+                                 && o.TipoCliente == "Professionista")
+                        .Select(o => (int?)o.ID_Operatore)
+                        .FirstOrDefault();
+                }
+                else if (utenteCorrente.TipoUtente == "Collaboratore")
+                {
+                    idUtenteProfessionista = db.RelazioneUtenti
+                        .Where(r => r.ID_UtenteAssociato == idUtenteCorrente
+                                 && r.Stato == "Attivo")
+                        .Select(r => (int?)r.ID_Utente)
+                        .FirstOrDefault();
+
+                    if (idUtenteProfessionista.HasValue)
+                    {
+                        idOperatoreProfessionista = db.OperatoriSinergia
+                            .Where(o => o.ID_UtenteCollegato == idUtenteProfessionista
+                                     && o.TipoCliente == "Professionista")
+                            .Select(o => (int?)o.ID_Operatore)
+                            .FirstOrDefault();
+                    }
+                }
+
+                ViewBag.IdProfessionistaCorrente = idUtenteProfessionista;
+
+                // ====================================================
+                // 📥 MAPPA INCASSO → AVVISO
+                // ====================================================
+
+                var mappaAvvisi = db.Incassi
+                    .Where(i => i.ID_AvvisoParcella.HasValue)
+                    .ToDictionary(i => i.ID_Incasso, i => i.ID_AvvisoParcella.Value);
+
+                // ====================================================
+                // 🗂️ MAPPA PRATICHE
+                // ====================================================
+
+                var mappaPratiche = db.Pratiche
+                    .Select(p => new
+                    {
+                        p.ID_Pratiche,
+                        p.Titolo,
+                        p.AnnoProgressivo,
+                        p.ProgressivoAnno
+                    })
+                    .ToList()
+                    .ToDictionary(
+                        x => x.ID_Pratiche,
+                        x =>
+                        {
+                            string codice =
+                                x.AnnoProgressivo.HasValue &&
+                                x.ProgressivoAnno.HasValue &&
+                                x.AnnoProgressivo.Value > 0 &&
+                                x.ProgressivoAnno.Value > 0
+                                    ? (x.AnnoProgressivo.Value % 100).ToString()
+                                      + x.ProgressivoAnno.Value.ToString("D3")
+                                    : x.ID_Pratiche.ToString();
+
+                            return new
+                            {
+                                x.Titolo,
+                                Codice = codice
+                            };
+                        });
+
+                // ====================================================
+                // 📥 QUERY BILANCIO
+                // ====================================================
+
+                var query = db.BilancioProfessionista
+                    .Where(b =>
+                        (b.Categoria == "Netto Effettivo Responsabile"
+                         || b.Categoria == "Owner Fee")
+                        && b.Stato == "Finanziario"
+                        && b.ID_Professionista != null
+                        && !db.PagamentiProfessionistaDettaglio
+                            .Any(d => d.ID_BilancioProfessionista == b.ID_Bilancio)
+                    );
+
+                // ====================================================
+                // 🔥 FILTRO OWNER + NETTO
+                // ====================================================
+
+                if (utenteCorrente.TipoUtente == "Admin"
+                    && !idUtenteProfessionista.HasValue
+                    && !idOperatoreProfessionista.HasValue)
+                {
+                    // Admin senza filtro → mostra tutto
+                }
+                else if (idUtenteProfessionista.HasValue || idOperatoreProfessionista.HasValue)
+                {
+                    query = query.Where(b =>
+                        (idUtenteProfessionista.HasValue &&
+                            b.ID_Professionista == idUtenteProfessionista.Value)
+                        ||
+                        (idOperatoreProfessionista.HasValue &&
+                            b.ID_Professionista == idOperatoreProfessionista.Value)
+                    );
+                }
+                else
+                {
+                    query = query.Where(b => false);
+                }
+
+                var righe = query.ToList();
+
+                // ====================================================
+                // 📦 MAPPING VIEWMODEL COMPLETO
+                // ====================================================
+
+                var lista = righe.Select(b =>
+                {
+                    int? idAvviso = null;
+
+                    if (b.ID_Incasso.HasValue &&
+                        mappaAvvisi.TryGetValue(b.ID_Incasso.Value, out var avvId))
+                    {
+                        idAvviso = avvId;
+                    }
+
+                    string nomePratica = null;
+                    string codicePratica = null;
+
+                    if (b.ID_Pratiche.HasValue &&
+                        mappaPratiche.TryGetValue(b.ID_Pratiche.Value, out var praticaInfo))
+                    {
+                        nomePratica = praticaInfo.Titolo;
+                        codicePratica = praticaInfo.Codice;
+                    }
+
+                    return new PagamentoProfessionistaViewModel
+                    {
+                        ID_Bilancio = b.ID_Bilancio,
+                        ID_Professionista = b.ID_Professionista,
+                        NomeProfessionista = GetNomeProfessionista(b.ID_Professionista),
+                        Importo = b.Importo,
+                        ID_Pratiche = b.ID_Pratiche,
+                        CodicePratica = codicePratica,
+                        TitoloPratica = nomePratica,
+                        ID_Incasso = b.ID_Incasso,
+                        ID_AvvisoParcella = idAvviso,
+                        Descrizione = b.Descrizione,
+                        Categoria = b.Categoria,
+                        DataRegistrazione = b.DataRegistrazione,
+                        Stato = b.Stato
+                    };
+                })
+                .OrderByDescending(x => x.DataRegistrazione ?? DateTime.MinValue)
+                .ToList();
+
+                return PartialView(
+                    "~/Views/PagamentiProfessionista/_GestionePagamentoProfessionistaList.cshtml",
+                    lista);
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore caricamento pagamenti: " + ex.Message
+                }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
+        private string GetNomeProfessionista(int id)
+        {
+            System.Diagnostics.Trace.WriteLine("══════════════════════════════");
+            System.Diagnostics.Trace.WriteLine($"🔎 [GetNomeProfessionista] CHIAMATA con ID = {id}");
+
+            // 1️⃣ PRIMA controllo se è un ID_Operatore
+            var operatore = db.OperatoriSinergia.FirstOrDefault(o => o.ID_Operatore == id);
+            if (operatore != null)
+            {
+                System.Diagnostics.Trace.WriteLine($"🟡 ID = {id} è un OperatoreSinergia → ID_UtenteCollegato = {operatore.ID_UtenteCollegato}");
+
+                var prof = db.Utenti.FirstOrDefault(u => u.ID_Utente == operatore.ID_UtenteCollegato);
+                if (prof != null)
+                {
+                    string nome = $"{prof.Cognome} {prof.Nome}";
+                    System.Diagnostics.Trace.WriteLine($"🟢 Nome trovato da OperatoriSinergia → {nome}");
+                    return nome;
+                }
+
+                System.Diagnostics.Trace.WriteLine("❌ ERRORE: Operatore trovato ma utente collegato NON esiste!");
+            }
+
+            System.Diagnostics.Trace.WriteLine("⚠️ Non è un operatore → controllo in Utenti...");
+
+            // 2️⃣ SOLO SE NON È OPERATORE, lo cerco come ID_Utente
+            var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == id);
+            if (utente != null)
+            {
+                string nome = $"{utente.Cognome} {utente.Nome}";
+                System.Diagnostics.Trace.WriteLine($"🟢 Nome trovato in Utenti → {nome}");
+                return nome;
+            }
+
+            System.Diagnostics.Trace.WriteLine("🔴 Nessun nome trovato");
+            return "—";
+        }
+
+
+        [HttpGet]
+        public JsonResult GetRiepilogoPagamentoProfessionista(
+     int idProfessionista,
+     int? anno,
+     int? trimestre)
+        {
+            try
+            {
+                // ====================================================
+                // 🔎 COSTRUZIONE ID COLLEGATI
+                // ====================================================
+                var idCollegati = new List<int>();
+
+                var operatori = db.OperatoriSinergia
+                    .Where(o => o.ID_UtenteCollegato == idProfessionista)
+                    .ToList();
+
+                if (operatori.Any())
+                {
+                    idCollegati.Add(idProfessionista);
+                    idCollegati.AddRange(operatori.Select(o => o.ID_Operatore));
+                }
+                else
+                {
+                    var operatore = db.OperatoriSinergia
+                        .FirstOrDefault(o => o.ID_Operatore == idProfessionista);
+
+                    if (operatore != null)
+                    {
+                        idCollegati.Add(idProfessionista);
+                        idCollegati.Add((int)operatore.ID_UtenteCollegato);
+
+                        var altriOperatori = db.OperatoriSinergia
+                            .Where(o => o.ID_UtenteCollegato == operatore.ID_UtenteCollegato)
+                            .Select(o => o.ID_Operatore)
+                            .ToList();
+
+                        idCollegati.AddRange(altriOperatori);
+                    }
+                }
+
+                if (!idCollegati.Any())
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Professionista non valido."
+                    }, JsonRequestBehavior.AllowGet);
+                }
+
+                // ====================================================
+                // 📅 CALCOLO PERIODO
+                // ====================================================
+                DateTime dal = DateTime.MinValue;
+                DateTime al = DateTime.MaxValue;
+
+                if (anno.HasValue && trimestre.HasValue)
+                {
+                    if (trimestre.Value == 12)
+                    {
+                        dal = new DateTime(anno.Value, 1, 1);
+                        al = new DateTime(anno.Value + 1, 1, 1);
+                    }
+                    else
+                    {
+                        int meseInizio = ((trimestre.Value - 1) * 3) + 1;
+                        dal = new DateTime(anno.Value, meseInizio, 1);
+                        al = dal.AddMonths(3);
+                    }
+                }
+
+                // ====================================================
+                // 🗂️ MAPPA PRATICHE
+                // ====================================================
+                var mappaPratiche = db.Pratiche
+                    .Select(p => new
+                    {
+                        p.ID_Pratiche,
+                        p.Titolo,
+                        p.AnnoProgressivo,
+                        p.ProgressivoAnno
+                    })
+                    .ToList()
+                    .ToDictionary(
+                        x => x.ID_Pratiche,
+                        x =>
+                        {
+                            string codice =
+                                x.AnnoProgressivo.HasValue &&
+                                x.ProgressivoAnno.HasValue &&
+                                x.AnnoProgressivo.Value > 0 &&
+                                x.ProgressivoAnno.Value > 0
+                                    ? (x.AnnoProgressivo.Value % 100).ToString()
+                                      + x.ProgressivoAnno.Value.ToString("D3")
+                                    : x.ID_Pratiche.ToString();
+
+                            return new
+                            {
+                                x.Titolo,
+                                Codice = codice
+                            };
+                        });
+
+                // ====================================================
+                // 🔗 MAPPA INCASSI → AVVISI
+                // ====================================================
+                var mappaAvvisi = db.Incassi
+                    .Where(i => i.ID_AvvisoParcella.HasValue)
+                    .ToDictionary(i => i.ID_Incasso, i => i.ID_AvvisoParcella.Value);
+
+                // ====================================================
+                // 📥 QUERY BILANCIO
+                // ====================================================
+                var pagati = db.PagamentiProfessionistaDettaglio
+                    .Select(d => d.ID_BilancioProfessionista)
+                    .ToList();
+
+                var righeBilancio = db.BilancioProfessionista
+                    .Where(b =>
+                        (b.Categoria == "Netto Effettivo Responsabile"
+                         || b.Categoria == "Owner Fee")
+                        && b.Stato == "Finanziario"
+                        && b.ID_Professionista != null
+                        && idCollegati.Contains(b.ID_Professionista)
+                        && b.DataRegistrazione >= dal
+                        && b.DataRegistrazione < al
+                        && !pagati.Contains(b.ID_Bilancio)
+                    )
+                    .OrderByDescending(b => b.DataRegistrazione)
+                    .ToList();
+
+                if (!righeBilancio.Any())
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Nessuna riga disponibile per il periodo selezionato."
+                    }, JsonRequestBehavior.AllowGet);
+                }
+
+                // ====================================================
+                // 📦 MAPPING RISULTATO
+                // ====================================================
+                var risultato = righeBilancio
+                    .Select(b =>
+                    {
+                        int? idAvviso = null;
+
+                        if (b.ID_Incasso.HasValue &&
+                            mappaAvvisi.TryGetValue(b.ID_Incasso.Value, out var avvId))
+                        {
+                            idAvviso = avvId;
+                        }
+
+                        string codicePratica = null;
+                        string titoloPratica = null;
+
+                        if (b.ID_Pratiche.HasValue &&
+                            mappaPratiche.TryGetValue(b.ID_Pratiche.Value, out var praticaInfo))
+                        {
+                            codicePratica = praticaInfo.Codice;
+                            titoloPratica = praticaInfo.Titolo;
+                        }
+
+                        return new
+                        {
+                            b.ID_Bilancio,
+                            b.Descrizione,
+                            b.Importo,
+                            b.Categoria,
+                            DataRegistrazione = b.DataRegistrazione,
+                            b.ID_Incasso,
+                            ID_AvvisoParcella = idAvviso,
+                            CodicePratica = codicePratica,
+                            TitoloPratica = titoloPratica
+                        };
+                    })
+                    .Select(x => new
+                    {
+                        x.ID_Bilancio,
+                        x.Descrizione,
+                        x.Importo,
+                        x.Categoria,
+                        DataRegistrazione = x.DataRegistrazione.ToString("dd/MM/yyyy"),
+                        x.ID_Incasso,
+                        x.ID_AvvisoParcella,
+                        x.CodicePratica,
+                        x.TitoloPratica
+                    })
+                    .ToList();
+
+                return Json(new
+                {
+                    success = true,
+                    totale = risultato.Sum(r => r.Importo),
+                    righe = risultato
+                }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore: " + ex.Message
+                }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
+        [HttpPost]
+        public JsonResult EseguiPagamentoProfessionista(
+     int idProfessionista,
+     List<int> idBilanci,
+     string modalitaPagamento,
+     string riferimentoPagamento,
+     string note)
+        {
+            using (var transaction = db.Database.BeginTransaction())
+            {
+                try
+                {
+                    int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
+
+                    var utenteCorrente = db.Utenti
+                        .FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
+
+                    if (utenteCorrente == null || utenteCorrente.TipoUtente != "Admin")
+                        return Json(new { success = false, message = "Accesso negato." });
+
+                    if (idBilanci == null || !idBilanci.Any())
+                        return Json(new { success = false, message = "Seleziona almeno una riga." });
+
+                    // ====================================================
+                    // 🔎 DETERMINAZIONE ID UTENTE + OPERATORE
+                    // ====================================================
+
+                    int? idUtenteProfessionista = null;
+                    int? idOperatoreProfessionista = null;
+
+                    var operatori = db.OperatoriSinergia
+                        .Where(o => o.ID_UtenteCollegato == idProfessionista
+                                 && o.TipoCliente == "Professionista")
+                        .ToList();
+
+                    if (operatori.Any())
+                    {
+                        // id passato è ID_Utente
+                        idUtenteProfessionista = idProfessionista;
+                        idOperatoreProfessionista = operatori.First().ID_Operatore;
+                    }
+                    else
+                    {
+                        // potrebbe essere ID_Operatore
+                        var operatore = db.OperatoriSinergia
+                            .FirstOrDefault(o => o.ID_Operatore == idProfessionista);
+
+                        if (operatore != null)
+                        {
+                            idUtenteProfessionista = operatore.ID_UtenteCollegato;
+                            idOperatoreProfessionista = operatore.ID_Operatore;
+                        }
+                    }
+
+                    if (!idUtenteProfessionista.HasValue)
+                        return Json(new { success = false, message = "Professionista non valido." });
+
+                    // ====================================================
+                    // 🔒 RECUPERO RIGHE VALIDE NON PAGATE
+                    // ====================================================
+
+                    var righeBilancio = db.BilancioProfessionista
+                        .Where(b =>
+                            idBilanci.Contains(b.ID_Bilancio)
+                            && (b.Categoria == "Netto Effettivo Responsabile"
+                                || b.Categoria == "Owner Fee")
+                            && b.Stato == "Finanziario"
+                            && b.ID_Professionista != null
+                            && (b.ID_Professionista == idUtenteProfessionista.Value
+                                || b.ID_Professionista == idOperatoreProfessionista)
+                            && !db.PagamentiProfessionistaDettaglio
+                                .Any(d => d.ID_BilancioProfessionista == b.ID_Bilancio)
+                        )
+                        .ToList();
+
+                    if (!righeBilancio.Any())
+                        return Json(new { success = false, message = "Le righe selezionate non sono valide o già pagate." });
+
+                    decimal totale = righeBilancio.Sum(r => r.Importo);
+
+                    if (totale <= 0)
+                        return Json(new { success = false, message = "Importo non valido." });
+
+                    DateTime now = DateTime.Now;
+
+                    // ====================================================
+                    // 🧾 TESTATA PAGAMENTO
+                    // ====================================================
+
+                    var pagamento = new PagamentiProfessionista
+                    {
+                        ID_Professionista = idUtenteProfessionista.Value,
+                        ID_Operatore = idOperatoreProfessionista.Value,
+                        ImportoTotale = totale,
+                        DataPagamento = DateTime.Today,
+                        ModalitaPagamento = modalitaPagamento,
+                        Note = string.IsNullOrWhiteSpace(note) ? "Pagamento automatico" : note,
+                        Stato = "Pagato",
+                        DataInserimento = now,
+                        ID_UtenteInserimento = idUtenteCorrente,
+                        DataUltimaModifica = now,
+                        ID_UtenteUltimaModifica = idUtenteCorrente
+                    };
+
+                    db.PagamentiProfessionista.Add(pagamento);
+                    db.SaveChanges(); // serve per ottenere ID_Pagamento
+
+                    // Archivio testata
+                    db.PagamentiProfessionista_a.Add(new PagamentiProfessionista_a
+                    {
+                        ID_PagamentoOriginale = pagamento.ID_Pagamento,
+                        ID_Professionista = pagamento.ID_Professionista,
+                        ID_Operatore = pagamento.ID_Operatore,
+                        ImportoTotale = pagamento.ImportoTotale,
+                        DataPagamento = pagamento.DataPagamento,
+                        ModalitaPagamento = pagamento.ModalitaPagamento,
+                        Note = pagamento.Note,
+                        Stato = pagamento.Stato,
+                        NumeroVersione = 1,
+                        DataArchiviazione = now,
+                        ID_UtenteArchiviazione = idUtenteCorrente
+                    });
+
+                    // ====================================================
+                    // 📌 DETTAGLI PAGAMENTO
+                    // ====================================================
+
+                    foreach (var riga in righeBilancio)
+                    {
+                        var dettaglio = new PagamentiProfessionistaDettaglio
+                        {
+                            ID_Pagamento = pagamento.ID_Pagamento,
+                            ID_BilancioProfessionista = riga.ID_Bilancio,
+                            ImportoPagato = riga.Importo,
+                            DataInserimento = now,
+                            ID_UtenteInserimento = idUtenteCorrente
+                        };
+
+                        db.PagamentiProfessionistaDettaglio.Add(dettaglio);
+
+                        // salva per ottenere ID
+                        db.SaveChanges();
+
+                        // ====================================================
+                        // 📦 ARCHIVIO
+                        // ====================================================
+
+                        var dettaglioArchivio = new PagamentiProfessionistaDettaglio_a
+                        {
+                            ID_PagamentoDettaglioOriginale = dettaglio.ID_PagamentoDettaglio,
+                            ID_Pagamento = pagamento.ID_Pagamento,
+                            ID_BilancioProfessionista = riga.ID_Bilancio,
+                            ImportoPagato = riga.Importo,
+                            DataArchiviazione = now,
+                            ID_UtenteArchiviazione = idUtenteCorrente
+                        };
+
+                        db.PagamentiProfessionistaDettaglio_a.Add(dettaglioArchivio);
+                    }
+
+                    db.SaveChanges();
+
+                    transaction.Commit();
+
+                    return Json(new
+                    {
+                        success = true,
+                        message = $"Pagamento eseguito correttamente. Totale: {totale:N2} €"
+                    });
+                }
+                catch (DbEntityValidationException ex)
+                {
+                    transaction.Rollback();
+
+                    var errorMessages = ex.EntityValidationErrors
+                        .SelectMany(x => x.ValidationErrors)
+                        .Select(x => $"{x.PropertyName}: {x.ErrorMessage}");
+
+                    string messaggioTecnico = string.Join(" | ", errorMessages);
+
+                    return Json(new
+                    {
+                        success = false,
+                        message = messaggioTecnico
+                    });
+                }
+            }
+           }
+         
+
+        // ci serve per far arrivare nel cruscotto del professionista sia il credito totale di tutti gli anni e quello del trimestre in corso 
+        private (decimal creditoTotale, decimal creditoPeriodo)
+          CalcolaCreditoProfessionista(
+              SinergiaDB db,
+              int idUtenteProfessionista,
+              DateTime dalPeriodo,
+              DateTime alPeriodo)
+        {
+            DateTime dal = dalPeriodo.Date;
+            DateTime alEsclusivo = alPeriodo;
+
+            // 🔥 Recupero anche ID_Operatore (cliente)
+            int? idClienteProfessionista = db.OperatoriSinergia
+                .Where(o => o.ID_UtenteCollegato == idUtenteProfessionista)
+                .Select(o => (int?)o.ID_Operatore)
+                .FirstOrDefault();
+
+            System.Diagnostics.Trace.WriteLine("==================================================");
+            System.Diagnostics.Trace.WriteLine("🧾 [CALCOLO CREDITO PROFESSIONISTA]");
+            System.Diagnostics.Trace.WriteLine($"👤 ID Professionista: {idUtenteProfessionista}");
+            System.Diagnostics.Trace.WriteLine($"👤 ID Cliente/Operatore: {idClienteProfessionista}");
+            System.Diagnostics.Trace.WriteLine($"📅 Periodo: {dal:dd/MM/yyyy} → {alEsclusivo.AddDays(-1):dd/MM/yyyy}");
+            System.Diagnostics.Trace.WriteLine("==================================================");
+
+            decimal CalcolaSaldoFinoA(DateTime limite)
+            {
+                decimal nettiOwner = db.BilancioProfessionista
+                    .Where(b =>
+                        (b.Categoria == "Netto Effettivo Responsabile"
+                         || b.Categoria == "Owner Fee")
+                        && b.Stato == "Finanziario"
+                        && (
+                            b.ID_Professionista == idUtenteProfessionista
+                            || (idClienteProfessionista != null &&
+                                b.ID_Professionista == idClienteProfessionista)
+                        )
+                        && b.DataRegistrazione < limite)
+                    .Sum(b => (decimal?)b.Importo) ?? 0m;
+
+                decimal versamenti = db.PlafondUtente
+                    .Where(p =>
+                        p.ID_Utente == idUtenteProfessionista
+                        && p.TipoPlafond == "Versamento Credito Fatturabile"
+                        && (p.DataVersamento ?? p.DataInserimento) < limite)
+                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+
+                decimal prelievi = db.PlafondUtente
+                    .Where(p =>
+                        p.ID_Utente == idUtenteProfessionista
+                        && p.TipoPlafond == "Prelievo verso Credito Fatturabile"
+                        && (p.DataVersamento ?? p.DataInserimento) < limite)
+                    .Sum(p => (decimal?)p.Importo) ?? 0m;
+
+                decimal saldo = nettiOwner - versamenti - prelievi;
+
+                System.Diagnostics.Trace.WriteLine($"--- SALDO FINO A {limite:dd/MM/yyyy HH:mm} ---");
+                System.Diagnostics.Trace.WriteLine($"   💰 Netti + Owner: {nettiOwner:N2}");
+                System.Diagnostics.Trace.WriteLine($"   ⬆️ Versamenti: {versamenti:N2}");
+                System.Diagnostics.Trace.WriteLine($"   ⬇️ Prelievi: {prelievi:N2}");
+                System.Diagnostics.Trace.WriteLine($"   🧮 Saldo: {saldo:N2}");
+                System.Diagnostics.Trace.WriteLine("----------------------------------------------");
+
+                return saldo;
+            }
+
+            decimal saldoInizio = CalcolaSaldoFinoA(dal);
+            decimal saldoFine = CalcolaSaldoFinoA(alEsclusivo);
+
+            decimal creditoTotale = saldoFine;
+            decimal creditoPeriodo = saldoFine - saldoInizio;
+
+            System.Diagnostics.Trace.WriteLine("==================================================");
+            System.Diagnostics.Trace.WriteLine($"📊 Saldo Inizio Periodo: {saldoInizio:N2}");
+            System.Diagnostics.Trace.WriteLine($"📊 Saldo Fine Periodo:   {saldoFine:N2}");
+            System.Diagnostics.Trace.WriteLine($"📈 Delta Periodo:        {creditoPeriodo:N2}");
+            System.Diagnostics.Trace.WriteLine($"🏦 Credito Totale:       {creditoTotale:N2}");
+            System.Diagnostics.Trace.WriteLine("==================================================");
+
+            return (creditoTotale, creditoPeriodo);
+        }
+
+        #endregion
     }
 }

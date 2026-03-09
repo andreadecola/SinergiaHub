@@ -17,7 +17,7 @@
 <div class="d-flex justify-content-end mb-2">
     @if (puoAggiungere)
     {
-        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"  onclick="apriNuovoKnowledgeAziendale()">Nuovo Documento</button>
+        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" onclick="apriNuovoKnowledgeAziendale()">Nuovo Documento</button>
     }
 </div>
 
@@ -33,7 +33,7 @@
                     <th class="text-nowrap">Versione</th>
                     <th class="text-nowrap">Creato Da</th>
                     <th class="text-nowrap text-center">Data Documento</th>
-                    <th class="text-nowrap text-center">Allegato</th>
+                    <th class="text-nowrap text-center">Allegato/Video</th>
                     @if (mostraAzioni)
                     {
                         <th class="text-center text-nowrap">Azioni</th>
@@ -43,32 +43,47 @@
             <tbody>
                 @foreach (var d in Model)
                 {
-                   <tr data-letto="@(d.Letto ? "true" : "false")">
-                       <td class="text-nowrap">@d.KnowledgeAziendaleID</td>
-                       <td class="text-nowrap">@d.Titolo</td>
-                       <td class="text-nowrap">@d.Tipo</td>
-                       <td class="text-nowrap">@d.Versione</td>
-                       <td class="text-nowrap">@d.CreatoDa</td>
-                       <td class="text-nowrap text-center">@d.DataDocumento.ToString("dd/MM/yyyy")</td>
-                       <td class="text-center">
-                           @if (!string.IsNullOrEmpty(d.AllegatoPercorso))
-                           {
-                               <a href="@Url.Content(d.AllegatoPercorso)" target="_blank" class="btn btn-info btn-sm">
-                                   <i class="fa fa-download"></i>
-                               </a>
-                           }
-                           else
-                           {
-                               <span>-</span>
-                           }
-                       </td>
-                       @if (mostraAzioni)
-                       {
-                           <td class="text-center">
-                               @Html.Partial("~/Views/KnowledgeAziendale/_AzioniKnowledgeAziendale.cshtml", d)
-                           </td>
-                       }
-                   </tr>
+                    <tr data-letto="@(d.Letto ? "true" : "false")">
+                        <td class="text-nowrap">@d.KnowledgeAziendaleID</td>
+                        <td class="text-nowrap">@d.Titolo</td>
+                        <td class="text-nowrap">@d.Tipo</td>
+                        <td class="text-nowrap">@d.Versione</td>
+                        <td class="text-nowrap">@d.CreatoDa</td>
+                        <td class="text-nowrap text-center">@d.DataDocumento.ToString("dd/MM/yyyy")</td>
+                        <td class="text-center">
+
+                            <!-- VIDEO -->
+                            @if (!string.IsNullOrEmpty(d.VideoPercorso))
+                            {
+                                <button class="btn btn-danger btn-sm"
+                                        onclick="apriVideoKnowledge('@Url.Content(d.VideoPercorso)')">
+                                    <i class="fa fa-play"></i>
+                                </button>
+                            }
+
+                            <!-- DOCUMENTO -->
+                            @if (!string.IsNullOrEmpty(d.AllegatoPercorso))
+                            {
+                                <a href="@Url.Content(d.AllegatoPercorso)"
+                                   target="_blank"
+                                   class="btn btn-info btn-sm">
+                                    <i class="fa fa-download"></i>
+                                </a>
+                            }
+
+                            @if (string.IsNullOrEmpty(d.VideoPercorso) && string.IsNullOrEmpty(d.AllegatoPercorso))
+                            {
+                                <span>-</span>
+                            }
+
+                        </td>
+                        @if (mostraAzioni)
+                        {
+                            <td class="text-center">
+                                @Html.Partial("~/Views/KnowledgeAziendale/_AzioniKnowledgeAziendale.cshtml", d)
+                            </td>
+                        }
+                    </tr>
                 }
             </tbody>
         </table>
@@ -79,35 +94,50 @@
 <div class="d-block d-md-none mt-3 px-2">
     @foreach (var d in Model)
     {
-       <div class="card-knowledge" data-letto="@(d.Letto ? "true" : "false")">
+        <div class="card-knowledge" data-letto="@(d.Letto ? "true" : "false")">
 
-           <div class="fw-bold text-primary mb-1">@d.Titolo</div>
-           <div class="small text-muted"><strong>ID:</strong> @d.KnowledgeAziendaleID</div>
-           <div class="small text-muted"><strong>Tipo:</strong> @d.Tipo</div>
-           <div class="small text-muted"><strong>Versione:</strong> @d.Versione</div>
-           <div class="small text-muted"><strong>Creato Da:</strong> @d.CreatoDa</div>
-           <div class="small text-muted"><strong>Data Documento:</strong> @d.DataDocumento.ToString("dd/MM/yyyy")</div>
+            <div class="fw-bold text-primary mb-1">@d.Titolo</div>
+            <div class="small text-muted"><strong>ID:</strong> @d.KnowledgeAziendaleID</div>
+            <div class="small text-muted"><strong>Tipo:</strong> @d.Tipo</div>
+            <div class="small text-muted"><strong>Versione:</strong> @d.Versione</div>
+            <div class="small text-muted"><strong>Creato Da:</strong> @d.CreatoDa</div>
+            <div class="small text-muted"><strong>Data Documento:</strong> @d.DataDocumento.ToString("dd/MM/yyyy")</div>
 
-           <div class="mt-2">
-               @if (!string.IsNullOrEmpty(d.AllegatoPercorso))
-               {
-                   <a href="@Url.Content(d.AllegatoPercorso)" target="_blank" class="btn btn-info btn-sm">
-                       <i class="fa fa-download"></i> Apri
-                   </a>
-               }
-               else
-               {
-                   <span class="text-muted small">Nessun allegato</span>
-               }
-           </div>
+            <div class="mt-2 d-flex gap-2 flex-wrap">
 
-           @if (mostraAzioni)
-           {
-               <div class="d-flex flex-wrap gap-2 mt-2">
-                   @Html.Partial("~/Views/KnowledgeAziendale/_AzioniKnowledgeAziendale.cshtml", d)
-               </div>
-           }
-       </div>
+                <!-- VIDEO -->
+                @if (!string.IsNullOrEmpty(d.VideoPercorso))
+                {
+                    <button class="btn btn-danger btn-sm"
+                            onclick="apriVideoKnowledge('@Url.Content(d.VideoPercorso)')">
+                        <i class="fa fa-play"></i> Video
+                    </button>
+                }
+
+                <!-- DOCUMENTO -->
+                @if (!string.IsNullOrEmpty(d.AllegatoPercorso))
+                {
+                    <a href="@Url.Content(d.AllegatoPercorso)"
+                       target="_blank"
+                       class="btn btn-info btn-sm">
+                        <i class="fa fa-download"></i> Documento
+                    </a>
+                }
+
+                @if (string.IsNullOrEmpty(d.VideoPercorso) && string.IsNullOrEmpty(d.AllegatoPercorso))
+                {
+                    <span class="text-muted small">Nessun allegato</span>
+                }
+
+            </div>
+
+            @if (mostraAzioni)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @Html.Partial("~/Views/KnowledgeAziendale/_AzioniKnowledgeAziendale.cshtml", d)
+                </div>
+            }
+        </div>
     }
 </div>
 
@@ -138,10 +168,13 @@
                             <label class="form-label">Tipo *</label>
                             <select name="Tipo" class="form-select form-select-sm" required>
                                 <option value="">— Seleziona —</option>
-                                <option value="Procedura">Procedura</option>
-                                <option value="Modulo">Modulo</option>
-                                <option value="Guida">Guida</option>
-                                <option value="Comunicazione">Comunicazione</option>
+                                <option value="Sinergia Basics">Sinergia Basics</option>
+                                <option value="Lavorare in Sinergia con Microsoft Teams">Lavorare in Sinergia con Microsoft Teams</option>
+                                <option value="Formazione commerciale per il professionista">Formazione commerciale per il professionista</option>
+                                <option value="Guide">Guide</option>
+                                <option value="Procedure">Procedure</option>
+                                <option value="Comunicazioni">Comunicazioni</option>
+                                <option value="Moduli">Moduli</option>
                                 <option value="Altro">Altro</option>
                             </select>
                         </div>
@@ -202,6 +235,33 @@
                         </div>
                     </div>
 
+                    <!-- Riga 5 - VIDEO -->
+                    <div class="row g-3 mt-2">
+
+                        <div class="col-md-9">
+                            <label class="form-label">Video Formazione</label>
+
+                            <input type="file"
+                                   name="Video"
+                                   id="videoInput"
+                                   accept="video/mp4,video/webm,video/ogg"
+                                   class="form-control form-control-sm" />
+
+                            <small class="text-muted">
+                                Formati supportati: MP4, WEBM, OGG
+                            </small>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Nome video</label>
+                            <input type="text"
+                                   id="nomeVideo"
+                                   class="form-control form-control-sm"
+                                   readonly />
+                        </div>
+
+                    </div>
+
                     <!-- Allegati Esistenti -->
                     <div id="allegatiEsistenti" class="mt-2 d-none">
                         <label class="form-label">Allegati già presenti</label>
@@ -210,15 +270,15 @@
 
                     <!-- Riga 5 -->
                     @*<div class="row g-3 mt-3">
-                        <div class="col-md-3">
-                            <label class="form-label d-block">Letto</label>
-                            <input type="hidden" name="Letto" value="false" />
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="chkLetto" name="Letto" value="true">
-                                <label class="form-check-label" for="chkLetto">NO</label>
+                            <div class="col-md-3">
+                                <label class="form-label d-block">Letto</label>
+                                <input type="hidden" name="Letto" value="false" />
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="chkLetto" name="Letto" value="true">
+                                    <label class="form-check-label" for="chkLetto">NO</label>
+                                </div>
                             </div>
-                        </div>
-                    </div>*@
+                        </div>*@
                 </div>
 
                 <div class="modal-footer">
@@ -246,6 +306,29 @@
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
                 <button type="button" class="btn btn-danger btn-sm" id="btnConfermaEliminazioneDocumento">Elimina</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- 🎥 MODALE VIDEO KNOWLEDGE -->
+<div class="modal fade" id="videoKnowledgeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">Video Formazione</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body text-center">
+
+                <video id="videoKnowledgePlayer"
+                       controls
+                       style="width:100%; max-height:500px;">
+                </video>
+
+            </div>
+
         </div>
     </div>
 </div>
@@ -408,6 +491,21 @@
     // mostra nome/i dei file selezionati
     const allegatoInput = document.getElementById('allegatoInput');
     const nomeFile = document.getElementById('nomeFileAllegato');
+    const videoInput = document.getElementById('videoInput');
+    const nomeVideo = document.getElementById('nomeVideo');
+
+    if (videoInput && nomeVideo) {
+        videoInput.addEventListener('change', () => {
+
+            if (!videoInput.files || videoInput.files.length === 0) {
+                nomeVideo.value = '';
+                return;
+            }
+
+            nomeVideo.value = videoInput.files[0].name;
+
+        });
+    }
     if (allegatoInput && nomeFile) {
         allegatoInput.addEventListener('change', () => {
             if (!allegatoInput.files || allegatoInput.files.length === 0) {
@@ -418,6 +516,38 @@
             nomeFile.value = names.join(', ');
         });
     }
+
+    function apriVideoKnowledge(url) {
+
+        const video = document.getElementById("videoKnowledgePlayer");
+
+        if (!video) {
+            toastr.error("Player video non trovato");
+            return;
+        }
+
+        video.src = url;
+
+        new bootstrap.Modal(
+            document.getElementById("videoKnowledgeModal")
+        ).show();
+    }
+
+    // -------------------------
+    // 🎥 reset video quando chiudi la modale
+    // -------------------------
+    document.getElementById("videoKnowledgeModal")
+        ?.addEventListener("hidden.bs.modal", function () {
+
+            const video = document.getElementById("videoKnowledgePlayer");
+
+            if (video) {
+                video.pause();
+                video.src = "";
+            }
+
+        });
+
 
     // 🔍 Filtro e paginazione - Knowledge Aziendale
     document.addEventListener("DOMContentLoaded", function () {
@@ -433,6 +563,8 @@
         const searchInput = document.createElement('input');
         const selectPageSize = document.createElement('select');
         const selectLetto = document.createElement('select');
+        const selectTipo = document.createElement('select');
+
 
         let pageSize = 10;
         let currentPage = 1;
@@ -463,68 +595,116 @@
             selectLetto.appendChild(option);
         });
         selectLetto.className = 'form-select form-select-sm w-auto';
+        selectLetto.value = "nonletto";
+
+        // 📂 Filtro Categoria
+        [
+            { value: "", label: "Tutte le categorie" },
+            { value: "Sinergia Basics", label: "Sinergia Basics" },
+            { value: "Lavorare in Sinergia con Microsoft Teams", label: "Microsoft Teams" },
+            { value: "Formazione commerciale per il professionista", label: "Formazione commerciale" },
+            { value: "Guide", label: "Guide" },
+            { value: "Procedure", label: "Procedure" },
+            { value: "Comunicazioni", label: "Comunicazioni" },
+            { value: "Moduli", label: "Moduli" }
+        ].forEach(opt => {
+
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            selectTipo.appendChild(option);
+
+        });
+
+        selectTipo.className = 'form-select form-select-sm w-auto';
 
         // ➕ Inserisci controlli nella barra
         controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectTipo);
         controlliContainer.appendChild(selectLetto);
         controlliContainer.appendChild(selectPageSize);
 
         function renderTable() {
+
             const keyword = searchInput.value.toLowerCase();
-            const lettoFilter = selectLetto.value; // "letto" | "nonletto" | ""
+            const lettoFilter = selectLetto.value ; // default NON LETTO
+            const tipoFilter = selectTipo ? selectTipo.value : "";
 
             // Filtra righe desktop
             let filteredRows = rows.filter(row => {
+
                 const text = row.innerText.toLowerCase();
+                const tipo = row.children[2].innerText.trim(); // colonna Tipo
 
                 let matchesKeyword = text.includes(keyword);
                 let matchesLetto = true;
+                let matchesTipo = true;
 
+                // filtro LETTO
                 if (lettoFilter === "letto") {
                     matchesLetto = row.dataset.letto === "true";
-                } else if (lettoFilter === "nonletto") {
+                }
+                else if (lettoFilter === "nonletto") {
                     matchesLetto = row.dataset.letto === "false";
-                } else {
-                    matchesLetto = true; // ✅ Mostra tutto
                 }
 
-                return matchesKeyword && matchesLetto;
+                // filtro CATEGORIA
+                if (tipoFilter) {
+                    matchesTipo = tipo === tipoFilter;
+                }
+
+                return matchesKeyword && matchesLetto && matchesTipo;
+
             });
 
             // Filtra card mobile
             let filteredCards = cards.filter(card => {
+
                 const text = card.innerText.toLowerCase();
 
                 let matchesKeyword = text.includes(keyword);
                 let matchesLetto = true;
+                let matchesTipo = true;
 
                 if (lettoFilter === "letto") {
                     matchesLetto = card.dataset.letto === "true";
-                } else if (lettoFilter === "nonletto") {
+                }
+                else if (lettoFilter === "nonletto") {
                     matchesLetto = card.dataset.letto === "false";
-                } else {
-                    matchesLetto = true; // ✅ Mostra tutto
                 }
 
-                return matchesKeyword && matchesLetto;
+                if (tipoFilter) {
+                    matchesTipo = text.includes(tipoFilter.toLowerCase());
+                }
+
+                return matchesKeyword && matchesLetto && matchesTipo;
+
             });
 
             const totalPages = Math.ceil(filteredRows.length / pageSize);
             currentPage = Math.min(currentPage, totalPages || 1);
 
-            // 🖥️ Mostra/nasconde righe tabella
+            // 🖥️ Tabella
             rows.forEach(r => r.style.display = 'none');
-            filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(r => r.style.display = '');
 
-            // 📱 Mostra/nasconde card mobile
+            filteredRows
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = '');
+
+            // 📱 Card
             cards.forEach(c => c.style.display = 'none');
-            filteredCards.slice((currentPage - 1) * pageSize, currentPage * pageSize).forEach(c => c.style.display = '');
+
+            filteredCards
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(c => c.style.display = '');
 
             // 🔄 Paginazione
             paginationContainer.innerHTML = '';
+
             const pageInfo = document.createElement('span');
             pageInfo.textContent = `Pagina ${currentPage} di ${totalPages || 1}`;
             pageInfo.className = 'me-2';
+
             paginationContainer.appendChild(pageInfo);
 
             const prevBtn = document.createElement('button');
@@ -532,6 +712,7 @@
             prevBtn.className = 'btn btn-sm ' + (currentPage === 1 ? 'btn-secondary' : 'btn-outline-primary');
             prevBtn.disabled = currentPage === 1;
             prevBtn.onclick = () => { currentPage--; renderTable(); };
+
             paginationContainer.appendChild(prevBtn);
 
             const nextBtn = document.createElement('button');
@@ -539,7 +720,9 @@
             nextBtn.className = 'btn btn-sm ' + (currentPage === totalPages ? 'btn-secondary' : 'btn-outline-primary');
             nextBtn.disabled = currentPage === totalPages;
             nextBtn.onclick = () => { currentPage++; renderTable(); };
+
             paginationContainer.appendChild(nextBtn);
+
         }
 
 
@@ -551,6 +734,11 @@
             renderTable();
         });
         selectLetto.addEventListener('change', () => {
+            currentPage = 1;
+            renderTable();
+        });
+
+        selectTipo.addEventListener('change', () => {
             currentPage = 1;
             renderTable();
         });

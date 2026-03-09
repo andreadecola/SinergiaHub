@@ -220,7 +220,6 @@ namespace Sinergia.App_Helpers
                                 x.DataRegistrazione == dataReg))
                                 continue;
 
-                            var statoCalc = determinaStato(idProf, importo);
                             righeDaSalvare.Add(new GenerazioneCosti
                             {
                                 ID_Utente = idProf,
@@ -229,8 +228,7 @@ namespace Sinergia.App_Helpers
                                 Importo = importo,
                                 Periodicita = ric.Periodicita,
                                 Origine = "Ricorrenza",
-                                Stato = statoCalc.stato,
-                                Approvato = statoCalc.approvato,
+                                Stato = "Autorizzato",
                                 DataRegistrazione = dataReg,
                                 ID_UtenteCreatore = idUtenteCorrente,
                                 DataCreazione = DateTime.Now,
@@ -264,7 +262,6 @@ namespace Sinergia.App_Helpers
                             x.Descrizione == descrizione &&
                             x.DataRegistrazione == dataReg))
                         {
-                            var statoCalc = determinaStato(idProf, importo);
                             righeDaSalvare.Add(new GenerazioneCosti
                             {
                                 ID_Utente = idProf,
@@ -273,8 +270,7 @@ namespace Sinergia.App_Helpers
                                 Importo = importo,
                                 Periodicita = ric.Periodicita,
                                 Origine = "Ricorrenza",
-                                Stato = statoCalc.stato,
-                                Approvato = statoCalc.approvato,
+                                Stato = "Autorizzato",
                                 DataRegistrazione = dataReg,
                                 ID_UtenteCreatore = idUtenteCorrente,
                                 DataCreazione = DateTime.Now,
@@ -333,7 +329,6 @@ namespace Sinergia.App_Helpers
                                 x.Descrizione == descrizione &&
                                 x.DataRegistrazione == dataReg))
                             {
-                                var statoCalc = determinaStato(membro, quota);
                                 righeDaSalvare.Add(new GenerazioneCosti
                                 {
                                     ID_Utente = membro,
@@ -343,8 +338,7 @@ namespace Sinergia.App_Helpers
                                     Importo = quota,
                                     Periodicita = ric.Periodicita,
                                     Origine = "Ricorrenza",
-                                    Stato = statoCalc.stato,
-                                    Approvato = statoCalc.approvato,
+                                    Stato = "Autorizzato",
                                     DataRegistrazione = dataReg,
                                     ID_UtenteCreatore = idUtenteCorrente,
                                     DataCreazione = DateTime.Now,
@@ -398,7 +392,6 @@ namespace Sinergia.App_Helpers
                             Importo = importoProj,
                             Origine = "Costo Pratica",
                             Stato = statoCalc.stato,
-                            Approvato = statoCalc.approvato,
                             DataRegistrazione = c.DataInserimento,
                             DataCreazione = DateTime.Now,
                             DataUltimaModifica = DateTime.Now,
@@ -425,166 +418,101 @@ namespace Sinergia.App_Helpers
             }
         }
 
-
-        public static RisultatoPagamento VerificaPagamentoConPlafondSingolo(int idProfessionista)
+        public static RisultatoPagamento PagaCostiSelezionati(
+       int idProfessionista,
+       List<int> idCosti)
         {
+            if (idCosti == null || !idCosti.Any())
+            {
+                return new RisultatoPagamento
+                {
+                    Successo = false,
+                    Messaggio = "Nessun costo selezionato."
+                };
+            }
+
             DateTime oggi = DateTime.Today;
 
             using (var db = new SinergiaDB())
+            using (var transaction = db.Database.BeginTransaction())
             {
-                int idSistema = UserManager.GetIDUtenteCollegato();
-
-                var prof = db.Utenti.FirstOrDefault(u =>
-                    u.ID_Utente == idProfessionista &&
-                    u.TipoUtente == "Professionista" &&
-                    u.Stato == "Attivo");
-
-                if (prof == null)
+                try
                 {
-                    return new RisultatoPagamento
+                    int idSistema = UserManager.GetIDUtenteCollegato();
+
+                    // ==========================================================
+                    // 🔎 PROFESSIONISTA
+                    // ==========================================================
+                    var prof = db.Utenti.FirstOrDefault(u =>
+                        u.ID_Utente == idProfessionista &&
+                        u.TipoUtente == "Professionista" &&
+                        u.Stato == "Attivo");
+
+                    if (prof == null)
                     {
-                        Successo = false,
-                        Messaggio = "Professionista non trovato o non attivo."
-                    };
-                }
+                        return new RisultatoPagamento
+                        {
+                            Successo = false,
+                            Messaggio = "Professionista non trovato o non attivo."
+                        };
+                    }
 
-                // ==========================================================
-                // 💰 CALCOLO PLAFOND EFFETTIVO REALE (NUOVA LOGICA SINERGIA)
-                // ==========================================================
+                    // ==========================================================
+                    // 🔎 COSTI SELEZIONATI (solo autorizzati)
+                    // ==========================================================
+                    var costi = db.GenerazioneCosti
+                        .Where(c =>
+                            idCosti.Contains(c.ID_GenerazioneCosto) &&
+                            c.ID_Utente == prof.ID_Utente &&
+                            (c.Stato == "Autorizzato" || c.Stato == "Previsionale"))
+                        .ToList();
 
-                // 1️⃣ Finanziamenti veri
-                decimal entrateFinanziamenti = db.FinanziamentiProfessionisti
-                    .Where(f => f.ID_Professionista == prof.ID_Utente)
-                    .Sum(f => (decimal?)f.Importo) ?? 0m;
-
-                // 2️⃣ Incassi netti + Owner fee (bilancio)
-                decimal entrateBilancio = db.BilancioProfessionista
-                    .Where(b =>
-                           b.ID_Professionista == prof.ID_Utente
-                           && b.Origine == "Incasso"
-                           && b.Stato == "Finanziario"
-                           && (
-                                b.Categoria == "Netto Effettivo Responsabile"
-                             || b.Categoria == "Owner Fee"
-                           ))
-                    .Sum(b => (decimal?)b.Importo) ?? 0m;
-
-                // 3️⃣ Totale entrate reali
-                decimal totaleEntrate = entrateFinanziamenti + entrateBilancio;
-
-                // 4️⃣ Costi personali
-                decimal usciteCostiPersonali = db.CostiPersonaliUtente
-                    .Where(c => c.ID_Utente == prof.ID_Utente)
-                    .Sum(c => (decimal?)c.Importo) ?? 0m;
-
-                // 5️⃣ Costi pagati da generazione costi
-                decimal uscitePagamentiCosti = db.GenerazioneCosti
-                    .Where(g =>
-                           g.ID_Utente == prof.ID_Utente
-                           && g.Stato == "Pagato")
-                    .Sum(g => (decimal?)g.Importo) ?? 0m;
-
-                // 6️⃣ Plafond effettivo reale
-                decimal plafondDisponibile =
-                    totaleEntrate - (usciteCostiPersonali + uscitePagamentiCosti);
-
-
-                System.Diagnostics.Trace.WriteLine("========== [DEBUG PLAFOND PROFESSIONISTA] ==========");
-                System.Diagnostics.Trace.WriteLine($"👤 Professionista: {prof.Nome} {prof.Cognome}");
-                System.Diagnostics.Trace.WriteLine($"💰 Entrate (Finanziamenti + Incassi): {totaleEntrate:N2}");
-                System.Diagnostics.Trace.WriteLine($"💸 Uscite (Pagamenti): {uscitePagamentiCosti:N2}");
-                System.Diagnostics.Trace.WriteLine($"📊 Plafond disponibile: {plafondDisponibile:N2}");
-                System.Diagnostics.Trace.WriteLine("===================================================");
-
-                // ==========================================================
-                // 👥 Utenti collegati (professionista + eventuale cliente)
-                // ==========================================================
-                var idUtentiValidi = new List<int> { prof.ID_Utente };
-                var idClienteCollegato = db.OperatoriSinergia
-                    .Where(o => o.ID_UtenteCollegato == prof.ID_Utente && o.TipoCliente == "Professionista")
-                    .Select(o => (int?)o.ID_Operatore)
-                    .FirstOrDefault();
-
-                if (idClienteCollegato.HasValue)
-                    idUtentiValidi.Add(idClienteCollegato.Value);
-
-                // ==========================================================
-                // 📦 COSTI DA PAGARE (Previsionali, non approvati)
-                // ==========================================================
-                var costiPrevisionali = db.GenerazioneCosti
-                    .Where(c =>
-                        c.Approvato == false &&
-                        c.Stato == "Previsionale" &&
-                        c.DataRegistrazione.HasValue &&
-                        c.ID_Utente.HasValue &&
-                        idUtentiValidi.Contains(c.ID_Utente.Value))
-                    .OrderBy(c => c.DataRegistrazione)
-                    .ToList();
-
-                System.Diagnostics.Trace.WriteLine($"📄 Costi previsionali trovati: {costiPrevisionali.Count}");
-                if (!costiPrevisionali.Any())
-                {
-                    // 🔔 Esegui anche la verifica costi non pagati (per notifiche)
-                    NotificheHelper.VerificaCostiNonPagati(1); // soglia di 2 mesi (puoi personalizzarla)
-
-                    return new RisultatoPagamento
+                    if (!costi.Any())
                     {
-                        Successo = true,
-                        Messaggio = $"✅ Nessun costo da pagare per il professionista {prof.Nome} {prof.Cognome}."
-                    };
-                }
+                        return new RisultatoPagamento
+                        {
+                            Successo = false,
+                            Messaggio = "Nessun costo valido selezionato."
+                        };
+                    }
 
-                // ==========================================================
-                // 💳 VERIFICA E PAGAMENTO AUTOMATICO
-                // ==========================================================
-                decimal plafondResiduo = plafondDisponibile;
-                decimal totalePagato = 0m;
-                var costiPagati = new List<GenerazioneCosti>();
+                    decimal totaleDaPagare = costi.Sum(c => c.Importo ?? 0m);
 
-                foreach (var costo in costiPrevisionali)
-                {
-                    decimal importo = costo.Importo ?? 0m;
+                    // ==========================================================
+                    // 💰 PLAFOND REALE
+                    // ==========================================================
+                    decimal plafondDisponibile = db.PlafondUtente
+                        .Where(p => p.ID_Utente == prof.ID_Utente)
+                        .Sum(p => (decimal?)p.Importo) ?? 0m;
 
-                    if (plafondResiduo >= importo)
+                    if (plafondDisponibile < totaleDaPagare)
                     {
-                        costo.Approvato = true;
+                        return new RisultatoPagamento
+                        {
+                            Successo = false,
+                            Messaggio = $"Fondi insufficienti. Disponibile: {plafondDisponibile:N2} €"
+                        };
+                    }
+
+                    // ==========================================================
+                    // 💳 AGGIORNA COSTI
+                    // ==========================================================
+                    foreach (var costo in costi)
+                    {
                         costo.Stato = "Pagato";
                         costo.DataUltimaModifica = oggi;
                         costo.ID_UtenteUltimaModifica = idSistema;
-
-                        plafondResiduo -= importo;
-                        totalePagato += importo;
-                        costiPagati.Add(costo);
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                // ==========================================================
-                // 💾 SALVATAGGI (solo se ha pagato almeno un costo)
-                // ==========================================================
-                if (totalePagato > 0)
-                {
-                    try
-                    {
-                        db.SaveChanges();
-                    }
-                    catch (DbEntityValidationException ex)
-                    {
-                        var dettagli = ex.EntityValidationErrors
-                            .SelectMany(e => e.ValidationErrors)
-                            .Select(e => $"❌ COSTI: {e.PropertyName} – {e.ErrorMessage}")
-                            .ToList();
-                        throw new Exception("Errore su COSTI:\n" + string.Join("\n", dettagli));
                     }
 
-                    // 🔹 Movimento nel plafond
-                    var nuovaVoce = new PlafondUtente
+                    db.SaveChanges();
+
+                    // ==========================================================
+                    // ➖ MOVIMENTO NEGATIVO UNICO
+                    // ==========================================================
+                    var movimento = new PlafondUtente
                     {
                         ID_Utente = prof.ID_Utente,
-                        Importo = -totalePagato,
+                        Importo = -totaleDaPagare,
                         TipoPlafond = "Pagamento Costi",
                         DataVersamento = oggi,
                         DataInserimento = oggi,
@@ -592,66 +520,58 @@ namespace Sinergia.App_Helpers
                         ID_UtenteCreatore = idSistema,
                         DataInizio = oggi,
                         DataFine = oggi,
-                        Note = "Pagamento manuale costi generati"
+                        Note = $"Pagamento costi ({costi.Count})"
                     };
 
-                    db.PlafondUtente.Add(nuovaVoce);
+                    db.PlafondUtente.Add(movimento);
                     db.SaveChanges();
 
-                    // 🔔 Dopo il pagamento, aggiorna le notifiche
-                    NotificheHelper.VerificaCostiNonPagati(1);
-
-                    // 🔹 Archivio
+                    // ==========================================================
+                    // 📦 ARCHIVIO
+                    // ==========================================================
                     db.PlafondUtente_a.Add(new PlafondUtente_a
                     {
-                        ID_PlannedPlafond_Archivio = nuovaVoce.ID_PlannedPlafond,
-                        ID_Utente = nuovaVoce.ID_Utente,
-                        ImportoTotale = nuovaVoce.ImportoTotale,
-                        TipoPlafond = nuovaVoce.TipoPlafond,
+                        ID_PlannedPlafond_Archivio = movimento.ID_PlannedPlafond,
+                        ID_Utente = movimento.ID_Utente,
+                        ImportoTotale = movimento.ImportoTotale,
+                        TipoPlafond = movimento.TipoPlafond,
                         Operazione = "Pagamento Costi",
-                        DataInizio = nuovaVoce.DataInizio,
-                        DataFine = nuovaVoce.DataFine,
-                        ID_UtenteCreatore = nuovaVoce.ID_UtenteCreatore,
-                        ID_UtenteUltimaModifica = nuovaVoce.ID_UtenteUltimaModifica,
-                        DataUltimaModifica = nuovaVoce.DataUltimaModifica,
-                        ID_Incasso = nuovaVoce.ID_Incasso,
-                        Importo = nuovaVoce.Importo,
-                        DataVersamento = nuovaVoce.DataVersamento,
-                        ID_UtenteInserimento = nuovaVoce.ID_UtenteInserimento,
-                        DataInserimento = nuovaVoce.DataInserimento,
-                        Note = nuovaVoce.Note,
-                        ID_Pratiche = nuovaVoce.ID_Pratiche,
-                        ID_CostoPersonale = nuovaVoce.ID_CostoPersonale,
+                        DataInizio = movimento.DataInizio,
+                        DataFine = movimento.DataFine,
+                        ID_UtenteCreatore = movimento.ID_UtenteCreatore,
+                        ID_UtenteUltimaModifica = movimento.ID_UtenteUltimaModifica,
+                        DataUltimaModifica = movimento.DataUltimaModifica,
+                        Importo = movimento.Importo,
+                        DataVersamento = movimento.DataVersamento,
+                        ID_UtenteInserimento = movimento.ID_UtenteInserimento,
+                        DataInserimento = movimento.DataInserimento,
+                        Note = movimento.Note,
                         NumeroVersione = 1,
                         DataArchiviazione = DateTime.Now,
                         ID_UtenteArchiviazione = idSistema,
-                        ModificheTestuali = "Pagamento manuale costi generati"
+                        ModificheTestuali = "Pagamento costi selezionati"
                     });
 
                     db.SaveChanges();
 
+                    transaction.Commit();
+
                     return new RisultatoPagamento
                     {
                         Successo = true,
-                        Messaggio = $"✅ Pagati {costiPagati.Count} costi per il professionista {prof.Nome} {prof.Cognome} – Totale: {totalePagato:N2} €"
+                        Messaggio = $"Pagati {costi.Count} costi. Totale: {totaleDaPagare:N2} €"
                     };
                 }
-
-                // ==========================================================
-                // ⚠️ Nessun pagamento possibile
-                // ==========================================================
-                NotificheHelper.VerificaCostiNonPagati(1);
-
-                // ==========================================================
-                // ⚠️ Nessun pagamento possibile
-                // ==========================================================
-                return new RisultatoPagamento
+                catch (Exception ex)
                 {
-                    Successo = false,
-                    Messaggio = plafondDisponibile <= 0
-                        ? $"❌ Il professionista {prof.Nome} {prof.Cognome} non ha plafond disponibile."
-                        : $"❌ I fondi presenti ({plafondDisponibile:N2} €) non coprono i costi da pagare per il professionista {prof.Nome} {prof.Cognome}."
-                };
+                    transaction.Rollback();
+
+                    return new RisultatoPagamento
+                    {
+                        Successo = false,
+                        Messaggio = "Errore durante il pagamento: " + ex.Message
+                    };
+                }
             }
         }
 

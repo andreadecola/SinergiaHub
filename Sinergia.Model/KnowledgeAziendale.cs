@@ -47,5 +47,8 @@ namespace Sinergia.Model
         public string ModificatoDa { get; set; }
 
         public DateTime? DataModifica { get; set; }
+
+        [StringLength(500)]
+        public string VideoPercorso { get; set; }
     }
 }

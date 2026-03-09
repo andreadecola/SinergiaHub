@@ -23,9 +23,12 @@
 <div class="d-flex justify-content-end mb-2">
     @if (ViewBag.PuoAggiungere == true)
     {
-        <button class="btn btn-outline-primary btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;" type="button" data-bs-toggle="modal" data-bs-target="#utenteModal" onclick="addNewUtente()">
-            Nuovo Utente
-        </button>
+       <button class="btn btn-outline-primary btn-sm"
+               style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;"
+               type="button"
+               onclick="addNewUtente()">
+           Nuovo Utente
+       </button>
     }
 </div>
 
@@ -46,8 +49,8 @@
                     class="btn btn-outline-danger btn-sm"
                     style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
                 <i class="bi bi-file-earmark-pdf"></i> PDF
-            </button>
-        </form>*@
+            </button>*@
+        </form>
     </div>
 }
 
@@ -136,6 +139,347 @@
     }
 </div>
 
+ <!-- Modale Nuovo Utente -->
+<div class="modal fade" id="utenteModal" tabindex="-1" aria-labelledby="utenteModalLabel" aria-hidden="true">
+
+    <div class="modal-dialog modal-lg">
+
+        <form id="UtenteForm" enctype="multipart/form-data" autocomplete="off">
+
+            <div class="modal-content">
+
+                <div class="modal-header text-dark">
+                    <h5 class="modal-title" id="utenteModalLabel">Nuovo Utente</h5>
+                    <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <div class="container-fluid">
+                        <div class="row g-2">
+
+                            <input type="hidden" name="ID_Utente" />
+
+                            <div class="col-md-4">
+                                <label>Nome *</label>
+                                <input type="text" name="Nome" class="form-control form-control-sm" required />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Cognome *</label>
+                                <input type="text" name="Cognome" class="form-control form-control-sm" required />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Cellulare 1 *</label>
+                                <input type="text" name="Cellulare1" class="form-control form-control-sm" required />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Cellulare 2</label>
+                                <input type="text" name="Cellulare2" class="form-control form-control-sm" />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Codice Fiscale</label>
+                                <input type="text"
+                                       name="CodiceFiscale"
+                                       id="CodiceFiscaleNuovo"
+                                       class="form-control form-control-sm codice-fiscale-input"
+                                       maxlength="16" />
+
+                                <small class="text-danger d-none" id="erroreCodiceFiscaleNuovo">
+                                    Il codice fiscale deve avere 16 caratteri
+                                </small>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Email *</label>
+                                <input type="email" name="MAIL1" class="form-control form-control-sm" required />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Telefono</label>
+                                <input type="text" name="Telefono" class="form-control form-control-sm" />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Email 2</label>
+                                <input type="email" name="MAIL2" class="form-control form-control-sm" />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Descrizione Attività</label>
+                                <textarea name="DescrizioneAttivita" class="form-control form-control-sm" rows="1"></textarea>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Tipo Utente *</label>
+
+                                <select name="TipoUtente" class="form-select form-select-sm" required>
+                                    <option value="" disabled selected>Seleziona un tipo utente</option>
+                                    <option value="Admin">Admin</option>
+                                    <option value="Collaboratore">Collaboratore</option>
+                                    <option value="Professionista">Professionista</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Stato Utente *</label>
+
+                                <select name="Stato" class="form-select form-select-sm" required>
+                                    <option value="Attivo">Attivo</option>
+                                    <option value="Disattivato">Disattivato</option>
+                                    <option value="Sospeso">Sospeso</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Indirizzo</label>
+                                <input type="text" name="Indirizzo" class="form-control form-control-sm" />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Nazione</label>
+                                <select id="NazioneNuovo" name="ID_Nazione" class="form-select form-select-sm"></select>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label>Città</label>
+                                <select id="CittaNuovo" name="ID_CittaResidenza" class="form-select form-select-sm"></select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label>Documento</label>
+
+                                <div id="documentiContainerNuovo">
+                                    <div class="input-group input-group-sm mb-1">
+
+                                        <input type="file"
+                                               name="DOCUMENTO"
+                                               class="form-control form-control-sm" />
+
+                                        <button type="button"
+                                                class="btn btn-outline-primary btn-sm mx-1"
+                                                onclick="aggiungiCampoDocumento('nuovo')">
+                                            +
+                                        </button>
+
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <div class="col-md-6">
+                                <label>Foto Profilo</label>
+
+                                <input type="file"
+                                       name="FotoProfilo"
+                                       id="FotoProfiloUploadNuovo"
+                                       accept="image/*"
+                                       class="form-control form-control-sm"
+                                       onchange="validaFotoProfilo(this)" />
+
+                            </div>
+
+                            <div class="col-md-12 mt-2">
+                                <label>Note</label>
+                                <textarea name="Note" class="form-control form-control-sm" rows="2"></textarea>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button type="button"
+                            class="btn btn-secondary btn-sm"
+                            data-bs-dismiss="modal">
+                        Chiudi
+                    </button>
+
+                    <button type="button"
+                            class="btn btn-success btn-sm"
+                            onclick="saveUtente()">
+                        Salva
+                    </button>
+
+                </div>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+ <script>
+     // Rimuove spazi dal cognome al termine della digitazione
+     document.addEventListener('DOMContentLoaded', function () {
+         const cognomeInput = document.querySelector('input[name="Cognome"]');
+         if (cognomeInput) {
+             cognomeInput.addEventListener('blur', function () {
+                 this.value = this.value.replace(/\s+/g, '');
+             });
+         }
+     });
+ </script>
+
+
+ <!-- Modale Modifica Utente -->
+ <div class="modal fade" id="modificaUtenteModal" tabindex="-1" aria-labelledby="modificaUtenteLabel" aria-hidden="true">
+     <div class="modal-dialog modal-lg">
+         <form id="ModificaUtenteForm" enctype="multipart/form-data" autocomplete="off">
+             <div class="modal-content">
+                 <div class="modal-header  text-dark">
+                     <h5 class="modal-title" id="modificaUtenteLabel">Modifica Utente</h5>
+                     <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal"></button>
+                 </div>
+
+                 <div class="modal-body">
+                     <div class="container-fluid">
+
+                         <!-- ✅ SWITCH VERSIONI -->
+                         <div class="row mb-2" id="toggleVersioniWrapperUtente">
+                             <div class="col-12">
+                                 <div class="form-check form-switch">
+                                     <input class="form-check-input" type="checkbox" id="toggleVersioniUtente">
+                                     <label class="form-check-label fw-bold" for="toggleVersioniUtente">Mostra versione precedente</label>
+                                 </div>
+                             </div>
+                         </div>
+
+                         <div class="row g-2">
+                             <input type="hidden" name="ID_Utente" id="modifica_ID_Utente" />
+
+                             <div class="col-md-4">
+                                 <label>Nome *</label>
+                                 <input type="text" name="Nome" class="form-control form-control-sm" required />
+                                 <small class="text-muted d-none" data-prev="Nome"></small>
+                             </div>
+                             <div class="col-md-4">
+                                 <label>Cognome *</label>
+                                 <input type="text" name="Cognome" class="form-control form-control-sm" required />
+                                 <small class="text-muted d-none" data-prev="Cognome"></small>
+                             </div>
+                             <div class="col-md-4">
+                                 <label>Cellulare 1 *</label>
+                                 <input type="text" name="Cellulare1" class="form-control form-control-sm" required />
+                                 <small class="text-muted d-none" data-prev="Cellulare 1"></small>
+                             </div>
+
+                             <div class="col-md-4">
+                                 <label>Cellulare 2</label>
+                                 <input type="text" name="Cellulare2" class="form-control form-control-sm" />
+                                 <small class="text-muted d-none" data-prev="Cellulare 2"></small>
+                             </div>
+                             <div class="col-md-4">
+                                 <label>Codice Fiscale</label>
+                                 <input type="text"
+                                        name="CodiceFiscale"
+                                        id="CodiceFiscale"
+                                        class="form-control form-control-sm codice-fiscale-input"
+                                        maxlength="16" />
+                                 <small class="text-danger d-none" id="erroreCodiceFiscale">Il codice fiscale deve avere 16 caratteri</small>
+                             </div>
+
+                             <div class="col-md-4">
+                                 <label>Email *</label>
+                                 <input type="email" name="MAIL1" class="form-control form-control-sm" required />
+                                 <small class="text-muted d-none" data-prev="Email 1"></small>
+                             </div>
+
+                             <div class="col-md-4">
+                                 <label>Telefono</label>
+                                 <input type="text" name="Telefono" class="form-control form-control-sm" />
+                                 <small class="text-muted d-none" data-prev="Telefono"></small>
+                             </div>
+                             <div class="col-md-4">
+                                 <label>Email 2</label>
+                                 <input type="email" name="MAIL2" class="form-control form-control-sm" />
+                                 <small class="text-muted d-none" data-prev="Email 2"></small>
+                             </div>
+                             <div class="col-md-4">
+                                 <label>Descrizione Attività</label>
+                                 <textarea name="DescrizioneAttivita" class="form-control form-control-sm" rows="1"></textarea>
+                                 <small class="text-muted d-none" data-prev="Descrizione Attività"></small>
+                             </div>
+
+                             <div class="col-md-4">
+                                 <label>Nazione</label>
+                                 <select id="Nazione" name="ID_Nazione" class="form-select form-select-sm"></select>
+                                 <small class="text-muted d-none" data-prev="Nazione"></small>
+                             </div>
+                             <div class="col-md-4">
+                                 <label>Città</label>
+                                 <select id="Citta" name="ID_CittaResidenza" class="form-select form-select-sm"></select>
+                                 <small class="text-muted d-none" data-prev="Citta"></small>
+                             </div>
+                             <div class="col-md-4">
+                                 <label>Indirizzo</label>
+                                 <input type="text" name="Indirizzo" class="form-control form-control-sm" />
+                                 <small class="text-muted d-none" data-prev="Indirizzo"></small>
+                             </div>
+
+                             <div class="col-md-4">
+                                 <label>Tipo Utente *</label>
+                                 <select name="TipoUtente" class="form-select form-select-sm" required>
+                                     <option value="" disabled selected>Seleziona un tipo utente</option>
+                                     <option value="Admin">Admin</option>
+                                     <option value="Collaboratore">Collaboratore</option>
+                                     <option value="Professionista">Professionista</option>
+                                 </select>
+                                 <small class="text-muted d-none" data-prev="TipoUtente"></small>
+                             </div>
+                             <div class="col-md-4">
+                                 <label>Stato Utente *</label>
+                                 <select name="Stato" class="form-select form-select-sm" required>
+                                     <option value="Attivo">Attivo</option>
+                                     <option value="Disattivato">Disattivato</option>
+                                     <option value="Sospeso">Sospeso</option>
+                                 </select>
+                                 <small class="text-muted d-none" data-prev="Stato"></small>
+                             </div>
+
+                             <div class="col-md-6">
+                                 <label>Documento</label>
+                                 <div id="documentiContainerModifica">
+                                     <div class="input-group input-group-sm mb-1">
+                                         <input type="file" name="DOCUMENTO" class="form-control form-control-sm" />
+                                         <button type="button" class="btn btn-outline-primary btn-sm mx-1" onclick="aggiungiCampoDocumento('modifica')">+</button>
+                                     </div>
+                                 </div>
+                                 <small class="text-muted d-none" data-prev="Documento"></small>
+                             </div>
+                             <div class="col-md-6">
+                                 <label>Foto Profilo</label>
+                                 <input type="file" name="FotoProfilo" id="FotoProfiloUpload" accept="image/*" class="form-control form-control-sm" onchange="validaFotoProfilo(this)" />
+                                 <small id="nomeFotoAttuale" class="form-text text-muted d-none"></small>
+                                 <small class="text-muted d-none" data-prev="Foto Profilo"></small>
+                             </div>
+
+                             <div class="col-md-12 mt-2">
+                                 <label>Note</label>
+                                 <textarea name="Note" class="form-control form-control-sm" rows="2"></textarea>
+                                 <small class="text-muted d-none" data-prev="Note"></small>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div class="modal-footer">
+                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                     <button type="button" class="btn btn-primary btn-sm" onclick="salvaModificaUtente()">Salva modifiche</button>
+                 </div>
+             </div>
+         </form>
+     </div>
+ </div>
+
+
 <!-- 🔄 Paginazione -->
 <div id="paginazioneUtenti" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
 
@@ -187,6 +531,548 @@
 
 
 <script>
+
+    //document.addEventListener("DOMContentLoaded", function () {
+
+    //    const utenteModal = document.getElementById('utenteModal');
+
+    //    if (utenteModal) {
+
+    //        utenteModal.addEventListener('hidden.bs.modal', function () {
+
+    //            const form = document.getElementById('UtenteForm');
+
+    //            if (form) form.reset();
+
+    //        });
+
+    //    }
+
+    //});
+
+    function addNewUtente() {
+
+        console.log("Apertura Modale per NUOVO Utente");
+
+        const modalEl = document.getElementById('utenteModal');
+        const form = modalEl.querySelector("#UtenteForm");
+
+        if (form) {
+            form.reset();
+        }
+
+        document.getElementById("utenteModalLabel").textContent = "Nuovo Utente";
+
+        // 🔹 Nascondi toggle e storico
+        $("#toggleVersioniWrapperUtente").addClass("d-none");
+        $("[data-prev]").addClass("d-none").text("");
+        $("#infoStoricoUtente").remove();
+        $("#toggleVersioniUtente").prop("checked", false);
+
+        // 🔹 Reset città e nazioni
+        const citta = modalEl.querySelector('#CittaNuovo');
+        const nazione = modalEl.querySelector('#NazioneNuovo');
+
+        if (citta) citta.innerHTML = '<option value="">Seleziona una città</option>';
+        if (nazione) nazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+        // 🔹 Carica città e nazioni
+        caricaCittaENazioni();
+
+        // 🔹 Capitalizzazione nome
+        const nomeInput = modalEl.querySelector('input[name="Nome"]');
+
+        if (nomeInput) {
+
+            nomeInput.removeEventListener("blur", capitalizzaNome);
+
+            nomeInput.addEventListener("blur", capitalizzaNome);
+        }
+
+        function capitalizzaNome() {
+            if (nomeInput.value.length > 0) {
+                nomeInput.value =
+                    nomeInput.value.charAt(0).toUpperCase() +
+                    nomeInput.value.slice(1).toLowerCase();
+            }
+        }
+
+        // 🔹 Mostra modale
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        // 🔹 Validazione foto profilo
+        const fotoInput = modalEl.querySelector("#FotoProfiloUploadNuovo");
+
+        if (fotoInput) {
+
+            fotoInput.removeEventListener("change", validaFotoProfilo);
+
+            fotoInput.addEventListener("change", function () {
+                validaFotoProfilo(this);
+            });
+        }
+
+    }
+
+
+    function saveUtente() {
+
+        console.log("📝 Funzione saveUtente chiamata");
+
+        const form = document.getElementById("UtenteForm");
+
+        if (!form) {
+            console.error("❌ Form UtenteForm non trovato");
+            return;
+        }
+
+        const formData = new FormData(form);
+
+        fetch('/Utenti/Crea', {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+
+                if (res.success) {
+
+                    toastr.success(res.message);
+
+                    const modal = bootstrap.Modal.getInstance(document.getElementById("utenteModal"));
+                    if (modal) modal.hide();
+
+                    location.reload();
+
+                } else {
+
+                    toastr.error(res.message);
+
+                }
+
+            })
+            .catch(error => {
+
+                console.error("Errore nel salvataggio utente:", error);
+                toastr.error("Errore durante la richiesta al server.");
+
+            });
+    }
+
+    function apriModaleModificaUtente(idUtente) {
+        fetch(`/Utenti/GetUtente?id=${idUtente}`)
+            .then(response => response.json())
+            .then(utente => {
+                if (utente) {
+                    const form = document.getElementById('ModificaUtenteForm');
+
+                    // Reset
+                    form.reset();
+                    $("[data-prev]").addClass("d-none").text("");
+                    $("#infoStoricoUtente").remove();
+                    $("#toggleVersioniUtente").prop("checked", false);
+
+                    // Popola valori attuali
+                    form.querySelector('[name="ID_Utente"]').value = utente.ID_Utente || '';
+                    form.querySelector('[name="Nome"]').value = utente.Nome || '';
+                    form.querySelector('[name="Cognome"]').value = utente.Cognome || '';
+                    form.querySelector('[name="Cellulare1"]').value = utente.Cellulare1 || '';
+                    form.querySelector('[name="Cellulare2"]').value = utente.Cellulare2 || '';
+                    form.querySelector('[name="CodiceFiscale"]').value = utente.CodiceFiscale || '';
+                    form.querySelector('[name="Telefono"]').value = utente.Telefono || '';
+                    form.querySelector('[name="MAIL1"]').value = utente.MAIL1 || '';
+                    form.querySelector('[name="MAIL2"]').value = utente.MAIL2 || '';
+                    form.querySelector('[name="DescrizioneAttivita"]').value = utente.DescrizioneAttivita || '';
+                    form.querySelector('[name="Note"]').value = utente.Note || '';
+                    form.querySelector('[name="TipoUtente"]').value = utente.TipoUtente || '';
+                    form.querySelector('[name="Indirizzo"]').value = utente.Indirizzo || '';
+                    form.querySelector('[name="Stato"]').value = utente.Stato || '';
+
+                    // Foto profilo
+                    const inputFoto = form.querySelector('#FotoProfiloUpload');
+                    if (inputFoto) {
+                        inputFoto.value = "";
+                        inputFoto.removeEventListener("change", validaFotoProfilo);
+                        inputFoto.addEventListener("change", function () {
+                            validaFotoProfilo(this);
+                        });
+                    }
+                    const fotoAttualeLabel = document.getElementById('nomeFotoAttuale');
+                    if (fotoAttualeLabel) {
+                        if (utente.FotoPresente && utente.NomeFileFotoProfilo) {
+                            fotoAttualeLabel.textContent = "File attuale: " + utente.NomeFileFotoProfilo;
+                            fotoAttualeLabel.style.display = "block";
+                        } else {
+                            fotoAttualeLabel.textContent = "";
+                            fotoAttualeLabel.style.display = "none";
+                        }
+                    }
+
+                    // Carica Città e Nazione
+                    fetch('/Utenti/GetCittaENazioni')
+                        .then(r => r.json())
+                        .then(data => {
+                            const selectCitta = form.querySelector('[name="ID_CittaResidenza"]');
+                            const selectNazione = form.querySelector('[name="ID_Nazione"]');
+
+                            // reset
+                            selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                            selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                            // Popola nazioni
+                            data.nazioni.forEach(n => {
+                                const opt = document.createElement("option");
+                                opt.value = n.ID_BPCittaDN;
+                                opt.textContent = n.NameNazione;
+                                selectNazione.appendChild(opt);
+                            });
+
+                            // Popola città
+                            data.citta.forEach(c => {
+                                const opt = document.createElement("option");
+                                opt.value = c.ID_BPCitta;
+                                opt.textContent = c.NameLocalita;
+                                selectCitta.appendChild(opt);
+                            });
+
+                            // ✅ Seleziona DOPO aver popolato
+                            if (utente.ID_Nazione) {
+                                selectNazione.value = utente.ID_Nazione;
+                            }
+                            if (utente.ID_CittaResidenza) {
+                                selectCitta.value = utente.ID_CittaResidenza;
+                            }
+                        });
+
+
+                    // ✅ Aggancio toggle per mostrare versione precedente
+                    $("#toggleVersioniUtente").off("change").on("change", function () {
+                        if (this.checked) {
+                            $.get("/Home/GetStoricoUtente", { idUtente: idUtente }, function (res) {
+                                // Prima resetto tutti i campi prev a "Precedente: "
+                                $("[data-prev]").each(function () {
+                                    $(this).text("Precedente: ").removeClass("d-none");
+                                });
+
+                                if (res.success && res.storico) {
+                                    const storico = res.storico;
+
+                                    // Formatto la data
+                                    let dataFormattata = "";
+                                    if (storico.DataUltimaModifica) {
+                                        let dt = new Date(storico.DataUltimaModifica);
+                                        if (!isNaN(dt)) {
+                                            dataFormattata = dt.toLocaleString("it-IT");
+                                        }
+                                    }
+
+                                    // Popola i <small data-prev="..."> con i valori effettivi trovati
+                                    for (const key in storico.CampiSpecifici) {
+                                        const valorePrec = storico.CampiSpecifici[key] || "";
+                                        $(`[data-prev='${key}']`).text(`Precedente: ${valorePrec}`);
+                                    }
+
+                                    // Info versione
+                                    $("#infoStoricoUtente").remove();
+                                    $(".modal-body").prepend(`
+                                  <div id="infoStoricoUtente" class="alert alert-light border small mb-2">
+                                      Ultima modifica: ${dataFormattata} ·
+                                      Utente: ${storico.NomeUtente || "?"} ·
+                                      Versione: ${storico.NumeroVersione}
+                                  </div>
+                              `);
+                                } else {
+                                    // Nessuna versione trovata → tengo comunque i "Precedente:" vuoti
+                                    $("#infoStoricoUtente").remove();
+                                    $(".modal-body").prepend(`
+                                  <div id="infoStoricoUtente" class="alert alert-warning small mb-2">
+                                      Nessuna versione precedente trovata.
+                                  </div>
+                              `);
+                                }
+                            });
+                        } else {
+                            // Reset quando disattivo il toggle
+                            $("[data-prev]").addClass("d-none").text("");
+                            $("#infoStoricoUtente").remove();
+                        }
+                    });
+
+                    // Mostra modale
+                    const modal = new bootstrap.Modal(document.getElementById('modificaUtenteModal'));
+                    modal.show();
+
+                } else {
+                    toastr.error("Utente non trovato.");
+                }
+            })
+            .catch(err => {
+                toastr.error("Errore nel caricamento dei dati dell'utente.");
+                console.error(err);
+            });
+    }
+
+    function salvaModificaUtente() {
+        const form = document.getElementById('ModificaUtenteForm');
+        const inputFoto = form.querySelector('#FotoProfiloModifica');
+
+        if (inputFoto && inputFoto.files.length > 0) {
+            const file = inputFoto.files[0];
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(file);
+
+            img.onload = function () {
+                inviaFormModificaUtente(form);
+                URL.revokeObjectURL(objectUrl);
+            };
+
+            img.onerror = function () {
+                toastr.error("Impossibile leggere l'immagine.");
+                inputFoto.value = ""; // pulisci se errore
+                URL.revokeObjectURL(objectUrl);
+            };
+
+            img.src = objectUrl;
+        } else {
+            inviaFormModificaUtente(form);
+        }
+    }
+
+
+    function inviaFormModificaUtente(form) {
+        const formData = new FormData(form);
+
+        fetch('/Utenti/Modifica', {
+            method: 'POST',
+            body: formData
+        })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('modificaUtenteModal')).hide();
+                    toastr.success(res.message);
+                    location.reload();
+                } else {
+                    toastr.error(res.message);
+                }
+            })
+            .catch(err => {
+                toastr.error("Errore durante la richiesta.");
+                console.error(err);
+            });
+    }
+
+    function OpenDeleteUtente(id) {
+        const deleteBtn = document.getElementById('confirmDeleteBtn');
+        if (deleteBtn) {
+            deleteBtn.dataset.id = id;
+            const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            modal.show();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const deleteBtn = document.getElementById('confirmDeleteBtn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                const id = deleteBtn.dataset.id;
+                if (!id) return;
+
+                fetch('/Utenti/Elimina', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ id: id })
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+                            toastr.success(res.message);
+                            location.reload();
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Errore eliminazione:", error);
+                        toastr.error("Errore durante la richiesta.");
+                    });
+            });
+        }
+    });
+
+    function caricaCittaENazioni() {
+
+        fetch('/Utenti/GetCittaENazioni')
+            .then(response => response.json())
+            .then(data => {
+
+                const selectCitta = document.getElementById('CittaNuovo');
+                const selectNazione = document.getElementById('NazioneNuovo');
+
+                if (!selectCitta || !selectNazione) {
+                    console.error("❌ Select città o nazione non trovati nel DOM");
+                    return;
+                }
+
+                // reset
+                selectCitta.innerHTML = '<option value="">Seleziona una città</option>';
+                selectNazione.innerHTML = '<option value="">Seleziona una nazione</option>';
+
+                // === NAZIONI ===
+                data.nazioni.forEach(n => {
+
+                    const opt = document.createElement("option");
+                    opt.value = n.ID_BPCittaDN;
+                    opt.textContent = n.NameNazione;
+
+                    selectNazione.appendChild(opt);
+
+                    // default Italia
+                    if (n.NameNazione.toLowerCase() === "italia") {
+                        selectNazione.value = n.ID_BPCittaDN;
+                    }
+
+                });
+
+                // === CITTÀ ===
+                data.citta.forEach(c => {
+
+                    const opt = document.createElement("option");
+                    opt.value = c.ID_BPCitta;
+                    opt.textContent = c.NameLocalita;
+
+                    selectCitta.appendChild(opt);
+
+                    // default Roma
+                    if (c.NameLocalita.toLowerCase() === "roma") {
+                        selectCitta.value = c.ID_BPCitta;
+                    }
+
+                });
+
+            })
+            .catch(error => {
+                console.error("❌ Errore nel caricamento di città e nazioni:", error);
+            });
+    }
+
+    function chiudiModaleUtente() {
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('utenteModal'));
+        modal.hide();
+        setTimeout(() => {
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style = "";
+        }, 300);
+    }
+
+    function validaFotoProfilo(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const estensioniValide = ['image/jpeg', 'image/png'];
+
+            if (!estensioniValide.includes(file.type)) {
+                toastr.error("❌ Formato immagine non valido. Usa JPG o PNG.");
+                input.value = "";
+            }
+        }
+    }
+
+
+    // aggiungi altro documento dopo il primo gia aggiunto
+    function aggiungiCampoDocumento(tipo = "nuovo") {
+
+        const containerId = tipo === "modifica"
+            ? "documentiContainerModifica"
+            : "documentiContainerNuovo";
+
+        const container = document.getElementById(containerId);
+
+        if (!container) {
+            console.error("Container documenti non trovato:", containerId);
+            return;
+        }
+
+        const nuovoInput = document.createElement("div");
+        nuovoInput.classList.add("input-group", "input-group-sm", "mb-1");
+
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.name = "DOCUMENTO";
+        fileInput.classList.add("form-control", "form-control-sm");
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.classList.add("btn", "btn-outline-danger", "btn-sm");
+        removeBtn.textContent = "–";
+
+        removeBtn.onclick = function () {
+            container.removeChild(nuovoInput);
+        };
+
+        nuovoInput.appendChild(fileInput);
+        nuovoInput.appendChild(removeBtn);
+        container.appendChild(nuovoInput);
+    }
+
+    // === Validazione Codice Fiscale ===
+    document.addEventListener("DOMContentLoaded", function () {
+        const cfInputs = document.querySelectorAll(".codice-fiscale-input");
+
+        cfInputs.forEach(input => {
+            // Forza maiuscolo in tempo reale
+            input.addEventListener("input", function () {
+                this.value = this.value.toUpperCase();
+            });
+
+            // Controllo alla perdita di focus
+            input.addEventListener("blur", function () {
+                const errore = this.parentElement.querySelector(".errore-cf");
+
+                if (!this.value.trim()) {
+                    if (errore) errore.classList.add("d-none");
+                    return;
+                }
+
+                if (this.value.length !== 16) {
+                    if (errore) errore.classList.remove("d-none");
+                    this.classList.add("is-invalid");
+                } else {
+                    if (errore) errore.classList.add("d-none");
+                    this.classList.remove("is-invalid");
+                    this.classList.add("is-valid");
+                }
+            });
+        });
+    });
+
+    document.addEventListener("DOMContentLoaded", function () {
+        // Trova tutti i select TipoUtente delle modali
+        const selects = document.querySelectorAll('select[name="TipoUtente"]');
+
+        selects.forEach(select => {
+            // Sblocca tutto all'inizio
+            Array.from(select.options).forEach(opt => opt.disabled = false);
+
+            if (tipoUtenteLoggato === "Collaboratore") {
+                // Collaboratore non può creare/modificare nessun utente
+                select.innerHTML = '<option value="">❌ Non hai i permessi</option>';
+                select.disabled = true;
+            }
+            else if (tipoUtenteLoggato === "Professionista") {
+                // Professionista può solo gestire Collaboratori
+                Array.from(select.options).forEach(opt => {
+                    if (opt.value === "Admin" || opt.value === "Professionista") {
+                        opt.disabled = true;
+                    }
+                });
+            }
+            // Admin → non facciamo nulla (vede tutto)
+        });
+    });
+
 
     function ApriPermessi(idUtente) {
         console.log("🧪 Chiamo ApriPermessi con ID:", idUtente);

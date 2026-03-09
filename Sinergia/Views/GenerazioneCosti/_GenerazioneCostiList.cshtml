@@ -41,34 +41,65 @@
         </button>
 
         @*<button type="submit" formaction="@Url.Action("EsportaGenerazioneCostiPdf", "Pratiche")"
-                class="btn btn-outline-danger btn-sm">
-            <i class="bi bi-file-earmark-pdf"></i> PDF
-        </button>*@
+                    class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>*@
     </form>
 </div>
 
 
 <!-- Modale pagamento -->
-<div class="modal fade" id="modalePagamentoCosti" tabindex="-1" aria-labelledby="modalePagamentoCostiLabel" aria-hidden="true">
-    <div class="modal-dialog">
+<div class="modal fade" id="modalePagamentoCosti" tabindex="-1">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
+
             <div class="modal-header">
-                <h5 class="modal-title" id="modalePagamentoCostiLabel">Seleziona Professionista per il Pagamento</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                <h5 class="modal-title">Pagamento Costi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
+
             <div class="modal-body">
-                <select id="selectProfessionistaModal" class="form-select">
-                    <option value="">-- Seleziona professionista --</option>
-                    @foreach (var prof in ViewBag.ListaProfessionisti as List<Sinergia.Model.Utenti>)
-                    {
-                        <option value="@prof.ID_Utente">@prof.Nome @prof.Cognome</option>
-                    }
-                </select>
+
+                <!-- Professionista -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Professionista</label>
+                    <select id="selectProfessionistaModal" class="form-select">
+                        <option value="">-- Seleziona professionista --</option>
+                        @foreach (var prof in ViewBag.ListaProfessionisti as List<Sinergia.Model.Utenti>)
+                        {
+                            <option value="@prof.ID_Utente">
+                                @prof.Nome @prof.Cognome
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Lista Costi -->
+                <div class="border rounded p-3" style="max-height:300px; overflow:auto;">
+                    <div id="listaCostiModale">
+                        <div class="text-muted small">
+                            Seleziona un professionista per visualizzare i costi autorizzati.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Totale -->
+                <div class="mt-3 text-end">
+                    Totale selezionato:
+                    <strong id="totaleSelezionato">€ 0,00</strong>
+                </div>
+
             </div>
+
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-primary" id="btnConfermaPagamento">Conferma Pagamento</button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">
+                    Annulla
+                </button>
+                <button class="btn btn-success" id="btnConfermaPagamento" disabled>
+                    Conferma Pagamento
+                </button>
             </div>
+
         </div>
     </div>
 </div>
@@ -167,44 +198,232 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-            new bootstrap.Tooltip(tooltipTriggerEl);
-        });
 
-        // Apri modale pagamento
+        // =========================================
+        // TOOLTIP
+        // =========================================
+        document.querySelectorAll('[data-bs-toggle="tooltip"]')
+            .forEach(el => new bootstrap.Tooltip(el));
+
+        const modalElement = document.getElementById('modalePagamentoCosti');
         const btnApri = document.getElementById('btnApriModalePagamento');
-        if (btnApri) {
+        const btnConferma = document.getElementById('btnConfermaPagamento');
+        const selectProf = document.getElementById('selectProfessionistaModal');
+        const listaCosti = document.getElementById('listaCostiModale');
+        const totaleSpan = document.getElementById('totaleSelezionato');
+
+        // =========================================
+        // APRI MODALE
+        // =========================================
+        if (btnApri && modalElement) {
             btnApri.addEventListener('click', function () {
-                var modale = new bootstrap.Modal(document.getElementById('modalePagamentoCosti'));
-                modale.show();
+                new bootstrap.Modal(modalElement).show();
             });
         }
 
-        // Conferma pagamento
-        const btnConferma = document.getElementById('btnConfermaPagamento');
-        if (btnConferma) {
-            btnConferma.addEventListener('click', function () {
-                var select = document.getElementById('selectProfessionistaModal');
-                var idProfessionista = select.value;
+        // =========================================
+        // FUNZIONE AGGIORNA TOTALE
+        // =========================================
+        function aggiornaTotale() {
+
+            let totale = 0;
+
+            document.querySelectorAll('.chk-costo:checked')
+                .forEach(chk => {
+                    totale += parseFloat(chk.dataset.importo);
+                });
+
+            totaleSpan.innerText = "€ " + totale.toFixed(2);
+            btnConferma.disabled = totale <= 0;
+        }
+
+        // =========================================
+        // CARICA COSTI AL CAMBIO PROFESSIONISTA
+        // =========================================
+        if (selectProf) {
+            selectProf.addEventListener('change', function () {
+
+                const idProfessionista = this.value;
+
+                listaCosti.innerHTML = '';
+                totaleSpan.innerText = "€ 0,00";
+                btnConferma.disabled = true;
+
                 if (!idProfessionista) {
-                    toastr.warning("Devi selezionare un professionista prima di procedere.");
+                    listaCosti.innerHTML =
+                        '<div class="text-muted small">Seleziona un professionista.</div>';
                     return;
                 }
-                $.post('/Pratiche/EseguiPagamentoCostiAutomatico', { idProfessionista: idProfessionista }, function (res) {
-                    if (res.success) {
-                        toastr.success(res.messaggio);
-                        setTimeout(() => location.reload(), 1500);
-                    } else {
-                        toastr.error(res.messaggio);
+
+                $.get('/Pratiche/GetCostiPagabili',
+                    { idProfessionista: idProfessionista },
+                    function (res) {
+
+                        if (!res.success) {
+                            toastr.error(res.message);
+                            return;
+                        }
+
+                        if (!res.costi || res.costi.length === 0) {
+                            listaCosti.innerHTML =
+                                '<div class="text-muted small">Nessun costo autorizzato disponibile.</div>';
+                            return;
+                        }
+
+                        let html = '';
+
+                        res.costi.forEach(c => {
+
+                            // 🔹 Gestione data sicura
+                            let mese = "-";
+
+                            if (c.DataRegistrazione) {
+
+                                let data;
+
+                                // 🔹 Gestione formato /Date(123456789)/
+                                if (typeof c.DataRegistrazione === "string" &&
+                                    c.DataRegistrazione.includes("Date")) {
+
+                                    const timestamp = parseInt(
+                                        c.DataRegistrazione.replace(/\/Date\((\d+)\)\//, '$1')
+                                    );
+                                    data = new Date(timestamp);
+
+                                } else {
+                                    data = new Date(c.DataRegistrazione);
+                                }
+
+                                if (!isNaN(data)) {
+                                    mese = data.toLocaleDateString('it-IT', {
+                                        month: 'long',
+                                        year: 'numeric'
+                                    });
+                                }
+                            }
+
+                            const tipoBadge = c.Origine === "Ricorrenza"
+                                ? '<span class="badge bg-primary-subtle text-primary border">Sistema</span>'
+                                : '<span class="badge bg-secondary-subtle text-secondary border">Manuale</span>';
+
+                                html += `
+                            <div class="border rounded-3 p-3 mb-3 shadow-sm bg-light costo-item">
+
+                                <div class="d-flex justify-content-between align-items-start">
+
+                                    <!-- SINISTRA -->
+                                    <div class="d-flex align-items-start gap-2">
+
+                                        <input class="form-check-input chk-costo mt-1"
+                                               type="checkbox"
+                                               value="${c.ID_GenerazioneCosto}"
+                                               data-importo="${c.Importo}">
+
+                                        <div>
+
+                                            <div class="fw-semibold fs-6">
+                                                ${c.Descrizione}
+                                            </div>
+
+                                            <div class="small text-muted mt-1">
+                                                <span class="me-2">
+                                                    <strong>Categoria:</strong> ${c.Categoria || "-"}
+                                                </span>
+                                                ${tipoBadge}
+                                                <span class="ms-2">
+                                                    ${mese}
+                                                </span>
+                                            </div>
+
+                                            <div class="small text-muted">
+                                                <strong>Periodicità:</strong> ${c.Periodicita || "-"}
+                                            </div>
+
+                                        </div>
+                                    </div>
+
+                                    <!-- DESTRA IMPORTO -->
+                                    <div class="text-end">
+                                        <div class="fw-bold fs-5 text-dark">
+                                            € ${parseFloat(c.Importo).toLocaleString('it-IT', {
+                                                        minimumFractionDigits: 2,
+                                                        maximumFractionDigits: 2
+                                                    })}
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                            </div>
+                            `;
+                        });
+
+                        listaCosti.innerHTML = html;
+
+                        // Evento change per aggiornare totale
+                        document.querySelectorAll('.chk-costo')
+                            .forEach(chk => {
+                                chk.addEventListener('change', aggiornaTotale);
+                            });
+                    });
+            });
+        }
+
+        // =========================================
+        // CONFERMA PAGAMENTO
+        // =========================================
+        if (btnConferma) {
+            btnConferma.addEventListener('click', function () {
+
+                const idProfessionista = selectProf.value;
+
+                if (!idProfessionista) {
+                    toastr.warning("Seleziona un professionista.");
+                    return;
+                }
+
+                let idCosti = [];
+
+                document.querySelectorAll('.chk-costo:checked')
+                    .forEach(chk => idCosti.push(parseInt(chk.value)));
+
+                if (idCosti.length === 0) {
+                    toastr.warning("Seleziona almeno un costo.");
+                    return;
+                }
+
+                btnConferma.disabled = true;
+
+                $.ajax({
+                    url: '/Pratiche/EseguiPagamentoCostiAutomatico',
+                    type: 'POST',
+                    traditional: true,
+                    data: {
+                        idProfessionista: idProfessionista,
+                        idCosti: idCosti
+                    },
+                    success: function (res) {
+
+                        btnConferma.disabled = false;
+
+                        if (res.success) {
+                            toastr.success(res.messaggio);
+                            setTimeout(() => location.reload(), 1200);
+                        } else {
+                            toastr.error(res.messaggio);
+                        }
+                    },
+                    error: function () {
+                        btnConferma.disabled = false;
+                        toastr.error("Errore durante la richiesta.");
                     }
-                }).fail(function () {
-                    toastr.error("Errore durante la richiesta al server.");
                 });
             });
         }
+
     });
 </script>
+
 <!-- MODALE DETTAGLIO COSTO -->
 <div class="modal fade" id="modalDettagliCosto" tabindex="-1" aria-labelledby="modalDettagliCostoLabel" aria-hidden="true">
     <div class="modal-dialog modal-sm">
@@ -385,8 +604,6 @@
         const pad = (n) => (n < 10 ? "0" + n : n);
         return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     }
-
-
 
     // 📌 Salva eccezione
     function submitFormEccezione(event) {

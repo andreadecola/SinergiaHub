@@ -1,0 +1,261 @@
+﻿<!-- Modale Lettura Pratica -->
+<div class="modal fade" id="praticaModal" tabindex="-1" aria-labelledby="praticaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+
+            <form>
+
+                <div class="modal-header text-black">
+                    <h5 class="modal-title" id="praticaModalLabel">Lettura Pratica</h5>
+                    <button type="button" class="btn-close btn-close-black" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <input type="hidden" id="hiddenIDPratica" />
+
+                    <!-- Titolo -->
+                    <div class="mb-2">
+                        <label class="form-label">Titolo</label>
+                        <input type="text" class="form-control form-control-sm" readonly />
+                    </div>
+
+                    <!-- Cliente Owner Responsabile -->
+                    <div class="row mb-2">
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Cliente</label>
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   readonly />
+
+                            <select class="form-select form-select-sm" disabled>
+                                <option>-- Cliente --</option>
+                            </select>
+
+                        </div>
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Owner</label>
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   readonly />
+
+                        </div>
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Responsabile</label>
+
+                            <select class="form-select form-select-sm" disabled>
+                                <option>-- Responsabile --</option>
+                            </select>
+
+                        </div>
+
+                    </div>
+
+                    <!-- Stato Date -->
+                    <div class="row mb-2">
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Stato</label>
+
+                            <select class="form-select form-select-sm" disabled>
+                                <option>Contrattualizzazione</option>
+                                <option>Inviata</option>
+                                <option>In lavorazione</option>
+                                <option>Conclusa</option>
+                            </select>
+
+                        </div>
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Data Inizio Attività Stimata</label>
+
+                            <input type="date"
+                                   class="form-control form-control-sm"
+                                   readonly />
+
+                        </div>
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Data Fine Attività Stimata</label>
+
+                            <input type="date"
+                                   class="form-control form-control-sm"
+                                   readonly />
+
+                        </div>
+
+                    </div>
+
+                    <!-- Categoria Oggetto -->
+                    <div class="row mb-3">
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">Categoria</label>
+
+                            <select class="form-select form-select-sm" disabled>
+                                <option>Categoria</option>
+                            </select>
+
+                        </div>
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">Oggetto della Pratica</label>
+
+                            <select class="form-select form-select-sm" disabled>
+                                <option>Oggetto</option>
+                            </select>
+
+                        </div>
+
+                    </div>
+
+                    <!-- Budget Note -->
+                    <div class="row mb-2">
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Valore Stimato (€)</label>
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   readonly />
+
+                        </div>
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Note</label>
+
+<textarea class="form-control form-control-sm"
+          style="height:30px;"
+          readonly></textarea>
+
+                        </div>
+
+                    </div>
+
+                    <!-- Metodo compenso -->
+                    <hr>
+
+                    <h6>⚙️ Tipologia e Metodo di Compenso</h6>
+
+                    <div class="row mb-2">
+
+                        <div class="col-md-4">
+
+                            <label class="form-label">Metodo di Compenso</label>
+
+                            <select class="form-select form-select-sm" disabled>
+                                <option>Fisso</option>
+                                <option>A ore</option>
+                                <option>Giudiziale</option>
+                            </select>
+
+                        </div>
+
+                        <div class="col-md-4 d-flex align-items-end">
+
+                            <button type="button"
+                                    class="btn btn-outline-primary btn-sm ms-2"
+                                    disabled>
+
+                                Gestisci Compensi
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                    <hr>
+
+                    <h6>💵 Riepilogo Compensi Inseriti</h6>
+
+                    <div class="table-responsive">
+
+                        <table class="table table-sm table-bordered align-middle">
+
+                            <thead class="table-light">
+
+                                <tr>
+                                    <th>#</th>
+                                    <th>Metodo</th>
+                                    <th>Descrizione</th>
+                                    <th>Importo</th>
+                                    <th>Tipologia</th>
+                                    <th>Unità</th>
+                                    <th>Intestatario</th>
+                                </tr>
+
+                            </thead>
+
+                            <tbody>
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                    <hr>
+
+                    <h6>👥 Utenti Associati</h6>
+
+                    <div id="collaboratoriContainer"></div>
+
+                    <hr>
+
+                    <h6>💼 Costi</h6>
+
+                    <button type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            disabled>
+
+                        Gestione Costi Di Pratica
+
+                    </button>
+
+                    <hr>
+
+                    <!-- Incarico -->
+                    <div>
+
+                        <label class="form-label">📎 Incarico Firmato</label>
+
+                        <input type="text"
+                               class="form-control form-control-sm"
+                               readonly />
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button type="button"
+                            class="btn btn-secondary"
+                            data-bs-dismiss="modal">
+
+                        Chiudi
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+</div>

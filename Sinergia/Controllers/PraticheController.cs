@@ -1333,6 +1333,27 @@ namespace SinergiaMvc.Controllers
                 using (var transaction = db.Database.BeginTransaction())
                 {
                     var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == model.ID_Pratiche);
+
+                    // 🔍 Controllo incarico obbligatorio per stato "In lavorazione"
+                    if (model.Stato == "In lavorazione")
+                    {
+                        bool fileGiaPresente = db.DocumentiPratiche.Any(d =>
+                            d.ID_Pratiche == model.ID_Pratiche &&
+                            d.Stato == "Firmato");
+
+                        bool fileCaricatoOra =
+                            model.IncaricoProfessionale != null &&
+                            model.IncaricoProfessionale.ContentLength > 0;
+
+                        if (!fileGiaPresente && !fileCaricatoOra)
+                        {
+                            return Json(new
+                            {
+                                success = false,
+                                message = "⚠️ Devi caricare un incarico firmato prima di passare allo stato 'In lavorazione'."
+                            });
+                        }
+                    }
                     if (pratica == null)
                         return Json(new { success = false, message = "Pratica non trovata." });
 
@@ -2209,23 +2230,7 @@ namespace SinergiaMvc.Controllers
                         db.SaveChanges();
                     }
 
-                    // 🔍 Controllo incarico prima dello stato "In lavorazione"
-                    if (model.Stato == "In lavorazione")
-                    {
-                        bool filePDFPresente = db.DocumentiPratiche.Any(d =>
-                            d.ID_Pratiche == pratica.ID_Pratiche &&
-                            d.Documento != null &&
-                            d.NomeFile.ToLower().EndsWith(".pdf"));
-
-                        if (!filePDFPresente)
-                        {
-                            return Json(new
-                            {
-                                success = false,
-                                message = "⚠️ Devi caricare un incarico firmato prima di passare allo stato 'In lavorazione'."
-                            });
-                        }
-                    }
+             
 
                     // 🔐 Se la pratica è segnala come "Conclusa"
                     if (pratica.Stato == "Conclusa")
@@ -2826,6 +2831,20 @@ namespace SinergiaMvc.Controllers
                 .ToList();
 
             // ======================================================
+            // 📎 INCARICO FIRMATO
+            // ======================================================
+
+            var incarico = db.DocumentiPratiche
+                .Where(d => d.ID_Pratiche == id && d.Stato == "Firmato")
+                .OrderByDescending(d => d.DataCaricamento)
+                .Select(d => new
+                {
+                    d.ID_Documento,
+                    d.NomeFile
+                })
+                .FirstOrDefault();
+
+            // ======================================================
             // 📤 RISPOSTA JSON
             // ======================================================
 
@@ -2841,7 +2860,8 @@ namespace SinergiaMvc.Controllers
                 totaleIncassato,
                 avvisi,
                 incassi,
-                ownerFeeTotale
+                ownerFeeTotale,
+                incarico = incarico
 
             }, JsonRequestBehavior.AllowGet);
         }
@@ -5573,7 +5593,130 @@ namespace SinergiaMvc.Controllers
             }
         }
 
+        public ActionResult GeneraSnapshotPraticheStoriche()
+        {
+            try
+            {
+                var praticheIds = db.Pratiche
+                    .Where(p => p.Stato != "Eliminato")
+                    .Select(p => p.ID_Pratiche)
+                    .ToList();
 
+                int count = 0;
+
+                foreach (var id in praticheIds)
+                {
+                    bool esiste = db.SnapshotModali.Any(s => s.ID_Pratiche == id);
+
+                    if (esiste)
+                        continue;
+
+                    var pratica = db.Pratiche.FirstOrDefault(p => p.ID_Pratiche == id);
+                    if (pratica == null)
+                        continue;
+
+                    // =========================
+                    // Compensi
+                    // =========================
+
+                    var compensi = db.CompensiPraticaDettaglio
+                        .Where(c => c.ID_Pratiche == id && c.IsAttivo)
+                        .Select(c => new
+                        {
+                            c.ID_RigaCompenso,
+                            c.TipoCompenso,
+                            c.Categoria,
+                            c.Descrizione,
+                            c.Importo,
+                            c.ValoreStimato,
+                            c.Ordine,
+                            c.ID_ProfessionistaIntestatario,
+                            c.Collaboratori
+                        }).ToList();
+
+                    // =========================
+                    // Utenti associati
+                    // =========================
+
+                    var utentiAssociati = db.RelazionePraticheUtenti
+                        .Where(r => r.ID_Pratiche == id)
+                        .Select(r => new
+                        {
+                            r.ID_Utente,
+                            r.Ruolo
+                        }).ToList();
+
+                    // =========================
+                    // Documenti incarico
+                    // =========================
+
+                    var incarichi = db.DocumentiPratiche
+                        .Where(d => d.ID_Pratiche == id)
+                        .Select(d => new
+                        {
+                            d.ID_Documento,
+                            d.NomeFile,
+                            d.Estensione,
+                            d.CategoriaDocumento,
+                            d.Stato
+                        }).ToList();
+
+                    // =========================
+                    // Snapshot completo pratica
+                    // =========================
+
+                    var snapshot = new
+                    {
+                        pratica.ID_Pratiche,
+                        pratica.Titolo,
+                        pratica.Descrizione,
+                        pratica.Tipologia,
+                        pratica.OggettoPratica,
+                        pratica.Stato,
+                        pratica.DataInizioAttivitaStimata,
+                        pratica.DataFineAttivitaStimata,
+                        pratica.Budget,
+                        pratica.ImportoFisso,
+                        pratica.TariffaOraria,
+                        pratica.AccontoGiudiziale,
+                        pratica.GradoGiudizio,
+                        pratica.TerminiPagamento,
+                        pratica.OrePreviste,
+                        pratica.OreEffettive,
+                        pratica.ID_Cliente,
+                        pratica.ID_UtenteResponsabile,
+                        pratica.ID_Owner,
+                        pratica.Note,
+                        pratica.DataCreazione,
+                        pratica.UltimaModifica,
+
+                        compensi,
+                        utentiAssociati,
+                        incarichi
+                    };
+
+                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(snapshot);
+
+                    db.SnapshotModali.Add(new SnapshotModali
+                    {
+                        Tipo = "Pratica",
+                        ID_Pratiche = id,
+                        HtmlSnapshot = json,
+                        DataCreazione = DateTime.Now
+                    });
+
+                    count++;
+                }
+
+                db.SaveChanges();
+
+                return Content($"Snapshot pratiche creati: {count}");
+            }
+            catch (Exception ex)
+            {
+                return Content(ex.ToString());
+            }
+        }
 
 
         #endregion
@@ -5695,117 +5838,6 @@ namespace SinergiaMvc.Controllers
                 return PartialView("~/Views/Shared/_MessaggioErrore.cshtml");
             }
         }
-
-
-        //[HttpGet]
-        //public ActionResult GestioneSpeseGeneraliList()
-        //{
-        //    try
-        //    {
-        //        int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
-        //        var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-
-        //        if (utenteCorrente == null)
-        //        {
-        //            ViewBag.MessaggioErrore = "Utente non autenticato o sessione scaduta.";
-        //            return PartialView("~/Views/Shared/_MessaggioErrore.cshtml");
-        //        }
-
-        //        var query = db.TipologieCosti
-        //            .Where(t =>
-        //                t.Stato != "Eliminato" &&
-        //                t.TipoCostoApplicazione == "Generale");
-
-        //        var costiList = query
-        //            .OrderBy(t => t.Nome)
-        //            .ToList()
-        //            .Select(t =>
-        //            {
-        //                string nomeCreatore = "Sconosciuto";
-
-        //                if (t.ID_UtenteCreatore.HasValue)
-        //                {
-        //                    int idCreatore = t.ID_UtenteCreatore.Value;
-        //                    var creatore = db.Utenti.FirstOrDefault(u => u.ID_Utente == idCreatore);
-        //                    if (creatore != null)
-        //                        nomeCreatore = $"{creatore.Nome} {creatore.Cognome}";
-        //                }
-
-        //                int numeroAssegnati = db.RicorrenzeCosti.Count(r =>
-        //                    r.ID_TipoCostoGenerale == t.ID_TipoCosto &&
-        //                    r.ID_Professionista != null &&
-        //                    r.Attivo);
-
-        //                return new TipologieCostiViewModel
-        //                {
-        //                    ID_TipoCosto = t.ID_TipoCosto,
-        //                    Nome = t.Nome,
-        //                    ValorePercentuale = t.ValorePercentuale,
-        //                    ValoreFisso = t.ValoreFisso,
-        //                    Tipo = t.Tipo,
-        //                    Stato = t.Stato,
-        //                    DataInizio = t.DataInizio,
-        //                    DataFine = t.DataFine,
-        //                    ID_UtenteCreatore = t.ID_UtenteCreatore,
-        //                    ID_UtenteUltimaModifica = t.ID_UtenteUltimaModifica,
-        //                    DataUltimaModifica = t.DataUltimaModifica,
-        //                    NomeCreatore = nomeCreatore,
-        //                    NumeroAssegnati = numeroAssegnati
-        //                };
-        //            })
-        //            .ToList();
-
-        //        // 🔐 Gestione permessi
-        //        var permessiUtente = new PermessiViewModel
-        //        {
-        //            ID_Utente = utenteCorrente.ID_Utente,
-        //            NomeUtente = utenteCorrente.Nome + " " + utenteCorrente.Cognome,
-        //            Permessi = new List<PermessoSingoloViewModel>()
-        //        };
-
-        //        if (utenteCorrente.TipoUtente == "Admin")
-        //        {
-        //            permessiUtente.Permessi.Add(new PermessoSingoloViewModel
-        //            {
-        //                Aggiungi = true,
-        //                Modifica = true,
-        //                Elimina = true
-        //            });
-        //        }
-        //        else
-        //        {
-        //            var permessiDb = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
-
-        //            permessiUtente.Permessi.Add(new PermessoSingoloViewModel
-        //            {
-        //                Aggiungi = permessiDb.Any(p => p.Aggiungi == true),
-        //                Modifica = permessiDb.Any(p => p.Modifica == true),
-        //                Elimina = permessiDb.Any(p => p.Elimina == true)
-        //            });
-        //        }
-
-        //        ViewBag.Permessi = permessiUtente;
-
-        //        // 🔽 Lista professionisti attivi
-        //        ViewBag.Professionisti = db.OperatoriSinergia
-        //            .Where(p => p.TipoCliente == "Professionista" && p.Stato == "Attivo" && p.ID_UtenteCollegato != null)
-        //            .Select(p => new SelectListItem
-        //            {
-        //                Value = p.ID_UtenteCollegato.Value.ToString(),
-        //                Text = p.Nome + " " + p.Cognome
-        //            })
-        //            .OrderBy(p => p.Text)
-        //            .ToList();
-
-        //        return PartialView("~/Views/CostiGenerali/_GestioneCostiGeneraliList.cshtml", costiList);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        ViewBag.MessaggioErrore = $"❌ Errore nella vista Costi Generali: {ex.Message} - {(ex.InnerException != null ? ex.InnerException.Message : "")}";
-        //        return PartialView("~/Views/Shared/_MessaggioErrore.cshtml");
-        //    }
-        //}
-
 
         [HttpPost]
         public ActionResult CreaTipologiaCosto(TipologieCostiViewModel model)
@@ -6949,51 +6981,110 @@ namespace SinergiaMvc.Controllers
                 if (utenteCorrente == null)
                     return RedirectToAction("Login", "Account");
 
-                // 🔽 Caricamento lista dei costi del professionista
-                var costiList = db.AnagraficaCostiProfessionista
-                    //.Where(t => t.Attivo) // <-- opzionale se vuoi mostrare solo i costi attivi
+                var costiList = new List<CostoProfessionistaCompletoViewModel>();
+
+                // ================================
+                // 🔹 COSTI DA ANAGRAFICA PROFESSIONISTA
+                // ================================
+                var costiAnagrafica = db.AnagraficaCostiProfessionista
                     .OrderBy(t => t.ID_AnagraficaCostoProfessionista)
-                    .ToList()
-                    .Select(t =>
-                    {
-                        string nomeCreatore = "Sconosciuto";
-
-                        if (t.ID_UtenteCreatore.HasValue)
-                        {
-                            var creatore = db.Utenti.FirstOrDefault(u => u.ID_Utente == t.ID_UtenteCreatore.Value);
-                            if (creatore != null)
-                                nomeCreatore = $"{creatore.Nome} {creatore.Cognome}";
-                        }
-
-                        var ricorrenzeAttive = db.RicorrenzeCosti
-                          .Where(r => r.ID_CostoProfessionista == t.ID_AnagraficaCostoProfessionista && r.Attivo)
-                          .ToList();
-
-                        int numeroAssegnati = ricorrenzeAttive.Count(r => r.ID_Professionista != null);
-
-                        // 🔄 Verifica se c’è almeno una ricorrenza attiva
-                        bool haRicorrenzaAttiva = ricorrenzeAttive.Any();
-
-
-                        return new CostoProfessionistaCompletoViewModel
-                        {
-                            ID_AnagraficaCostoProfessionista = t.ID_AnagraficaCostoProfessionista,
-                            Descrizione = t.Descrizione,
-                            ModalitaRipartizione = t.ModalitaRipartizione,
-                            TipoPeriodicita = t.TipoPeriodicita,
-                            ImportoBase = t.ImportoBase,
-                            Attivo = (bool)t.Attivo,
-                            ID_UtenteCreatore = t.ID_UtenteCreatore,
-                            ID_UtenteUltimaModifica = t.ID_UtenteUltimaModifica,
-                            DataUltimaModifica = t.DataUltimaModifica,
-                            NomeCreatore = nomeCreatore,
-                            NumeroAssegnati = numeroAssegnati,
-                            RicorrenzaAttiva = haRicorrenzaAttiva
-                        };
-                    })
                     .ToList();
 
-                // 🔐 Permessi utente
+                foreach (var t in costiAnagrafica)
+                {
+                    string nomeCreatore = "Sconosciuto";
+
+                    if (t.ID_UtenteCreatore.HasValue)
+                    {
+                        var creatore = db.Utenti.FirstOrDefault(u => u.ID_Utente == t.ID_UtenteCreatore.Value);
+                        if (creatore != null)
+                            nomeCreatore = $"{creatore.Nome} {creatore.Cognome}";
+                    }
+
+                    var ricorrenzeAttive = db.RicorrenzeCosti
+                        .Where(r => r.ID_CostoProfessionista == t.ID_AnagraficaCostoProfessionista && r.Attivo)
+                        .ToList();
+
+                    int numeroAssegnati = ricorrenzeAttive.Count(r => r.ID_Professionista != null);
+                    bool haRicorrenzaAttiva = ricorrenzeAttive.Any();
+
+                    costiList.Add(new CostoProfessionistaCompletoViewModel
+                    {
+                        ID_AnagraficaCostoProfessionista = t.ID_AnagraficaCostoProfessionista,
+                        Descrizione = t.Descrizione,
+                        ModalitaRipartizione = t.ModalitaRipartizione,
+                        TipoPeriodicita = t.TipoPeriodicita,
+                        ImportoBase = t.ImportoBase,
+                        Attivo = (bool)t.Attivo,
+                        ID_UtenteCreatore = t.ID_UtenteCreatore,
+                        ID_UtenteUltimaModifica = t.ID_UtenteUltimaModifica,
+                        DataUltimaModifica = t.DataUltimaModifica,
+                        NomeCreatore = nomeCreatore,
+                        NumeroAssegnati = numeroAssegnati,
+                        RicorrenzaAttiva = haRicorrenzaAttiva,
+                        Assegnabile = true
+                    });
+                }
+
+                // ================================
+                // 🔹 CALCOLO ULTIMO ID ANAGRAFICA
+                // ================================
+                int ultimoIdAnagrafica = costiAnagrafica
+                    .Select(x => x.ID_AnagraficaCostoProfessionista)
+                    .DefaultIfEmpty(0)
+                    .Max();
+
+                int progressivoTipologie = 1;
+
+                // ================================
+                // 🔹 COSTI DA TIPOLOGIE COSTI
+                // ================================
+                var costiTipologia = db.TipologieCosti
+                    .Where(t => t.TipoCostoApplicazione == "Professionista" && t.Stato == "Attivo")
+                    .ToList();
+
+                foreach (var t in costiTipologia)
+                {
+                    var ricorrenzeAttive = db.RicorrenzeCosti
+                        .Where(r => r.ID_TipoCostoGenerale == t.ID_TipoCosto && r.Attivo)
+                        .ToList();
+
+                    int numeroAssegnati = ricorrenzeAttive.Count(r => r.ID_Professionista != null);
+
+                    // 🔹 non mostrare numero per costo resident
+                    if (t.Nome == "Costo fisso Resident")
+                        numeroAssegnati = 0;
+
+                    bool haRicorrenzaAttiva = ricorrenzeAttive.Any();
+
+                    bool assegnabile = !(t.ID_TipoCosto == 1 || t.ID_TipoCosto == 3);
+
+                    costiList.Add(new CostoProfessionistaCompletoViewModel
+                    {
+                        ID_AnagraficaCostoProfessionista = null,
+                        ID_TipoCosto = t.ID_TipoCosto,
+
+                        // 🔹 genera sequenza dopo l'anagrafica
+                        IDProgressivoVisuale = ultimoIdAnagrafica + progressivoTipologie,
+
+                        Descrizione = t.Nome,
+                        ModalitaRipartizione = t.Tipo,
+                        TipoPeriodicita = "Automatico",
+                        ImportoBase = t.ValoreFisso ?? 0,
+                        Attivo = true,
+                        ID_UtenteCreatore = t.ID_UtenteCreatore,
+                        NomeCreatore = "Sistema",
+                        NumeroAssegnati = numeroAssegnati,
+                        RicorrenzaAttiva = haRicorrenzaAttiva,
+                        Assegnabile = assegnabile
+                    });
+
+                    progressivoTipologie++;
+                }
+
+                // ================================
+                // 🔐 PERMESSI UTENTE
+                // ================================
                 var permessiUtente = new PermessiViewModel
                 {
                     ID_Utente = utenteCorrente.ID_Utente,
@@ -7024,7 +7115,9 @@ namespace SinergiaMvc.Controllers
 
                 ViewBag.Permessi = permessiUtente;
 
-                // 🔽 Professionisti attivi
+                // ================================
+                // 🔹 PROFESSIONISTI ATTIVI
+                // ================================
                 ViewBag.Professionisti = db.OperatoriSinergia
                     .Where(p => p.TipoCliente == "Professionista" && p.Stato == "Attivo" && p.ID_UtenteCollegato != null)
                     .Select(p => new SelectListItem
@@ -7035,7 +7128,6 @@ namespace SinergiaMvc.Controllers
                     .OrderBy(p => p.Text)
                     .ToList();
 
-                // ✅ Ritorna la view con model = costiList
                 return View("~/Views/CostiProfessionista/GestioneCostiProfessionista.cshtml", costiList);
             }
             catch (Exception ex)
@@ -7044,101 +7136,6 @@ namespace SinergiaMvc.Controllers
                 return PartialView("~/Views/Shared/_MessaggioErrore.cshtml");
             }
         }
-
-
-
-
-        //public ActionResult GestioneSpeseProfessionistaList()
-        //{
-        //    int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
-        //    var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
-
-        //    if (utenteCorrente == null)
-        //    {
-        //        ViewBag.MessaggioErrore = "Utente non autenticato o sessione scaduta.";
-        //        return PartialView("~/Views/Shared/_MessaggioErrore.cshtml");
-        //    }
-
-        //    IQueryable<AnagraficaCostiProfessionista> query = db.AnagraficaCostiProfessionista
-        //        .Where(t => t.Attivo == true);
-
-        //    // 🔐 Gestione Permessi
-        //    bool puoAggiungere = false;
-        //    bool puoModificare = false;
-        //    bool puoEliminare = false;
-
-        //    if (utenteCorrente.TipoUtente == "Admin")
-        //    {
-        //        puoAggiungere = puoModificare = puoEliminare = true;
-        //    }
-        //    else if (utenteCorrente.TipoUtente == "Professionista" || utenteCorrente.TipoUtente == "Collaboratore")
-        //    {
-        //        var permessiDb = db.Permessi.Where(p => p.ID_Utente == idUtenteCorrente).ToList();
-        //        puoAggiungere = permessiDb.Any(p => p.Aggiungi == true);
-        //        puoModificare = permessiDb.Any(p => p.Modifica == true);
-        //        puoEliminare = permessiDb.Any(p => p.Elimina == true);
-        //    }
-
-        //    var lista = query
-        //        .OrderBy(t => t.Descrizione)
-        //        .ToList()
-        //       .Select(t => new CostoProfessionistaCompletoViewModel
-        //       {
-        //           ID_AnagraficaCostoProfessionista = t.ID_AnagraficaCostoProfessionista,
-        //           Descrizione = t.Descrizione,
-        //           ModalitaRipartizione = t.ModalitaRipartizione,
-        //           TipoPeriodicita = t.TipoPeriodicita,
-        //           ImportoBase = t.ImportoBase,
-        //           Attivo = (bool)t.Attivo,
-        //           ID_UtenteCreatore = t.ID_UtenteCreatore,
-        //           ID_UtenteUltimaModifica = t.ID_UtenteUltimaModifica,
-        //           DataUltimaModifica = t.DataUltimaModifica,
-        //           NomeCreatore = t.ID_UtenteCreatore != null ? db.Utenti.Where(u => u.ID_Utente == t.ID_UtenteCreatore)
-        //          .Select(u => u.Nome + " " + u.Cognome).FirstOrDefault() : null,
-
-        //           // 👇 Aggiunto
-        //           NumeroAssegnati = db.CostiPersonaliUtente.Count(c => c.ID_AnagraficaCostoProfessionista == t.ID_AnagraficaCostoProfessionista)
-        //       })
-        //        .ToList();
-
-        //    ViewBag.PuoAggiungere = puoAggiungere;
-        //    ViewBag.Permessi = new PermessiViewModel
-        //    {
-        //        ID_Utente = utenteCorrente.ID_Utente,
-        //        NomeUtente = utenteCorrente.Nome + " " + utenteCorrente.Cognome,
-        //        Permessi = new List<PermessoSingoloViewModel>
-        //{
-        //    new PermessoSingoloViewModel
-        //    {
-        //        Aggiungi = puoAggiungere,
-        //        Modifica = puoModificare,
-        //        Elimina = puoEliminare
-        //    }
-        //}
-        //    };
-
-        //    // ✅ ViewBag per ricorrenze
-        //    ViewBag.IDProfessionistaCorrente = utenteCorrente.ID_Utente;
-
-        //    var professione = db.OperatoriSinergia
-        //        .FirstOrDefault(o => o.ID_UtenteCollegato == utenteCorrente.ID_Utente && o.TipoCliente == "Professionista");
-
-        //    ViewBag.IDProfessioneCorrente = professione?.ID_Professione ?? 0;
-
-        //    // ✅ ViewBag per dropdown professionisti (modale assegnazione)
-        //    var professionistiAttivi = db.OperatoriSinergia
-        //        .Where(o => o.TipoCliente == "Professionista" && o.Stato == "Attivo")
-        //        .OrderBy(o => o.Nome)
-        //        .ToList();
-
-        //    ViewBag.Professionisti = professionistiAttivi.Select(o => new SelectListItem
-        //    {
-        //        Value = o.ID_UtenteCollegato.ToString(),
-        //        Text = o.Nome + " " + o.Cognome
-        //    }).ToList();
-
-        //    return PartialView("~/Views/CostiProfessionista/_GestioneCostiProfessionistaList.cshtml", lista);
-        //}
 
         [HttpPost]
         public ActionResult CreaAnagraficaCostoProfessionista(CostoProfessionistaCompletoViewModel model)
@@ -7381,20 +7378,25 @@ namespace SinergiaMvc.Controllers
         [HttpGet]
         public ActionResult GetCostoProfessionista(int id)
         {
-            var costo = db.AnagraficaCostiProfessionista
-                .Where(c => c.ID_AnagraficaCostoProfessionista == id && c.Attivo == true)
-                .Select(c => new CostoProfessionistaCompletoViewModel
-                {
-                    ID_AnagraficaCostoProfessionista = c.ID_AnagraficaCostoProfessionista,
-                    Descrizione = c.Descrizione,
-                    ModalitaRipartizione = c.ModalitaRipartizione,
-                    TipoPeriodicita = c.TipoPeriodicita,
-                    ImportoBase = c.ImportoBase,
-                    Attivo = (bool)c.Attivo,
+            // ================================
+            // 1️⃣ CERCA IN ANAGRAFICA COSTI
+            // ================================
+            var costoAnagrafica = db.AnagraficaCostiProfessionista
+                .FirstOrDefault(c => c.ID_AnagraficaCostoProfessionista == id && c.Attivo == true);
 
-                    // Utenti a cui è stato assegnato questo costo
+            if (costoAnagrafica != null)
+            {
+                var model = new CostoProfessionistaCompletoViewModel
+                {
+                    ID_AnagraficaCostoProfessionista = costoAnagrafica.ID_AnagraficaCostoProfessionista,
+                    Descrizione = costoAnagrafica.Descrizione,
+                    ModalitaRipartizione = costoAnagrafica.ModalitaRipartizione,
+                    TipoPeriodicita = costoAnagrafica.TipoPeriodicita,
+                    ImportoBase = costoAnagrafica.ImportoBase,
+                    Attivo = (bool)costoAnagrafica.Attivo,
+
                     CostiAssegnati = db.CostiPersonaliUtente
-                        .Where(p => p.ID_AnagraficaCostoProfessionista == c.ID_AnagraficaCostoProfessionista)
+                        .Where(p => p.ID_AnagraficaCostoProfessionista == costoAnagrafica.ID_AnagraficaCostoProfessionista)
                         .Select(p => new CostiPersonaliUtenteViewModel
                         {
                             ID_CostoPersonale = p.ID_CostoPersonale,
@@ -7407,14 +7409,65 @@ namespace SinergiaMvc.Controllers
                                 .FirstOrDefault()
                         })
                         .ToList()
-                })
-                .FirstOrDefault();
+                };
 
-            if (costo == null)
-                return Json(new { success = false, message = "Costo non trovato." }, JsonRequestBehavior.AllowGet);
+                return Json(new { success = true, costo = model }, JsonRequestBehavior.AllowGet);
+            }
 
-            return Json(new { success = true, costo }, JsonRequestBehavior.AllowGet);
+            // ================================
+            // 2️⃣ CERCA IN TIPOLOGIE COSTI
+            // ================================
+            var costoTipologia = db.TipologieCosti
+                .FirstOrDefault(t => t.ID_TipoCosto == id);
+
+            if (costoTipologia != null)
+            {
+                List<CostiPersonaliUtenteViewModel> assegnati;
+
+                if (costoTipologia.Nome.Contains("Trattenuta"))
+                {
+                    // 🔹 vale per tutti i professionisti
+                    assegnati = db.OperatoriSinergia
+                        .Where(p => p.TipoCliente == "Professionista" && p.Stato == "Attivo")
+                        .Select(p => new CostiPersonaliUtenteViewModel
+                        {
+                            ID_Utente = p.ID_UtenteCollegato.Value,
+                            NomeProfessionista = p.Nome + " " + p.Cognome
+                        })
+                        .ToList();
+                }
+                else
+                {
+                    assegnati = db.RicorrenzeCosti
+                        .Where(r => r.ID_TipoCostoGenerale == costoTipologia.ID_TipoCosto && r.ID_Professionista != null)
+                        .Select(r => new CostiPersonaliUtenteViewModel
+                        {
+                            ID_Utente = r.ID_Professionista.Value,
+                            NomeProfessionista = db.Utenti
+                                .Where(u => u.ID_Utente == r.ID_Professionista)
+                                .Select(u => u.Nome + " " + u.Cognome)
+                                .FirstOrDefault()
+                        })
+                        .ToList();
+                }
+
+                var model = new CostoProfessionistaCompletoViewModel
+                {
+                    ID_AnagraficaCostoProfessionista = 0,
+                    Descrizione = costoTipologia.Nome,
+                    ModalitaRipartizione = costoTipologia.Tipo,
+                    TipoPeriodicita = "Automatico",
+                    ImportoBase = costoTipologia.ValoreFisso ?? 0,
+                    Attivo = true,
+                    CostiAssegnati = assegnati
+                };
+
+                return Json(new { success = true, costo = model }, JsonRequestBehavior.AllowGet);
+            }
+
+            return Json(new { success = false, message = "Costo non trovato." }, JsonRequestBehavior.AllowGet);
         }
+
 
         [HttpPost]
         public ActionResult EliminaCostoProfessionista(int id)
@@ -7643,89 +7696,51 @@ namespace SinergiaMvc.Controllers
             {
                 DateTime now = DateTime.Now;
 
-                var ricorrenzaBase = db.RicorrenzeCosti
-                    .FirstOrDefault(r => r.ID_CostoProfessionista == ID_AnagraficaCostoProfessionista && r.ID_Professionista == null);
+                // 🔹 Recupera anagrafica costo
+                var anagrafica = db.AnagraficaCostiProfessionista
+                    .FirstOrDefault(a => a.ID_AnagraficaCostoProfessionista == ID_AnagraficaCostoProfessionista);
 
-                if (ricorrenzaBase == null)
-                    return Json(new { success = false, message = "Ricorrenza base non trovata." });
+                if (anagrafica == null)
+                    return Json(new { success = false, message = "Costo non trovato." });
+
+                // 🔹 Ricorrenza base (se esiste)
+                var ricorrenzaBase = db.RicorrenzeCosti
+                    .FirstOrDefault(r =>
+                        r.ID_CostoProfessionista == ID_AnagraficaCostoProfessionista &&
+                        r.ID_Professionista == null &&
+                        r.Attivo);
 
                 int countNuove = 0;
 
                 foreach (int idProfessionista in ID_UtentiSelezionati)
                 {
-                    bool giàEsiste = db.RicorrenzeCosti.Any(r =>
-                        r.ID_CostoProfessionista == ID_AnagraficaCostoProfessionista &&
-                        r.Categoria == ricorrenzaBase.Categoria &&
-                        r.ID_Professionista == idProfessionista &&
-                        r.Attivo);
+                    bool giàEsiste = db.CostiPersonaliUtente.Any(c =>
+                        c.ID_AnagraficaCostoProfessionista == ID_AnagraficaCostoProfessionista &&
+                        c.ID_Utente == idProfessionista);
 
                     if (giàEsiste)
                         continue;
 
-                    // 🔁 Nuova ricorrenza
-                    var nuovaRicorrenza = new RicorrenzeCosti
-                    {
-                        ID_CostoProfessionista = ricorrenzaBase.ID_CostoProfessionista,
-                        Categoria = ricorrenzaBase.Categoria,
-                        ID_Professione = ricorrenzaBase.ID_Professione,
-                        ID_Professionista = idProfessionista,
-                        Periodicita = ricorrenzaBase.Periodicita,
-                        TipoValore = ricorrenzaBase.TipoValore,
-                        Valore = ricorrenzaBase.Valore,
-                        DataInizio = ricorrenzaBase.DataInizio,
-                        DataFine = ricorrenzaBase.DataFine,
-                        Attivo = true,
-                        ID_UtenteCreatore = idUtenteCorrente,
-                        ID_UtenteUltimaModifica = idUtenteCorrente,
-                        DataCreazione = now,
-                        DataUltimaModifica = now
-                    };
-                    db.RicorrenzeCosti.Add(nuovaRicorrenza);
-                    db.SaveChanges();
+                    decimal importo = ricorrenzaBase?.Valore ?? anagrafica.ImportoBase ?? 0;
 
-                    int numeroVersioneRic = db.RicorrenzeCosti_a
-                        .Count(r => r.IDVersioneRicorrenza == nuovaRicorrenza.ID_Ricorrenza) + 1;
-
-                    db.RicorrenzeCosti_a.Add(new RicorrenzeCosti_a
-                    {
-                        IDVersioneRicorrenza = nuovaRicorrenza.ID_Ricorrenza,
-                        ID_Ricorrenza = nuovaRicorrenza.ID_Ricorrenza,
-                       
-                        Categoria = nuovaRicorrenza.Categoria,
-                        ID_Professione = nuovaRicorrenza.ID_Professione,
-                        ID_Professionista = nuovaRicorrenza.ID_Professionista,
-                        Periodicita = nuovaRicorrenza.Periodicita,
-                        TipoValore = nuovaRicorrenza.TipoValore,
-                        Valore = nuovaRicorrenza.Valore,
-                        DataInizio = nuovaRicorrenza.DataInizio,
-                        DataFine = nuovaRicorrenza.DataFine,
-                        Attivo = true,
-                        ID_UtenteCreatore = idUtenteCorrente,
-                        ID_UtenteUltimaModifica = idUtenteCorrente,
-                        DataCreazione = now,
-                        DataUltimaModifica = now,
-                        DataArchiviazione = now,
-                        ID_UtenteArchiviazione = idUtenteCorrente,
-                        NumeroVersione = numeroVersioneRic,
-                        ModificheTestuali = $"📌 Ricorrenza assegnata al professionista {idProfessionista} da utente {idUtenteCorrente}"
-                    });
-
-                    // ✅ Salvataggio CostiPersonaliUtente
+                    // 🔹 Salvataggio costo personale
                     var costoUtente = new CostiPersonaliUtente
                     {
                         ID_Utente = idProfessionista,
-                        Descrizione = ricorrenzaBase.Categoria,
-                        Importo = ricorrenzaBase.Valore,
+                        Descrizione = anagrafica.Descrizione,
+                        Importo = importo,
                         DataInserimento = now.Date,
                         Approvato = false,
                         ID_UtenteCreatore = idUtenteCorrente,
                         ID_UtenteUltimaModifica = idUtenteCorrente,
                         DataUltimaModifica = now,
-                        ID_AnagraficaCostoProfessionista = ricorrenzaBase.ID_CostoProfessionista
+                        ID_AnagraficaCostoProfessionista = ID_AnagraficaCostoProfessionista
                     };
+
                     db.CostiPersonaliUtente.Add(costoUtente);
                     db.SaveChanges();
 
+                    // 🔹 Archivio costo
                     int numeroVersioneCosto = db.CostiPersonaliUtente_a
                         .Count(v => v.ID_CostoPersonale == costoUtente.ID_CostoPersonale) + 1;
 
@@ -7743,9 +7758,60 @@ namespace SinergiaMvc.Controllers
                         NumeroVersione = numeroVersioneCosto,
                         DataArchiviazione = now,
                         ID_UtenteArchiviazione = idUtenteCorrente,
-                        ModificheTestuali = $"📝 Assegnato costo personale a professionista {idProfessionista} da utente {idUtenteCorrente}",
+                        ModificheTestuali = $"📝 Assegnato costo '{anagrafica.Descrizione}' al professionista {idProfessionista}",
                         ID_AnagraficaCostoProfessionista = costoUtente.ID_AnagraficaCostoProfessionista
                     });
+
+                    // 🔹 Se esiste ricorrenza base → crea ricorrenza per professionista
+                    if (ricorrenzaBase != null)
+                    {
+                        var nuovaRicorrenza = new RicorrenzeCosti
+                        {
+                            ID_CostoProfessionista = ID_AnagraficaCostoProfessionista,
+                            Categoria = ricorrenzaBase.Categoria,
+                            ID_Professione = ricorrenzaBase.ID_Professione,
+                            ID_Professionista = idProfessionista,
+                            Periodicita = ricorrenzaBase.Periodicita,
+                            TipoValore = ricorrenzaBase.TipoValore,
+                            Valore = ricorrenzaBase.Valore,
+                            DataInizio = ricorrenzaBase.DataInizio,
+                            DataFine = ricorrenzaBase.DataFine,
+                            Attivo = true,
+                            ID_UtenteCreatore = idUtenteCorrente,
+                            ID_UtenteUltimaModifica = idUtenteCorrente,
+                            DataCreazione = now,
+                            DataUltimaModifica = now
+                        };
+
+                        db.RicorrenzeCosti.Add(nuovaRicorrenza);
+                        db.SaveChanges();
+
+                        int numeroVersioneRic = db.RicorrenzeCosti_a
+                            .Count(r => r.IDVersioneRicorrenza == nuovaRicorrenza.ID_Ricorrenza) + 1;
+
+                        db.RicorrenzeCosti_a.Add(new RicorrenzeCosti_a
+                        {
+                            IDVersioneRicorrenza = nuovaRicorrenza.ID_Ricorrenza,
+                            ID_Ricorrenza = nuovaRicorrenza.ID_Ricorrenza,
+                            Categoria = nuovaRicorrenza.Categoria,
+                            ID_Professione = nuovaRicorrenza.ID_Professione,
+                            ID_Professionista = nuovaRicorrenza.ID_Professionista,
+                            Periodicita = nuovaRicorrenza.Periodicita,
+                            TipoValore = nuovaRicorrenza.TipoValore,
+                            Valore = nuovaRicorrenza.Valore,
+                            DataInizio = nuovaRicorrenza.DataInizio,
+                            DataFine = nuovaRicorrenza.DataFine,
+                            Attivo = true,
+                            ID_UtenteCreatore = idUtenteCorrente,
+                            ID_UtenteUltimaModifica = idUtenteCorrente,
+                            DataCreazione = now,
+                            DataUltimaModifica = now,
+                            DataArchiviazione = now,
+                            ID_UtenteArchiviazione = idUtenteCorrente,
+                            NumeroVersione = numeroVersioneRic,
+                            ModificheTestuali = $"📌 Ricorrenza assegnata al professionista {idProfessionista}"
+                        });
+                    }
 
                     db.SaveChanges();
                     countNuove++;
@@ -7754,59 +7820,134 @@ namespace SinergiaMvc.Controllers
                 return Json(new
                 {
                     success = true,
-                    message = $"✅ Assegnazione completata ({countNuove} nuove ricorrenze e costi utente)."
+                    message = $"✅ Assegnazione completata ({countNuove} nuovi costi assegnati)."
                 });
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Errore: " + ex.Message });
+                return Json(new
+                {
+                    success = false,
+                    message = "Errore: " + ex.Message
+                });
             }
         }
-
-
-
-
 
         [HttpGet]
         public ActionResult VisualizzaAssegnazioniCosto(int idAnagraficaCosto)
         {
             try
             {
-                var assegnazioni = db.CostiPersonaliUtente
-                    .Where(c => c.ID_AnagraficaCostoProfessionista == idAnagraficaCosto)
-                    .ToList()
-                    .Select(c =>
+                var assegnazioni = new List<object>();
+                var utentiAggiunti = new HashSet<int>();
+
+                var ricorrenze = db.RicorrenzeCosti
+                    .Where(r =>
+                        r.ID_CostoProfessionista == idAnagraficaCosto ||
+                        r.ID_TipoCostoGenerale == idAnagraficaCosto
+                    )
+                    .Where(r => r.Attivo)
+                    .ToList();
+
+                foreach (var r in ricorrenze)
+                {
+                    // 🔹 ricorrenza assegnata a un professionista specifico
+                    if (r.ID_Professionista != null)
                     {
-                        var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == c.ID_Utente);
+                        int idUtente = r.ID_Professionista.Value;
 
-                        // ✅ Ricava importo da ricorrenza attiva
-                        var ricorrenza = db.RicorrenzeCosti
-                        .Where(r =>
-                            r.ID_CostoProfessionista == c.ID_AnagraficaCostoProfessionista &&
-                            r.Categoria == "Costo Professionista" &&
-                            r.Attivo == true)
-                        .OrderByDescending(r => r.DataUltimaModifica)
-                        .FirstOrDefault();
-
-
-                        return new
+                        if (!utentiAggiunti.Contains(idUtente))
                         {
-                            c.ID_CostoPersonale,
-                            c.ID_Utente,
-                            NomeProfessionista = utente != null ? utente.Nome + " " + utente.Cognome : "N/A",
-                            DataAssegnazione = c.DataInserimento.HasValue ? c.DataInserimento.Value.ToString("dd/MM/yyyy") : "",
+                            var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtente);
 
-                            Importo = ricorrenza?.Valore ?? 0
-                        };
-                    });
+                            assegnazioni.Add(new
+                            {
+                                ID_CostoPersonale = 0,
+                                ID_Utente = idUtente,
+                                NomeProfessionista = utente != null
+                                    ? utente.Nome + " " + utente.Cognome
+                                    : "N/A",
+                                DataAssegnazione = r.DataCreazione?.ToString("dd/MM/yyyy"),
+                                Importo = r.Valore
+                            });
+
+                            utentiAggiunti.Add(idUtente);
+                        }
+                    }
+                    else
+                    {
+                        // 🔹 ricorrenza generale
+                        var professionisti = db.OperatoriSinergia
+                             .Where(p =>
+                                 p.TipoCliente == "Professionista" &&
+                                 p.Stato == "Attivo" &&
+                                 p.TipoProfessionista == "Resident")
+                             .ToList();
+
+                        foreach (var p in professionisti)
+                        {
+                            int idUtente = p.ID_UtenteCollegato.Value;
+
+                            if (!utentiAggiunti.Contains(idUtente))
+                            {
+                                assegnazioni.Add(new
+                                {
+                                    ID_CostoPersonale = 0,
+                                    ID_Utente = idUtente,
+                                    NomeProfessionista = p.Nome + " " + p.Cognome,
+                                    DataAssegnazione = r.DataCreazione?.ToString("dd/MM/yyyy"),
+                                    Importo = r.Valore
+                                });
+
+                                utentiAggiunti.Add(idUtente);
+                            }
+                        }
+                    }
+                }
+
+                // fallback costi manuali
+                if (!assegnazioni.Any())
+                {
+                    var manuali = db.CostiPersonaliUtente
+                        .Where(c => c.ID_AnagraficaCostoProfessionista == idAnagraficaCosto)
+                        .ToList();
+
+                    foreach (var c in manuali)
+                    {
+                        int idUtente = c.ID_Utente;
+
+                        if (!utentiAggiunti.Contains(idUtente))
+                        {
+                            var utente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtente);
+
+                            assegnazioni.Add(new
+                            {
+                                ID_CostoPersonale = c.ID_CostoPersonale,
+                                ID_Utente = idUtente,
+                                NomeProfessionista = utente != null
+                                    ? utente.Nome + " " + utente.Cognome
+                                    : "N/A",
+                                DataAssegnazione = c.DataInserimento?.ToString("dd/MM/yyyy"),
+                                Importo = c.Importo
+                            });
+
+                            utentiAggiunti.Add(idUtente);
+                        }
+                    }
+                }
 
                 return Json(new { success = true, assegnazioni }, JsonRequestBehavior.AllowGet);
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Errore durante il recupero delle assegnazioni: " + ex.Message }, JsonRequestBehavior.AllowGet);
+                return Json(new
+                {
+                    success = false,
+                    message = ex.Message
+                }, JsonRequestBehavior.AllowGet);
             }
         }
+
 
         [HttpPost]
         public ActionResult EliminaAssegnazioneCosto(int idCostoPersonaleUtente)
@@ -7856,18 +7997,28 @@ namespace SinergiaMvc.Controllers
             {
                 int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
 
-                // 🔍 Professionisti attivi da OperatoriSinergia
-                var professionisti = db.OperatoriSinergia
-                    .Where(o => o.TipoCliente == "Professionista" && o.Stato == "Attivo")
-                    .ToList();
+                // 🔎 verifico se il costo arriva da TipologieCosti
+                bool costoGenerale = db.TipologieCosti
+                    .Any(t => t.ID_TipoCosto == idCosto);
 
-                // ❌ ID già assegnati
+                var queryProfessionisti = db.OperatoriSinergia
+                    .Where(o => o.TipoCliente == "Professionista" && o.Stato == "Attivo");
+
+                // ✅ solo per costi generali → Resident
+                if (costoGenerale)
+                {
+                    queryProfessionisti = queryProfessionisti
+                        .Where(o => o.TipoProfessionista == "Resident");
+                }
+
+                var professionisti = queryProfessionisti.ToList();
+
+                // ❌ già assegnati
                 var idAssegnati = db.CostiPersonaliUtente
                     .Where(c => c.ID_AnagraficaCostoProfessionista == idCosto)
                     .Select(c => c.ID_Utente)
                     .ToList();
 
-                // 🔍 Filtro SENZA Contains → usando !Any()
                 var disponibili = professionisti
                     .Where(p => !idAssegnati.Any(a => a == p.ID_UtenteCollegato))
                     .Select(p => new
@@ -8996,24 +9147,17 @@ namespace SinergiaMvc.Controllers
             // Filtro stato
             if (!string.IsNullOrEmpty(stato))
             {
-                if (stato == "Da Generare")
-                    query = query.Where(c => c.Approvato == null);
-                else if (stato == "Generati")
-                    query = query.Where(c => c.Approvato == true);
-                else if (stato == "Pagati")
-                    query = query.Where(c => c.Approvato == false);
+                query = query.Where(c => c.Stato == stato);
             }
 
             // Mostra bottone "Esegui pagamento costi mensili" solo se ci sono costi previsionali non pagati
             var inizioMese = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             var fineMese = inizioMese.AddMonths(1);
 
-            bool mostraPagamentoManuale = db.GenerazioneCosti.Any(c =>
-                c.Approvato == false &&
-                c.Stato == "Previsionale" &&
-                c.DataRegistrazione >= inizioMese &&
-                c.DataRegistrazione < fineMese
-            );
+            bool mostraPagamentoManuale = query.Any(c =>
+                  (c.Stato == "Previsionale" || c.Stato == "Autorizzato")
+                  && c.Importo > 0
+              );
 
             ViewBag.MostraPagamentoManuale = mostraPagamentoManuale;
 
@@ -9032,7 +9176,7 @@ namespace SinergiaMvc.Controllers
                              Periodicita = c.Periodicita,
                              DataRegistrazione = c.DataRegistrazione,
                              Origine = c.Origine,
-                             Stato = c.Approvato == true ? "Pagato" : (c.Approvato == false ? "Previsionale" : "Da generare"),
+                             Stato = c.Stato,
                              NomeProfessionista = c.Categoria == "Costo Generale"
                                  ? (from os in db.OperatoriSinergia
                                     where os.ID_UtenteCollegato == c.ID_Utente && os.TipoCliente == "Professionista"
@@ -9156,6 +9300,48 @@ namespace SinergiaMvc.Controllers
 
 
         [HttpGet]
+        public JsonResult GetCostiPagabili(int idProfessionista)
+        {
+            try
+            {
+                if (idProfessionista <= 0)
+                    return Json(new { success = false, message = "ID non valido." }, JsonRequestBehavior.AllowGet);
+
+                var costi = db.GenerazioneCosti
+                    .Where(c =>
+                        c.ID_Utente == idProfessionista &&
+                        c.Stato != "Pagato" &&
+                        (c.Importo ?? 0) > 0
+                    )
+                    .Select(c => new
+                    {
+                        c.ID_GenerazioneCosto,
+                        c.Descrizione,
+                        Importo = c.Importo ?? 0,
+                        c.Origine,
+                        c.Categoria,
+                        c.Periodicita,
+                        c.DataRegistrazione   // 🔥 QUESTA MANCAVA
+                    })
+                    .ToList();
+
+                return Json(new
+                {
+                    success = true,
+                    costi = costi
+                }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = ex.Message
+                }, JsonRequestBehavior.AllowGet);
+            }
+        }
+
+        [HttpGet]
         public JsonResult GetDettaglioCosto(int? id)
         {
             try
@@ -9249,7 +9435,7 @@ namespace SinergiaMvc.Controllers
         }
 
         [HttpPost]
-        public ActionResult EseguiPagamentoCostiAutomatico(int idProfessionista)
+        public ActionResult EseguiPagamentoCostiAutomatico(int idProfessionista, List<int> idCosti)
         {
             try
             {
@@ -9258,8 +9444,12 @@ namespace SinergiaMvc.Controllers
                     return Json(new { success = false, messaggio = "ID professionista non valido." });
                 }
 
-                // 🔁 Ora il metodo restituisce un RisultatoPagamento
-                var risultato = CostiHelper.VerificaPagamentoConPlafondSingolo(idProfessionista);
+                if (idCosti == null || !idCosti.Any())
+                {
+                    return Json(new { success = false, messaggio = "Nessun costo selezionato." });
+                }
+
+                var risultato = CostiHelper.PagaCostiSelezionati(idProfessionista, idCosti);
 
                 return Json(new
                 {
@@ -9278,10 +9468,6 @@ namespace SinergiaMvc.Controllers
                 });
             }
         }
-
-
-
-
 
 
         // GESTIONE ECCEZIONI 
@@ -10157,11 +10343,25 @@ namespace SinergiaMvc.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new
-                {
-                    success = false,
-                    message = "❌ Errore durante il caricamento del plafond: " + ex.Message
-                }, JsonRequestBehavior.AllowGet);
+                var errore = $@"
+<div style='background:#2b2b2b;color:#fff;padding:20px;font-family:consolas'>
+<h2 style='color:#ff6b6b'>🚨 ERRORE MVC</h2>
+
+<b>Tipo:</b><br/>
+{ex.GetType().FullName}<br/><br/>
+
+<b>Messaggio:</b><br/>
+{ex.Message}<br/><br/>
+
+<b>Inner:</b><br/>
+{ex.InnerException?.Message ?? "Nessuna"}<br/><br/>
+
+<b>StackTrace:</b><br/>
+<pre>{ex.StackTrace}</pre>
+
+</div>";
+
+                return Content(errore, "text/html");
             }
         }
 
@@ -14728,7 +14928,165 @@ td, th {
             };
         }
 
-    
+        public ActionResult GeneraSnapshotAvvisiParcellaStorici()
+        {
+            try
+            {
+                var avvisiIds = db.AvvisiParcella
+                    .Select(a => a.ID_AvvisoParcelle)
+                    .ToList();
+
+                int count = 0;
+
+                foreach (var id in avvisiIds)
+                {
+                    bool esiste = db.SnapshotModali
+                        .Any(s => s.ID_AvvisoParcella == id);
+
+                    if (esiste)
+                        continue;
+
+                    var avviso = db.AvvisiParcella
+                        .FirstOrDefault(a => a.ID_AvvisoParcelle == id);
+
+                    if (avviso == null)
+                        continue;
+
+                    // =========================
+                    // pratica collegata
+                    // =========================
+
+                    var pratica = db.Pratiche
+                        .Where(p => p.ID_Pratiche == avviso.ID_Pratiche)
+                        .Select(p => new
+                        {
+                            p.ID_Pratiche,
+                            p.Titolo,
+                            p.AnnoProgressivo,
+                            p.ProgressivoAnno
+                        })
+                        .FirstOrDefault();
+
+                    // =========================
+                    // compenso collegato
+                    // =========================
+
+                    var compenso = avviso.ID_CompensoOrigine.HasValue
+                        ? db.CompensiPraticaDettaglio
+                            .Where(c => c.ID_RigaCompenso == avviso.ID_CompensoOrigine.Value)
+                            .Select(c => new
+                            {
+                                c.ID_RigaCompenso,
+                                c.Descrizione,
+                                c.TipoCompenso,
+                                c.Importo,
+                                c.ValoreStimato
+                            })
+                            .FirstOrDefault()
+                        : null;
+
+                    // =========================
+                    // incassi collegati
+                    // =========================
+
+                    var incassi = db.Incassi
+                        .Where(i => i.ID_AvvisoParcella == id)
+                        .Select(i => new
+                        {
+                            i.ID_Incasso,
+                            i.Importo,
+                            i.ImportoNetto,
+                            i.DataIncasso,
+                            i.StatoIncasso
+                        })
+                        .ToList();
+
+                    // =========================
+                    // documenti collegati
+                    // =========================
+
+                    var documenti = db.DocumentiPratiche
+                        .Where(d =>
+                            d.ID_RiferimentoAvvisoParcella == id &&
+                            d.CategoriaDocumento == "Avviso Parcella")
+                        .Select(d => new
+                        {
+                            d.ID_Documento,
+                            d.NomeFile,
+                            d.Estensione,
+                            d.Stato,
+                            d.DataCaricamento
+                        })
+                        .ToList();
+
+                    // =========================
+                    // snapshot dati
+                    // =========================
+
+                    var snapshot = new
+                    {
+                        avviso.ID_AvvisoParcelle,
+                        avviso.TitoloAvviso,
+                        avviso.ID_Pratiche,
+                        pratica,
+
+                        avviso.DataAvviso,
+                        avviso.DataInvio,
+                        avviso.DataCompetenzaEconomica,
+
+                        avviso.Importo,
+                        avviso.ImportoAcconto,
+                        avviso.TotaleAvvisiParcella,
+
+                        avviso.ContributoIntegrativoPercentuale,
+                        avviso.ContributoIntegrativoImporto,
+
+                        avviso.AliquotaIVA,
+                        avviso.ImportoIVA,
+
+                        avviso.RimborsoSpesePercentuale,
+                        avviso.ImportoRimborsoSpese,
+
+                        avviso.TipologiaAvviso,
+                        avviso.RegimeFiscale,
+                        avviso.FaseGiudiziale,
+
+                        avviso.MetodoPagamento,
+                        avviso.Note,
+                        avviso.Stato,
+
+                        avviso.ID_ResponsabilePratica,
+                        avviso.ID_OwnerCliente,
+
+                        compenso,
+                        incassi,
+                        documenti
+                    };
+
+                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(snapshot);
+
+                    db.SnapshotModali.Add(new SnapshotModali
+                    {
+                        Tipo = "AvvisoParcella",
+                        ID_AvvisoParcella = id,
+                        HtmlSnapshot = json,
+                        DataCreazione = DateTime.Now
+                    });
+
+                    count++;
+                }
+
+                db.SaveChanges();
+
+                return Content($"Snapshot avvisi parcella creati: {count}");
+            }
+            catch (Exception ex)
+            {
+                return Content(ex.ToString());
+            }
+        }
+
+
         #endregion
 
         #region REGISTRAZIONE INCASSI 
@@ -16534,6 +16892,110 @@ td, th {
         }
 
 
+        public ActionResult GeneraSnapshotIncassiStorici()
+        {
+            try
+            {
+                var incassiIds = db.Incassi
+                    .Select(i => i.ID_Incasso)
+                    .ToList();
+
+                int count = 0;
+
+                foreach (var id in incassiIds)
+                {
+                    bool esiste = db.SnapshotModali
+                        .Any(s => s.ID_Incasso == id);
+
+                    if (esiste)
+                        continue;
+
+                    var incasso = db.Incassi
+                        .FirstOrDefault(i => i.ID_Incasso == id);
+
+                    if (incasso == null)
+                        continue;
+
+                    // =========================
+                    // avviso collegato
+                    // =========================
+
+                    var avviso = db.AvvisiParcella
+                        .Where(a => a.ID_AvvisoParcelle == incasso.ID_AvvisoParcella)
+                        .Select(a => new
+                        {
+                            a.ID_AvvisoParcelle,
+                            a.TitoloAvviso,
+                            a.Importo,
+                            a.ImportoIVA,
+                            a.ContributoIntegrativoImporto,
+                            a.TotaleAvvisiParcella,
+                            a.ID_Pratiche
+                        })
+                        .FirstOrDefault();
+
+                    // =========================
+                    // pratica collegata
+                    // =========================
+
+                    var pratica = db.Pratiche
+                        .Where(p => p.ID_Pratiche == incasso.ID_Pratiche)
+                        .Select(p => new
+                        {
+                            p.ID_Pratiche,
+                            p.Titolo,
+                            p.AnnoProgressivo,
+                            p.ProgressivoAnno
+                        })
+                        .FirstOrDefault();
+
+                    // =========================
+                    // snapshot dati
+                    // =========================
+
+                    var snapshot = new
+                    {
+                        incasso.ID_Incasso,
+                        incasso.ID_AvvisoParcella,
+                        incasso.ID_Pratiche,
+
+                        incasso.DataIncasso,
+                        incasso.DataCompetenzaEconomica,
+                        incasso.DataCompetenzaFinanziaria,
+
+                        incasso.Importo,
+                        incasso.ImportoNetto,
+                        incasso.ModalitaPagamento,
+                        incasso.VersaInPlafond,
+                        incasso.Note,
+                        incasso.StatoIncasso,
+
+                        avviso,
+                        pratica
+                    };
+
+                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(snapshot);
+
+                    db.SnapshotModali.Add(new SnapshotModali
+                    {
+                        Tipo = "Incasso",
+                        ID_Incasso = id,
+                        HtmlSnapshot = json,
+                        DataCreazione = DateTime.Now
+                    });
+
+                    count++;
+                }
+
+                db.SaveChanges();
+
+                return Content($"Snapshot incassi creati: {count}");
+            }
+            catch (Exception ex)
+            {
+                return Content(ex.ToString());
+            }
+        }
 
 
         /* ex versa utile in plafond non serve commentato in data 15/7/2025 */

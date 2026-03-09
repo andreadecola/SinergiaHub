@@ -43,9 +43,9 @@
         </button>
 
         @*<button type="submit" formaction="@Url.Action("EsportaIncassiPdf", "Pratiche")"
-                class="btn btn-outline-danger btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
-            <i class="bi bi-file-earmark-pdf"></i> PDF
-        </button>*@
+                    class="btn btn-outline-danger btn-sm" style="padding: 0.25rem 1rem; font-size: 0.8rem; line-height: 1.2; height: auto;">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>*@
     </form>
 </div>
 
@@ -109,52 +109,93 @@
                                 break;
                         }
 
-            <tr class="@(stato == "Pagato" ? "table-success" :
+                        <tr class="@(stato == "Pagato" ? "table-success" :
               stato == "Parziale" ? "table-info" :
               stato == "Da incassare" ? "table-warning" :
               "table-light")"
-                data-id="@i.ID_Incasso"
-                data-incasso="@(i.DataIncasso.HasValue
+                            data-id="@i.ID_Incasso"
+                            data-incasso="@(i.DataIncasso.HasValue
                 ? i.DataIncasso.Value.ToString("yyyy-MM-dd")
                 : "")">
 
-                <td class="text-center">
-                    <span class="badge bg-light text-dark border">
-                        @i.CodicePratica
-                    </span>
-                </td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrWhiteSpace(i.CodicePratica) && i.ID_Pratiche > 0)
+                                {
+                                    <a href="javascript:void(0)"
+                                       onclick="apriSnapshot('PRATICA', @i.ID_Pratiche)"
+                                       class="badge bg-light text-dark border text-decoration-none">
 
-                <td class="fw-semibold">
-                    @i.NomePratica
-                </td>
+                                        @i.CodicePratica
 
-                <td>
-                    @(i.TitoloAvviso ?? "-")
-                </td>
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
 
-                <td>@(i.DataCompetenza?.ToString("dd/MM/yyyy") ?? "-")</td>
-                <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
-                <td class="text-end"> @(i.Importo.ToString("C") ?? "-")</td>
-                <td>@(i.VersaInPlafond == true ? "Sì" : "No")</td>
-                <td class="text-center">
-                    <span class="@statoClasse">@statoBadge</span>
-                </td>
+                            <td class="fw-semibold">
 
-                @if (mostraAzioni)
-                {
-                    <td class="text-center">
-                        @Html.Partial(
-                            "~/Views/Incassi/_AzioniIncasso.cshtml",
-                            i,
-                            new ViewDataDictionary {
-                                { "PuoModificare", ViewBag.PuoModificare },
-                                { "PuoEliminare", ViewBag.PuoEliminare },
-                                { "TipoUtente", ViewBag.TipoUtente }
+                                @if (i.ID_Pratiche > 0)
+                                {
+                                    <a href="javascript:void(0)"
+                                       class="text-decoration-none"
+                                       onclick="apriSnapshot('PRATICA', @i.ID_Pratiche)">
+
+                                        @i.NomePratica
+
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+
+                            </td>
+
+                            <td>
+
+                                @if (i.ID_AvvisoParcella > 0)
+                                {
+                                    <a href="javascript:void(0)"
+                                       class="text-decoration-none"
+                                       onclick="apriSnapshot('AVVISO', @i.ID_AvvisoParcella)">
+
+                                        @(i.TitoloAvviso ?? "-")
+
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+
+                            </td>
+
+                            <td>@(i.DataCompetenza?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td>@(i.DataIncasso?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td class="text-end"> @(i.Importo.ToString("C") ?? "-")</td>
+                            <td>@(i.VersaInPlafond == true ? "Sì" : "No")</td>
+                            <td class="text-center">
+                                <span class="@statoClasse">@statoBadge</span>
+                            </td>
+
+                            @if (mostraAzioni)
+                            {
+                                <td class="text-center">
+                                    @Html.Partial(
+                                        "~/Views/Incassi/_AzioniIncasso.cshtml",
+                                        i,
+                                        new ViewDataDictionary {
+                                            { "PuoModificare", ViewBag.PuoModificare },
+                                            { "PuoEliminare", ViewBag.PuoEliminare },
+                                            { "TipoUtente", ViewBag.TipoUtente }
+                                        }
+                                    )
+                                </td>
                             }
-                        )
-                    </td>
-                }
-            </tr>
+                        </tr>
 
                         index++;
                     }
@@ -212,16 +253,58 @@
 
                     <div>
                         <div class="fw-bold text-primary">
-                            @i.NomePratica
+
+                            @if (i.ID_Pratiche > 0)
+                            {
+                                <a href="javascript:void(0)"
+                                   class="text-decoration-none text-primary"
+                                   onclick="apriSnapshot('PRATICA', @i.ID_Pratiche)">
+
+                                    @i.NomePratica
+
+                                </a>
+                            }
+                            else
+                            {
+                                <span>@i.NomePratica</span>
+                            }
+
                         </div>
 
                         <div class="small text-muted">
-                            Codice: <span class="fw-semibold">@i.CodicePratica</span>
+                            Codice:
+                            @if (!string.IsNullOrWhiteSpace(i.CodicePratica) && i.ID_Pratiche > 0)
+                            {
+                                <a href="javascript:void(0)"
+                                   onclick="apriSnapshot('PRATICA', @i.ID_Pratiche)"
+                                   class="fw-semibold text-decoration-none">
+
+                                    @i.CodicePratica
+
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
                         </div>
 
-                        <div class="small">
-                            <strong>Avviso:</strong> @(i.TitoloAvviso ?? "-")
-                        </div>
+                        <strong>Avviso:</strong>
+
+                        @if (i.ID_AvvisoParcella > 0)
+                        {
+                            <a href="javascript:void(0)"
+                               class="text-decoration-none"
+                               onclick="apriSnapshot('AVVISO', @i.ID_AvvisoParcella)">
+
+                                @(i.TitoloAvviso ?? "-")
+
+                            </a>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
                     </div>
 
                     <span class="@statoClasse">
@@ -261,9 +344,9 @@
                     </div>
                 }
             </div>
-                            }
-                        }
-                    </div>
+        }
+    }
+</div>
 
 
 <!-- 🔄 Paginazione -->
@@ -539,6 +622,701 @@
 </div>
 
 
+
+@*MI RAPPRESENTA IL DETTAGLIO DELLA PRATICA AVVISO PARCELLA E INCASSO*@
+<div id="snapshotContainer" class="card p-4 mt-3"></div>
+
+<div class="modal fade" id="globalSnapshotModal" tabindex="-1">
+
+    <div class="modal-dialog modal-xl">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <h5 class="modal-title" id="snapshotTitle">
+                    Snapshot
+                </h5>
+
+                <button class="btn-close" data-bs-dismiss="modal"></button>
+
+            </div>
+
+            <div class="modal-body" id="snapshotBody">
+
+                <div class="text-center p-4">
+                    Caricamento...
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+    function apriSnapshot(tipo, id) {
+
+        const modalElement = document.getElementById("globalSnapshotModal");
+        const modal = new bootstrap.Modal(modalElement);
+
+        const body = document.getElementById("snapshotBody");
+        const title = document.getElementById("snapshotTitle");
+
+        body.innerHTML = "Caricamento snapshot...";
+
+        modal.show();
+
+        fetch('/Snapshot/GetSnapshot?tipo=' + tipo + '&id=' + id)
+
+            .then(r => r.json())
+
+            .then(data => {
+
+                if (!data.success) {
+
+                    body.innerHTML =
+                        "<div class='alert alert-warning'>Snapshot non disponibile</div>";
+
+                    return;
+                }
+
+                const snap = JSON.parse(data.snapshot);
+
+                if (tipo === "PRATICA") {
+
+                    title.innerText = "Snapshot Pratica";
+
+                    renderSnapshotPratica(snap);
+
+                }
+
+                if (tipo === "AVVISO") {
+
+                    title.innerText = "Snapshot Avviso Parcella";
+
+                    renderSnapshotAvviso(snap);
+
+                }
+
+                if (tipo === "INCASSO") {
+
+                    title.innerText = "Snapshot Incasso";
+
+                    renderSnapshotIncasso(snap);
+
+                }
+
+            })
+
+            .catch(err => {
+
+                console.error(err);
+
+                body.innerHTML =
+                    "<div class='alert alert-danger'>Errore caricamento snapshot</div>";
+
+            });
+    }
+
+    function renderSnapshotPratica(p) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+            <div class="col-md-4 mb-2">
+                <small class="text-muted">${label}</small>
+                <div class="fw-semibold">${value ?? "-"}</div>
+            </div>`;
+        }
+
+        let html = `
+                <div class="container-fluid">
+
+                    <!-- CARD DATI PRATICA -->
+                    <div class="card shadow-sm mb-3">
+
+                        <div class="card-header bg-light fw-bold">
+                            <i class="bi bi-folder2-open"></i> Dati pratica
+                        </div>
+
+                        <div class="card-body">
+
+                            <div class="row">
+
+                                ${field("Titolo", p.Titolo)}
+                                ${field("Tipologia", p.Tipologia)}
+                                ${field("Oggetto", p.OggettoPratica)}
+                                ${field("Stato", `<span class="badge bg-primary">${p.Stato ?? "-"}</span>`)}
+                                ${field("Data Inizio Attività", formatDate(p.DataInizioAttivitaStimata))}
+                                ${field("Data Fine Attività", formatDate(p.DataFineAttivitaStimata))}
+                                ${field("Budget", `<span class="fw-bold text-success">${(p.Budget || 0)} €</span>`)}
+
+                            </div>
+
+                        </div>
+
+                    </div>
+                `;
+
+        // ======================
+        // COMPENSI
+        // ======================
+
+        if (p.compensi?.length) {
+
+            html += `
+                <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                        <i class="bi bi-cash-stack"></i> Compensi
+                    </div>
+
+                    <div class="card-body p-0">
+
+                        <table class="table table-hover mb-0">
+
+                        <thead class="table-light">
+                            <tr>
+                                <th>Descrizione</th>
+                                <th style="width:120px">Tipo</th>
+                                <th style="width:150px">Categoria</th>
+                                <th class="text-end" style="width:120px">Importo</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                `;
+
+            p.compensi.forEach(c => {
+
+                html += `
+                    <tr>
+                        <td>${c.Descrizione ?? "-"}</td>
+
+                        <td>
+                            <span class="badge bg-secondary">
+                                ${c.TipoCompenso ?? "-"}
+                            </span>
+                        </td>
+
+                        <td>${c.Categoria ?? "-"}</td>
+
+                        <td class="text-end fw-bold text-success">
+                            ${c.Importo ?? 0} €
+                        </td>
+                    </tr>
+                    `;
+            });
+
+            html += `
+                    </tbody>
+                    </table>
+
+                        </div>
+
+                    </div>
+                    `;
+        }
+
+        // ======================
+        // UTENTI ASSOCIATI
+        // ======================
+
+        if (p.utentiAssociati?.length) {
+
+            html += `
+                    <div class="card shadow-sm mb-3">
+
+                        <div class="card-header bg-light fw-bold">
+                            <i class="bi bi-people"></i> Utenti associati
+                        </div>
+
+                        <div class="list-group list-group-flush">
+                    `;
+
+            p.utentiAssociati.forEach(u => {
+
+                const nome = u.Nome ? u.Nome : ("Utente ID: " + u.ID_Utente);
+
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+
+                        <div>
+                            <i class="bi bi-person-circle me-1"></i>
+                            ${nome}
+                        </div>
+
+                        <span class="badge bg-info text-dark">
+                            ${u.Ruolo ?? "-"}
+                        </span>
+
+                    </div>
+                    `;
+            });
+
+            html += `</div></div>`;
+        }
+
+
+        // ======================
+        // DOCUMENTI INCARICO
+        // ======================
+
+        if (p.incarichi?.length) {
+
+            html += `
+                    <div class="card shadow-sm">
+
+                        <div class="card-header bg-light fw-bold">
+                            <i class="bi bi-file-earmark-text"></i> Documenti incarico
+                        </div>
+
+                        <div class="card-body p-0">
+
+                            <table class="table table-sm table-hover mb-0">
+
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Documento</th>
+                                    <th style="width:150px">Stato</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                    `;
+
+            p.incarichi.forEach(d => {
+
+                const badge =
+                    d.Stato === "Firmato"
+                        ? "bg-success"
+                        : "bg-secondary";
+
+                html += `
+                    <tr>
+
+                        <td>
+                            <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                            ${d.NomeFile}
+                        </td>
+
+                        <td>
+                            <span class="badge ${badge}">
+                                ${d.Stato}
+                            </span>
+                        </td>
+
+                    </tr>
+                    `;
+            });
+
+            html += `
+                            </tbody>
+                            </table>
+
+                        </div>
+
+                    </div>
+                    `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function renderSnapshotAvviso(a) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+            <div class="col-md-6 mb-2">
+                <small class="text-muted">${label}</small>
+                <div class="fw-semibold">${value ?? "-"}</div>
+            </div>`;
+        }
+
+        let html = `
+                    <div class="container-fluid">
+
+                    <!-- ============================= -->
+                    <!-- DATI AVVISO -->
+                    <!-- ============================= -->
+
+                    <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-receipt"></i> Avviso Parcella
+                    </div>
+
+                    <div class="card-body">
+
+                    <div class="row">
+
+                    ${field("Titolo Avviso", a.TitoloAvviso)}
+                    ${field("Pratica", a.pratica?.Titolo)}
+
+                    ${field("Anno pratica", a.pratica?.AnnoProgressivo)}
+                    ${field("Numero pratica", a.pratica?.ProgressivoAnno)}
+
+                    ${field("Data Avviso", formatDate(a.DataAvviso))}
+                    ${field("Data Invio", formatDate(a.DataInvio))}
+
+                    ${field("Competenza Economica", formatDate(a.DataCompetenzaEconomica))}
+
+                    ${field("Stato", `<span class="badge bg-primary">${a.Stato ?? "-"}</span>`)}
+
+                    ${field("Tipologia Avviso", a.TipologiaAvviso)}
+                    ${field("Regime Fiscale", a.RegimeFiscale)}
+
+                    ${field("Metodo Pagamento", a.MetodoPagamento)}
+
+                    ${field("Importo", `<span class="text-success fw-bold">${a.Importo || 0} €</span>`)}
+
+                    ${field("Acconto", (a.ImportoAcconto || 0) + " €")}
+
+                    ${field("Totale Avviso", `<span class="fw-bold text-primary">${a.TotaleAvvisiParcella || 0} €</span>`)}
+
+                    </div>
+
+                    </div>
+                    </div>
+                    `;
+
+        // =============================
+        // RIEPILOGO FISCALE (compatto)
+        // =============================
+
+        html += `
+                    <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-calculator"></i> Riepilogo fiscale
+                    </div>
+
+                    <div class="card-body p-0">
+
+                    <table class="table table-sm table-striped mb-0">
+
+                    <tbody>
+
+                    <tr>
+                    <td>Spese Generali</td>
+                    <td>${a.RimborsoSpesePercentuale || 0}%</td>
+                    <td class="text-end">${a.ImportoRimborsoSpese || 0} €</td>
+                    </tr>
+
+                    <tr>
+                    <td>Contributo Integrativo</td>
+                    <td>${a.ContributoIntegrativoPercentuale || 0}%</td>
+                    <td class="text-end">${a.ContributoIntegrativoImporto || 0} €</td>
+                    </tr>
+
+                    <tr>
+                    <td>IVA</td>
+                    <td>${a.AliquotaIVA || 0}%</td>
+                    <td class="text-end">${a.ImportoIVA || 0} €</td>
+                    </tr>
+
+                    </tbody>
+                    </table>
+
+                    </div>
+                    </div>
+                    `;
+
+        // =============================
+        // COMPENSO
+        // =============================
+
+        if (a.compenso) {
+
+            html += `
+                    <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-cash-stack"></i> Compenso
+                    </div>
+
+                    <div class="card-body p-0">
+
+                    <table class="table table-sm table-hover mb-0">
+
+                    <thead class="table-light">
+                    <tr>
+                    <th>Descrizione</th>
+                    <th style="width:120px">Tipo</th>
+                    <th class="text-end" style="width:120px">Importo</th>
+                    </tr>
+                    </thead>
+
+                    <tbody>
+
+                    <tr>
+                    <td>${a.compenso.Descrizione ?? "-"}</td>
+                    <td>
+                    <span class="badge bg-secondary">
+                    ${a.compenso.TipoCompenso ?? "-"}
+                    </span>
+                    </td>
+                    <td class="text-end fw-bold text-success">
+                    ${a.compenso.Importo ?? 0} €
+                    </td>
+                    </tr>
+
+                    </tbody>
+                    </table>
+
+                    </div>
+                    </div>
+                    `;
+        }
+
+        // =============================
+        // INCASSI
+        // =============================
+
+        if (a.incassi?.length) {
+
+            html += `
+                    <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-cash"></i> Incassi
+                    </div>
+
+                    <div class="card-body p-0">
+
+                    <table class="table table-sm table-hover mb-0">
+
+                    <thead class="table-light">
+                    <tr>
+                    <th>Data</th>
+                    <th class="text-end">Importo</th>
+                    </tr>
+                    </thead>
+
+                    <tbody>
+                    `;
+
+            a.incassi.forEach(i => {
+
+                html += `
+                    <tr>
+                    <td>${formatDate(i.DataIncasso)}</td>
+                    <td class="text-end fw-bold text-success">
+                    ${i.Importo ?? 0} €
+                    </td>
+                    </tr>
+                    `;
+            });
+
+            html += `
+                    </tbody>
+                    </table>
+
+                    </div>
+                    </div>
+                    `;
+        }
+
+        // =============================
+        // DOCUMENTI
+        // =============================
+
+        if (a.documenti?.length) {
+
+            html += `
+                        <div class="card shadow-sm">
+
+                        <div class="card-header bg-light fw-bold">
+                        <i class="bi bi-file-earmark-text"></i> Documenti
+                        </div>
+
+                        <div class="list-group list-group-flush">
+                        `;
+
+            a.documenti.forEach(d => {
+
+                html += `
+                        <div class="list-group-item d-flex justify-content-between">
+
+                        <span>
+                        <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                        ${d.NomeFile}
+                        </span>
+
+                        <span class="badge bg-secondary">
+                        ${d.Stato ?? "-"}
+                        </span>
+
+                        </div>
+                        `;
+            });
+
+            html += `
+                        </div>
+                        </div>
+                        `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function renderSnapshotIncasso(i) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+                <div class="col-md-6 mb-2">
+                    <small class="text-muted">${label}</small>
+                    <div class="fw-semibold">${value ?? "-"}</div>
+                </div>`;
+        }
+
+        let html = `
+                <div class="container-fluid">
+
+                <!-- ========================= -->
+                <!-- DATI INCASSO -->
+                <!-- ========================= -->
+
+                <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-cash-stack"></i> Incasso
+                </div>
+
+                <div class="card-body">
+
+                <div class="row">
+
+                ${field("Pratica", i.pratica?.Titolo)}
+                ${field("Titolo Avviso", i.avviso?.TitoloAvviso)}
+
+                ${field("Anno pratica", i.pratica?.AnnoProgressivo)}
+                ${field("Numero pratica", i.pratica?.ProgressivoAnno)}
+
+                ${field("Data Incasso", formatDate(i.DataIncasso))}
+                ${field("Competenza Economica", formatDate(i.DataCompetenzaEconomica))}
+
+                ${field("Competenza Finanziaria", formatDate(i.DataCompetenzaFinanziaria))}
+
+                ${field("Stato Incasso",
+            `<span class="badge bg-success">${i.StatoIncasso ?? "-"}</span>`)}
+
+                ${field("Versa in Plafond",
+                i.VersaInPlafond
+                    ? `<span class="badge bg-info text-dark">Si</span>`
+                    : `<span class="badge bg-secondary">No</span>`)}
+
+                ${field("Modalità pagamento", i.ModalitaPagamento)}
+
+                ${field("Importo Incasso",
+                        `<span class="fw-bold text-success">${i.Importo || 0} €</span>`)}
+
+                ${field("Importo Netto",
+                            `<span class="fw-bold text-primary">${i.ImportoNetto || 0} €</span>`)}
+
+                </div>
+
+                </div>
+                </div>
+                `;
+
+        // =========================
+        // AVVISO COLLEGATO
+        // =========================
+
+        if (i.avviso) {
+
+            html += `
+                <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-receipt"></i> Avviso Parcella
+                </div>
+
+                <div class="card-body p-0">
+
+                <table class="table table-sm table-hover mb-0">
+
+                <thead class="table-light">
+                <tr>
+                <th>Compenso</th>
+                <th>Contributo</th>
+                <th>IVA</th>
+                <th class="text-end">Totale Avviso</th>
+                </tr>
+                </thead>
+
+                <tbody>
+
+                <tr>
+                <td>${i.avviso.Importo ?? 0} €</td>
+                <td>${i.avviso.ContributoIntegrativoImporto ?? 0} €</td>
+                <td>${i.avviso.ImportoIVA ?? 0} €</td>
+                <td class="text-end fw-bold text-primary">
+                ${i.avviso.TotaleAvvisiParcella ?? 0} €
+                </td>
+                </tr>
+
+                </tbody>
+                </table>
+
+                </div>
+                </div>
+                `;
+        }
+
+
+        // =========================
+        // NOTE
+        // =========================
+
+        if (i.Note) {
+
+            html += `
+                <div class="card shadow-sm">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-chat-left-text"></i> Note
+                </div>
+
+                <div class="card-body">
+
+                <div class="alert alert-light border mb-0">
+                ${i.Note}
+                </div>
+
+                </div>
+                </div>
+                `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function formatDate(dateString) {
+
+        if (!dateString) return "-";
+
+        const d = new Date(dateString);
+
+        return d.toLocaleDateString("it-IT");
+    }
+</script>
+
 <script>
     // 🔁 VARIABILI GLOBALI
     let idIncassoDaEliminare = 0;
@@ -713,7 +1491,7 @@
                 // ============================================================
                 // 🧾 RIEPILOGO CALCOLO TESTUALE (NUOVA LOGICA)
                 // ============================================================
-                 let riepilogo = `
+                let riepilogo = `
                     📘 <b>Calcolo del netto professionista:</b><br>
 
                     <b>${avv.ImportoImponibile.toFixed(2)} €</b> (Base imponibile)
@@ -723,16 +1501,13 @@
                     <br>+ <b>${avv.SpeseGeneraliImporto.toFixed(2)} €</b> (Spese generali)
                     − <b>${avv.ContributoIntegrativoImporto.toFixed(2)} €</b> (Contributo integrativo)
                     ${avv.StessoProfessionista
-                                            ? `<br>− <b>0.00 €</b> (Quota owner — partita di giro)`
-                                            : `<br>− <b>${avv.QuotaOwner.toFixed(2)} €</b> (Quota owner)`
-                                        }
+                        ? `<br>− <b>0.00 €</b> (Quota owner — partita di giro)`
+                        : `<br>− <b>${avv.QuotaOwner.toFixed(2)} €</b> (Quota owner)`
+                    }
 
                     <br>= <b>${avv.ImportoNettoFinale.toFixed(2)} €</b> (Netto professionista)
 
-                    <br><br><small class="text-muted">
-                    ℹ️ Di questo netto, <b>${accantonamentoPlafond.toFixed(2)} €</b> verranno accantonati automaticamente nel tuo plafond
-                    per coprire i costi futuri. L’importo restante resta immediatamente disponibile.
-                    </small>`;
+                 `;
 
 
                 if (collabCluster.length > 0) {
@@ -769,16 +1544,15 @@
                     + ${safeNumber(avv.SpeseGeneraliImporto).toFixed(2)} € (Spese generali)
                     − ${contributo.toFixed(2)} € (Contributo integrativo)
                     ${avv.StessoProfessionista
-                                            ? `− 0.00 € (Quota owner — partita di giro)`
-                                            : `− ${quotaOwner.toFixed(2)} € (Quota owner)`
-                                        }
+                        ? `− 0.00 € (Quota owner — partita di giro)`
+                        : `− ${quotaOwner.toFixed(2)} € (Quota owner)`
+                    }
                     (${trattenuta.toFixed(2)} € Trattenuta Sinergia già sottratta)
                     − ${totaleCluster.toFixed(2)} € (Collaboratori Cluster)
                     − ${totaleDettaglio.toFixed(2)} € (Collaboratori Dettaglio)
                     <br>= <b class="text-success">${nettoFinale.toFixed(2)} €</b> (Netto professionista)
                     <br><small class="text-muted">
-                    ↳ Di questo importo, <b>${accantonamentoPlafond.toFixed(2)} €</b> verranno accantonati automaticamente nel tuo plafond
-                    </small>`;
+                    `;
 
                 document.getElementById("riepilogoCalcolo").innerHTML = riepilogo;
 
@@ -1143,7 +1917,7 @@
         return "-";
     }
 
-    // mi serve per la visualizzazione del incasso con la stessa modale di registrazione 
+    // mi serve per la visualizzazione del incasso con la stessa modale di registrazione
 
     function apriIncassoSalvato(idIncasso) {
 

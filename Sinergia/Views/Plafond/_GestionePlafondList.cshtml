@@ -84,7 +84,7 @@
                 <tr>
                     <th>Professionista</th>
                     <th>Tipo Plafond</th>
-                    <th> Cod.</th> 
+                    <th> Cod.</th>
                     <!-- 🆕 -->
                     <th>Pratica</th>
                     <th>Avviso</th>
@@ -113,11 +113,15 @@
 
                         <!-- 🔹 CODICE PRATICA -->
                         <td class="text-center">
-                            @if (!string.IsNullOrWhiteSpace(p.CodicePratica))
+                            @if (!string.IsNullOrWhiteSpace(p.CodicePratica) && p.ID_Pratiche.HasValue)
                             {
-                                <span class="badge bg-light text-dark border">
+                                <a href="javascript:void(0)"
+                                   onclick="apriSnapshot('PRATICA', @p.ID_Pratiche)"
+                                   class="badge bg-light text-dark border text-decoration-none">
+
                                     @p.CodicePratica
-                                </span>
+
+                                </a>
                             }
                             else
                             {
@@ -130,9 +134,11 @@
                             @if (p.ID_Pratiche.HasValue)
                             {
                                 <a class="text-decoration-none fw-semibold"
-                                   href="@Url.Action("GestionePratiche", "Pratiche", new { id = p.ID_Pratiche })"
-                                   title="Apri pratica">
+                                   href="javascript:void(0)"
+                                   onclick="apriSnapshot('PRATICA', @p.ID_Pratiche)">
+
                                     @p.NomePratica
+
                                 </a>
                             }
                             else
@@ -145,13 +151,14 @@
                         <td class="text-center">
                             @if (p.ID_AvvisoParcella.HasValue)
                             {
-                                <a class="badge bg-warning text-dark text-decoration-none"
-                                   href="@Url.Action("GestioneParcelle", "Pratiche")"
+                               <a class="badge bg-warning text-dark text-decoration-none"
+                                  href="javascript:void(0)"
+                                  onclick="apriSnapshot('AVVISO', @p.ID_AvvisoParcella)"
                                    title="Apri lista avvisi parcella">
-                                    @(!string.IsNullOrWhiteSpace(p.NumeroAvviso)
-                                    ? p.NumeroAvviso
-                                    : $"#{p.ID_AvvisoParcella}")
-                                </a>
+                                   @(!string.IsNullOrWhiteSpace(p.NumeroAvviso)
+                                     ? p.NumeroAvviso
+                                     : $"#{p.ID_AvvisoParcella}")
+                               </a>
                             }
                             else
                             {
@@ -165,9 +172,11 @@
                             @if (p.ID_Incasso.HasValue)
                             {
                                 <a class="badge bg-success text-decoration-none"
-                                   href="@Url.Action("GestioneIncassi", "Pratiche", new { id = p.ID_Incasso })"
-                                   title="Apri incasso">
+                                   href="javascript:void(0)"
+                                   onclick="apriSnapshot('INCASSO', @p.ID_Incasso)">
+
                                     #@p.ID_Incasso
+
                                 </a>
                             }
                             else
@@ -233,7 +242,8 @@
                     <strong>Pratica:</strong>
 
                     <a class="text-decoration-none fw-semibold"
-                       href="@Url.Action("GestionePratiche", "Pratiche", new { id = p.ID_Pratiche })">
+                       href="javascript:void(0)"
+                       onclick="apriSnapshot('PRATICA', @p.ID_Pratiche)">
 
                         @if (!string.IsNullOrWhiteSpace(p.CodicePratica))
                         {
@@ -255,7 +265,8 @@
                 @if (p.ID_AvvisoParcella.HasValue)
                 {
                     <a class="badge bg-warning text-dark text-decoration-none"
-                       href="@Url.Action("GestioneAParcelle", "Pratiche", new { id = p.ID_AvvisoParcella })">
+                       href="javascript:void(0)"
+                       onclick="apriSnapshot('AVVISO', @p.ID_AvvisoParcella)">
                         @(!string.IsNullOrWhiteSpace(p.NumeroAvviso) ? p.NumeroAvviso : $"#{p.ID_AvvisoParcella}")
                     </a>
                 }
@@ -269,7 +280,8 @@
                 @if (p.ID_Incasso.HasValue)
                 {
                     <a class="badge bg-success text-decoration-none"
-                       href="@Url.Action("GestioneIncassi", "Pratiche", new { id = p.ID_Incasso })">
+                       href="javascript:void(0)"
+                       onclick="apriSnapshot('INCASSO', @p.ID_Incasso)">
                         #@p.ID_Incasso
                     </a>
                 }
@@ -307,6 +319,700 @@
 
 <!-- 🔄 Paginazione -->
 <div id="paginazionePlafondTable" class="d-flex justify-content-end align-items-center gap-2 mt-2"></div>
+
+@*MI RAPPRESENTA IL DETTAGLIO DELLA PRATICA AVVISO PARCELLA E INCASSO*@ 
+<div id="snapshotContainer" class="card p-4 mt-3"></div>
+
+<div class="modal fade" id="globalSnapshotModal" tabindex="-1">
+
+    <div class="modal-dialog modal-xl">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <h5 class="modal-title" id="snapshotTitle">
+                    Snapshot
+                </h5>
+
+                <button class="btn-close" data-bs-dismiss="modal"></button>
+
+            </div>
+
+            <div class="modal-body" id="snapshotBody">
+
+                <div class="text-center p-4">
+                    Caricamento...
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+    function apriSnapshot(tipo, id) {
+
+        const modalElement = document.getElementById("globalSnapshotModal");
+        const modal = new bootstrap.Modal(modalElement);
+
+        const body = document.getElementById("snapshotBody");
+        const title = document.getElementById("snapshotTitle");
+
+        body.innerHTML = "Caricamento snapshot...";
+
+        modal.show();
+
+        fetch('/Snapshot/GetSnapshot?tipo=' + tipo + '&id=' + id)
+
+            .then(r => r.json())
+
+            .then(data => {
+
+                if (!data.success) {
+
+                    body.innerHTML =
+                        "<div class='alert alert-warning'>Snapshot non disponibile</div>";
+
+                    return;
+                }
+
+                const snap = JSON.parse(data.snapshot);
+
+                if (tipo === "PRATICA") {
+
+                    title.innerText = "Snapshot Pratica";
+
+                    renderSnapshotPratica(snap);
+
+                }
+
+                if (tipo === "AVVISO") {
+
+                    title.innerText = "Snapshot Avviso Parcella";
+
+                    renderSnapshotAvviso(snap);
+
+                }
+
+                if (tipo === "INCASSO") {
+
+                    title.innerText = "Snapshot Incasso";
+
+                    renderSnapshotIncasso(snap);
+
+                }
+
+            })
+
+            .catch(err => {
+
+                console.error(err);
+
+                body.innerHTML =
+                    "<div class='alert alert-danger'>Errore caricamento snapshot</div>";
+
+            });
+    }
+
+    function renderSnapshotPratica(p) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+        <div class="col-md-4 mb-2">
+            <small class="text-muted">${label}</small>
+            <div class="fw-semibold">${value ?? "-"}</div>
+        </div>`;
+        }
+
+        let html = `
+            <div class="container-fluid">
+
+                <!-- CARD DATI PRATICA -->
+                <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                        <i class="bi bi-folder2-open"></i> Dati pratica
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="row">
+
+                            ${field("Titolo", p.Titolo)}
+                            ${field("Tipologia", p.Tipologia)}
+                            ${field("Oggetto", p.OggettoPratica)}
+                            ${field("Stato", `<span class="badge bg-primary">${p.Stato ?? "-"}</span>`)}
+                            ${field("Data Inizio Attività", formatDate(p.DataInizioAttivitaStimata))}
+                            ${field("Data Fine Attività", formatDate(p.DataFineAttivitaStimata))}
+                            ${field("Budget", `<span class="fw-bold text-success">${(p.Budget || 0)} €</span>`)}
+
+                        </div>
+
+                    </div>
+
+                </div>
+            `;
+
+        // ======================
+        // COMPENSI
+        // ======================
+
+        if (p.compensi?.length) {
+
+            html += `
+            <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-cash-stack"></i> Compensi
+                </div>
+
+                <div class="card-body p-0">
+
+                    <table class="table table-hover mb-0">
+
+                    <thead class="table-light">
+                        <tr>
+                            <th>Descrizione</th>
+                            <th style="width:120px">Tipo</th>
+                            <th style="width:150px">Categoria</th>
+                            <th class="text-end" style="width:120px">Importo</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+            `;
+
+            p.compensi.forEach(c => {
+
+                html += `
+                <tr>
+                    <td>${c.Descrizione ?? "-"}</td>
+
+                    <td>
+                        <span class="badge bg-secondary">
+                            ${c.TipoCompenso ?? "-"}
+                        </span>
+                    </td>
+
+                    <td>${c.Categoria ?? "-"}</td>
+
+                    <td class="text-end fw-bold text-success">
+                        ${c.Importo ?? 0} €
+                    </td>
+                </tr>
+                `;
+            });
+
+            html += `
+                </tbody>
+                </table>
+
+                    </div>
+
+                </div>
+                `;
+        }
+
+        // ======================
+        // UTENTI ASSOCIATI
+        // ======================
+
+        if (p.utentiAssociati?.length) {
+
+            html += `
+                <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                        <i class="bi bi-people"></i> Utenti associati
+                    </div>
+
+                    <div class="list-group list-group-flush">
+                `;
+
+            p.utentiAssociati.forEach(u => {
+
+                const nome = u.Nome ? u.Nome : ("Utente ID: " + u.ID_Utente);
+
+                html += `
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+
+                    <div>
+                        <i class="bi bi-person-circle me-1"></i>
+                        ${nome}
+                    </div>
+
+                    <span class="badge bg-info text-dark">
+                        ${u.Ruolo ?? "-"}
+                    </span>
+
+                </div>
+                `;
+            });
+
+            html += `</div></div>`;
+        }
+
+
+        // ======================
+        // DOCUMENTI INCARICO
+        // ======================
+
+        if (p.incarichi?.length) {
+
+            html += `
+                <div class="card shadow-sm">
+
+                    <div class="card-header bg-light fw-bold">
+                        <i class="bi bi-file-earmark-text"></i> Documenti incarico
+                    </div>
+
+                    <div class="card-body p-0">
+
+                        <table class="table table-sm table-hover mb-0">
+
+                        <thead class="table-light">
+                            <tr>
+                                <th>Documento</th>
+                                <th style="width:150px">Stato</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                `;
+
+            p.incarichi.forEach(d => {
+
+                const badge =
+                    d.Stato === "Firmato"
+                        ? "bg-success"
+                        : "bg-secondary";
+
+                html += `
+                <tr>
+
+                    <td>
+                        <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                        ${d.NomeFile}
+                    </td>
+
+                    <td>
+                        <span class="badge ${badge}">
+                            ${d.Stato}
+                        </span>
+                    </td>
+
+                </tr>
+                `;
+                            });
+
+                            html += `
+                        </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+                `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function renderSnapshotAvviso(a) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+        <div class="col-md-6 mb-2">
+            <small class="text-muted">${label}</small>
+            <div class="fw-semibold">${value ?? "-"}</div>
+        </div>`;
+        }
+
+        let html = `
+                <div class="container-fluid">
+
+                <!-- ============================= -->
+                <!-- DATI AVVISO -->
+                <!-- ============================= -->
+
+                <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-receipt"></i> Avviso Parcella
+                </div>
+
+                <div class="card-body">
+
+                <div class="row">
+
+                ${field("Titolo Avviso", a.TitoloAvviso)}
+                ${field("Pratica", a.pratica?.Titolo)}
+
+                ${field("Anno pratica", a.pratica?.AnnoProgressivo)}
+                ${field("Numero pratica", a.pratica?.ProgressivoAnno)}
+
+                ${field("Data Avviso", formatDate(a.DataAvviso))}
+                ${field("Data Invio", formatDate(a.DataInvio))}
+
+                ${field("Competenza Economica", formatDate(a.DataCompetenzaEconomica))}
+
+                ${field("Stato", `<span class="badge bg-primary">${a.Stato ?? "-"}</span>`)}
+
+                ${field("Tipologia Avviso", a.TipologiaAvviso)}
+                ${field("Regime Fiscale", a.RegimeFiscale)}
+
+                ${field("Metodo Pagamento", a.MetodoPagamento)}
+
+                ${field("Importo", `<span class="text-success fw-bold">${a.Importo || 0} €</span>`)}
+
+                ${field("Acconto", (a.ImportoAcconto || 0) + " €")}
+
+                ${field("Totale Avviso", `<span class="fw-bold text-primary">${a.TotaleAvvisiParcella || 0} €</span>`)}
+
+                </div>
+
+                </div>
+                </div>
+                `;
+
+        // =============================
+        // RIEPILOGO FISCALE (compatto)
+        // =============================
+
+        html += `
+                <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-calculator"></i> Riepilogo fiscale
+                </div>
+
+                <div class="card-body p-0">
+
+                <table class="table table-sm table-striped mb-0">
+
+                <tbody>
+
+                <tr>
+                <td>Spese Generali</td>
+                <td>${a.RimborsoSpesePercentuale || 0}%</td>
+                <td class="text-end">${a.ImportoRimborsoSpese || 0} €</td>
+                </tr>
+
+                <tr>
+                <td>Contributo Integrativo</td>
+                <td>${a.ContributoIntegrativoPercentuale || 0}%</td>
+                <td class="text-end">${a.ContributoIntegrativoImporto || 0} €</td>
+                </tr>
+
+                <tr>
+                <td>IVA</td>
+                <td>${a.AliquotaIVA || 0}%</td>
+                <td class="text-end">${a.ImportoIVA || 0} €</td>
+                </tr>
+
+                </tbody>
+                </table>
+
+                </div>
+                </div>
+                `;
+
+        // =============================
+        // COMPENSO
+        // =============================
+
+        if (a.compenso) {
+
+            html += `
+                <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-cash-stack"></i> Compenso
+                </div>
+
+                <div class="card-body p-0">
+
+                <table class="table table-sm table-hover mb-0">
+
+                <thead class="table-light">
+                <tr>
+                <th>Descrizione</th>
+                <th style="width:120px">Tipo</th>
+                <th class="text-end" style="width:120px">Importo</th>
+                </tr>
+                </thead>
+
+                <tbody>
+
+                <tr>
+                <td>${a.compenso.Descrizione ?? "-"}</td>
+                <td>
+                <span class="badge bg-secondary">
+                ${a.compenso.TipoCompenso ?? "-"}
+                </span>
+                </td>
+                <td class="text-end fw-bold text-success">
+                ${a.compenso.Importo ?? 0} €
+                </td>
+                </tr>
+
+                </tbody>
+                </table>
+
+                </div>
+                </div>
+                `;
+                        }
+
+        // =============================
+        // INCASSI
+        // =============================
+
+        if (a.incassi?.length) {
+
+            html += `
+                <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-cash"></i> Incassi
+                </div>
+
+                <div class="card-body p-0">
+
+                <table class="table table-sm table-hover mb-0">
+
+                <thead class="table-light">
+                <tr>
+                <th>Data</th>
+                <th class="text-end">Importo</th>
+                </tr>
+                </thead>
+
+                <tbody>
+                `;
+
+            a.incassi.forEach(i => {
+
+                html += `
+                <tr>
+                <td>${formatDate(i.DataIncasso)}</td>
+                <td class="text-end fw-bold text-success">
+                ${i.Importo ?? 0} €
+                </td>
+                </tr>
+                `;
+                            });
+
+                            html += `
+                </tbody>
+                </table>
+
+                </div>
+                </div>
+                `;
+        }
+
+        // =============================
+        // DOCUMENTI
+        // =============================
+
+        if (a.documenti?.length) {
+
+            html += `
+                    <div class="card shadow-sm">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-file-earmark-text"></i> Documenti
+                    </div>
+
+                    <div class="list-group list-group-flush">
+                    `;
+
+                                a.documenti.forEach(d => {
+
+                                    html += `
+                    <div class="list-group-item d-flex justify-content-between">
+
+                    <span>
+                    <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                    ${d.NomeFile}
+                    </span>
+
+                    <span class="badge bg-secondary">
+                    ${d.Stato ?? "-"}
+                    </span>
+
+                    </div>
+                    `;
+            });
+
+            html += `
+                    </div>
+                    </div>
+                    `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function renderSnapshotIncasso(i) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+            <div class="col-md-6 mb-2">
+                <small class="text-muted">${label}</small>
+                <div class="fw-semibold">${value ?? "-"}</div>
+            </div>`;
+            }
+
+        let html = `
+            <div class="container-fluid">
+
+            <!-- ========================= -->
+            <!-- DATI INCASSO -->
+            <!-- ========================= -->
+
+            <div class="card shadow-sm mb-3">
+
+            <div class="card-header bg-light fw-bold">
+            <i class="bi bi-cash-stack"></i> Incasso
+            </div>
+
+            <div class="card-body">
+
+            <div class="row">
+
+            ${field("Pratica", i.pratica?.Titolo)}
+            ${field("Titolo Avviso", i.avviso?.TitoloAvviso)}
+
+            ${field("Anno pratica", i.pratica?.AnnoProgressivo)}
+            ${field("Numero pratica", i.pratica?.ProgressivoAnno)}
+
+            ${field("Data Incasso", formatDate(i.DataIncasso))}
+            ${field("Competenza Economica", formatDate(i.DataCompetenzaEconomica))}
+
+            ${field("Competenza Finanziaria", formatDate(i.DataCompetenzaFinanziaria))}
+
+            ${field("Stato Incasso",
+                        `<span class="badge bg-success">${i.StatoIncasso ?? "-"}</span>`)}
+
+            ${field("Versa in Plafond",
+                            i.VersaInPlafond
+                                ? `<span class="badge bg-info text-dark">Si</span>`
+                                : `<span class="badge bg-secondary">No</span>`)}
+
+            ${field("Modalità pagamento", i.ModalitaPagamento)}
+
+            ${field("Importo Incasso",
+                                    `<span class="fw-bold text-success">${i.Importo || 0} €</span>`)}
+
+            ${field("Importo Netto",
+                                        `<span class="fw-bold text-primary">${i.ImportoNetto || 0} €</span>`)}
+
+            </div>
+
+            </div>
+            </div>
+            `;
+
+        // =========================
+        // AVVISO COLLEGATO
+        // =========================
+
+        if (i.avviso) {
+
+            html += `
+            <div class="card shadow-sm mb-3">
+
+            <div class="card-header bg-light fw-bold">
+            <i class="bi bi-receipt"></i> Avviso Parcella
+            </div>
+
+            <div class="card-body p-0">
+
+            <table class="table table-sm table-hover mb-0">
+
+            <thead class="table-light">
+            <tr>
+            <th>Compenso</th>
+            <th>Contributo</th>
+            <th>IVA</th>
+            <th class="text-end">Totale Avviso</th>
+            </tr>
+            </thead>
+
+            <tbody>
+
+            <tr>
+            <td>${i.avviso.Importo ?? 0} €</td>
+            <td>${i.avviso.ContributoIntegrativoImporto ?? 0} €</td>
+            <td>${i.avviso.ImportoIVA ?? 0} €</td>
+            <td class="text-end fw-bold text-primary">
+            ${i.avviso.TotaleAvvisiParcella ?? 0} €
+            </td>
+            </tr>
+
+            </tbody>
+            </table>
+
+            </div>
+            </div>
+            `;
+        }
+
+
+        // =========================
+        // NOTE
+        // =========================
+
+        if (i.Note) {
+
+            html += `
+            <div class="card shadow-sm">
+
+            <div class="card-header bg-light fw-bold">
+            <i class="bi bi-chat-left-text"></i> Note
+            </div>
+
+            <div class="card-body">
+
+            <div class="alert alert-light border mb-0">
+            ${i.Note}
+            </div>
+
+            </div>
+            </div>
+            `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function formatDate(dateString) {
+
+        if (!dateString) return "-";
+
+        const d = new Date(dateString);
+
+        return d.toLocaleDateString("it-IT");
+    }
+</script>
 
 <!-- 📊 Totale -->
 @{

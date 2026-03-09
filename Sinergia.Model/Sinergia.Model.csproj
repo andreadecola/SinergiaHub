@@ -273,6 +273,7 @@
     <Compile Include="SettoriFornitori.cs" />
     <Compile Include="SettoriFornitori_a.cs" />
     <Compile Include="SinergiaDB.cs" />
+    <Compile Include="SnapshotModali.cs" />
     <Compile Include="TeamProfessionisti.cs" />
     <Compile Include="TeamProfessionisti_a.cs" />
     <Compile Include="TemplateIncarichi.cs" />

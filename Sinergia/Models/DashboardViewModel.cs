@@ -65,11 +65,13 @@ namespace Sinergia.Models
         public int AvvisiTotaliSinergia { get; set; }
         public decimal FatturatoTotaleGenerato { get; set; }
         public decimal DisponibilitaSinergia { get; set; }       // Entrate - Uscite
+        public decimal IncassiTotaliSinergia { get; set; }
 
         public decimal TotaleCompensiDocumentale { get; set; }
         public decimal TotaleRimborsiAnticipatiDocumentale { get; set; }
         public decimal TotaleRimborsiUrgentiDocumentale { get; set; }
 
+        public decimal CreditoPeriodoProfessionisti { get; set; }
 
         // 📈 Serie temporale per grafico andamento utile mensile
         public List<string> MesiUtile { get; set; }             // Etichette mesi (es. ["Mag 2025", "Giu 2025", "Lug 2025", ...])

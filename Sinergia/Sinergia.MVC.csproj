@@ -242,6 +242,7 @@
     <Compile Include="Controllers\FattureController.cs" />
     <Compile Include="Controllers\HomeController.cs" />
     <Compile Include="Controllers\PraticheController.cs" />
+    <Compile Include="Controllers\SnapshotController.cs" />
     <Compile Include="Controllers\UtentiController.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
@@ -280,6 +281,7 @@
     <Compile Include="Models\MenuViewModel.cs" />
     <Compile Include="Models\MovimentoBancarioViewModel.cs" />
     <Compile Include="Models\NotificaViewModel.cs" />
+    <Compile Include="Models\PagamentoProfessionistaViewModel.cs" />
     <Compile Include="Models\PermessiViewModel.cs" />
     <Compile Include="Models\PlafondUtenteViewModel.cs" />
     <Compile Include="Models\PracticeViewModel.cs" />
@@ -392,7 +394,6 @@
     <Content Include="Views\Clienti\_GestioneClientiList.cshtml" />
     <Content Include="Views\CostiGenerali\GestioneCostiGenerali.cshtml" />
     <Content Include="Views\CostiGenerali\_GestioneCostiGeneraliList.cshtml" />
-    <Content Include="Views\Plafond\GestionePlafond.cshtml" />
     <Content Include="Views\Plafond\_GestionePlafondList.cshtml" />
     <Content Include="Views\Home\TestImpersonificazione.cshtml" />
     <Content Include="Views\Clienti\_AzioniCliente.cshtml" />
@@ -458,6 +459,12 @@
     <Content Include="Views\GestioneCategoriePratiche\GestioneCategoriePratiche.cshtml" />
     <Content Include="Views\GestioneCategoriePratiche\_GestioneCategoriePraticheList.cshtml" />
     <Content Include="Views\GestioneCategoriePratiche\_AzioniCategoria.cshtml" />
+    <Content Include="Views\PagamentiProfessionista\GestionePagamentoProfessionista.cshtml" />
+    <Content Include="Views\PagamentiProfessionista\_GestionePagamentoProfessionistaList.cshtml" />
+    <Content Include="Views\Plafond\GestionePlafond.cshtml" />
+    <Content Include="Views\Snapshot\_SnapshotAvviso.cshtml" />
+    <Content Include="Views\Snapshot\_SnapshotIncasso.cshtml" />
+    <Content Include="Views\Snapshot\_SnapshotPratica.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Allegati\KnowledgeAziendale\" />

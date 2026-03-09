@@ -16,6 +16,10 @@ namespace Sinergia.Model
 
         public int ID_Utente { get; set; }
 
-        public DateTime DataLettura { get; set; }
+        public DateTime? DataLettura { get; set; }
+
+        public bool Posticipato { get; set; }
+
+        public DateTime? DataPosticipo { get; set; }
     }
 }

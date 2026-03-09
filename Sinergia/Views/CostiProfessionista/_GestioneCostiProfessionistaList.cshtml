@@ -82,7 +82,14 @@
                             }
                         </td>
                         <td class="text-center">
-                            @(costo.NumeroAssegnati > 0 ? costo.NumeroAssegnati.ToString() : "-")
+                            @if (costo.Descrizione == "Trattenuta Sinergia 20%")
+                            {
+                                <span>-</span>
+                            }
+                            else
+                            {
+                                @(costo.NumeroAssegnati > 0 ? costo.NumeroAssegnati.ToString() : "-")
+                            }
                         </td>
                         @if (mostraAzioni)
                         {
@@ -111,7 +118,12 @@
 
             <div class="small text-muted"><strong>ID:</strong> @costo.ID_CodiceCosto</div>
             <div class="small text-muted"><strong>Stato:</strong> @(costo.Attivo ? "Attivo" : "Inattivo")</div>
-            <div class="small text-muted"><strong>Assegnati:</strong> @(costo.NumeroAssegnati > 0 ? costo.NumeroAssegnati.ToString() : "-")</div>
+            @if (costo.Descrizione != "Trattenuta Sinergia 20%")
+            {
+                <div class="small text-muted">
+                    <strong>Assegnati:</strong> @(costo.NumeroAssegnati > 0 ? costo.NumeroAssegnati.ToString() : "-")
+                </div>
+            }
 
             @if (mostraAzioni)
             {
@@ -302,6 +314,7 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="ID_AnagraficaCostoProfessionista" />
+                    <input type="hidden" name="ID_TipoCostoGenerale">
                     <div id="listaProfessionistiContainer">
                         <!-- checkbox dinamici via JS -->
                     </div>
@@ -424,31 +437,50 @@
 
     // gestione assegnazione professionisti
 
-    function apriAssegnaProfessionisti(idCosto) {
-        fetch(`/Pratiche/GetListaProfessionistiAssegnabili?idCosto=${idCosto}`) // 🔄 deve esistere
+    function apriAssegnaProfessionisti(idAnagraficaCosto, idTipoCosto) {
+
+        const idCosto = idAnagraficaCosto || idTipoCosto;
+
+        fetch(`/Pratiche/GetListaProfessionistiAssegnabili?idCosto=${idCosto}`)
             .then(r => r.json())
             .then(res => {
+
                 const container = document.getElementById("listaProfessionistiContainer");
                 const form = document.getElementById("assegnaCostoForm");
+
                 form.reset();
-                form.querySelector('[name="ID_AnagraficaCostoProfessionista"]').value = idCosto;
+
+                // 🔹 assegna valori corretti al form
+                form.querySelector('[name="ID_AnagraficaCostoProfessionista"]').value = idAnagraficaCosto || "";
+                form.querySelector('[name="ID_TipoCostoGenerale"]').value = idTipoCosto || "";
 
                 if (!res.success || !Array.isArray(res.professionisti) || res.professionisti.length === 0) {
+
                     container.innerHTML = "<div class='alert alert-warning'>Nessun professionista disponibile.</div>";
+
                 } else {
+
                     container.innerHTML = res.professionisti.map(p => `
                     <div class="form-check">
-                        <input type="checkbox" class="form-check-input" name="ID_UtentiSelezionati" value="${p.ID}" id="check_${p.ID}">
-                        <label class="form-check-label" for="check_${p.ID}">${p.Nome}</label>
+                        <input type="checkbox" class="form-check-input"
+                               name="ID_UtentiSelezionati"
+                               value="${p.ID}"
+                               id="check_${p.ID}">
+                        <label class="form-check-label" for="check_${p.ID}">
+                            ${p.Nome}
+                        </label>
                     </div>
                 `).join('');
                 }
 
                 new bootstrap.Modal(document.getElementById("assegnaCostoModal")).show();
+
             })
             .catch(err => {
+
                 console.error("Errore fetch professionisti:", err);
                 toastr.error("Errore durante il caricamento dei professionisti.");
+
             });
     }
 

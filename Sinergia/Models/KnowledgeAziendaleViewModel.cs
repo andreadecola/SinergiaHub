@@ -54,6 +54,8 @@ namespace Sinergia.Models
         // 📌 Campi aggiunti per gestione lettura
         public bool Letto { get; set; }
         public DateTime? DataLettura { get; set; }
+
+        public string VideoPercorso { get; set; }
     }
 
     // 📎 Modello per allegato già presente

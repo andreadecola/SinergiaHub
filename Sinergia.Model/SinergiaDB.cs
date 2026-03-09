@@ -103,6 +103,7 @@ namespace Sinergia.Model
         public virtual DbSet<RuoliPratiche> RuoliPratiche { get; set; }
         public virtual DbSet<SettoriFornitori> SettoriFornitori { get; set; }
         public virtual DbSet<SettoriFornitori_a> SettoriFornitori_a { get; set; }
+        public virtual DbSet<SnapshotModali> SnapshotModali { get; set; }
         public virtual DbSet<TeamProfessionisti> TeamProfessionisti { get; set; }
         public virtual DbSet<TeamProfessionisti_a> TeamProfessionisti_a { get; set; }
         public virtual DbSet<TemplateIncarichi> TemplateIncarichi { get; set; }

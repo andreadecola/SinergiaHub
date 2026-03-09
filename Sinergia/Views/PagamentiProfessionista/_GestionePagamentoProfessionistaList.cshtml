@@ -1,0 +1,1475 @@
+﻿@model List<Sinergia.Models.PagamentoProfessionistaViewModel>
+
+@{
+    bool mostraAzioni = Model.Any();
+}
+
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+
+
+<style>
+    #pagamentoTable th, #pagamentoTable td {
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .importo {
+        font-weight: 600;
+    }
+</style>
+
+<!-- 🖥️ DESKTOP TABLE -->
+<div class="d-none d-md-block">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered"
+               id="pagamentoTable">
+
+            <thead>
+                <tr>
+                    <th>Professionista</th>
+                    <th>Categoria</th>
+                    <th>Cod.</th>
+                    <th>Pratica</th>
+                    <th>Avviso</th>
+                    <th>Incasso</th>
+                    <th>Descrizione</th>
+                    <th class="text-end">Importo</th>
+                    <th>Data</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @foreach (var p in Model)
+                {
+                    <tr data-id-prof="@p.ID_Professionista">
+
+                        <td>@p.NomeProfessionista</td>
+
+                        <td>
+                            <span class="badge @(p.Categoria == "Owner Fee" ? "bg-warning text-dark" : "bg-primary")">
+                                @p.Categoria
+                            </span>
+                        </td>
+                        <td class="text-center">
+
+                            @if (!string.IsNullOrWhiteSpace(p.CodicePratica) && p.ID_Pratiche.HasValue)
+                            {
+                                <a href="javascript:void(0)"
+                                   onclick="apriSnapshot('PRATICA', @p.ID_Pratiche)"
+                                   class="badge bg-light text-dark border text-decoration-none">
+
+                                    @p.CodicePratica
+
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+
+                        </td>
+
+                        <td>
+
+                            @if (p.ID_Pratiche.HasValue)
+                            {
+                                <a class="text-decoration-none fw-semibold"
+                                   href="javascript:void(0)"
+                                   onclick="apriSnapshot('PRATICA', @p.ID_Pratiche)">
+
+                                    @(p.TitoloPratica ?? "-")
+
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+
+                        </td>
+
+                        <td class="text-center">
+
+                            @if (p.ID_AvvisoParcella.HasValue)
+                            {
+                                <a class="badge bg-warning text-dark text-decoration-none"
+                                   href="javascript:void(0)"
+                                   onclick="apriSnapshot('AVVISO', @p.ID_AvvisoParcella)">
+
+                                    #@p.ID_AvvisoParcella
+
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+
+                        </td>
+
+                        <td class="text-center">
+
+                            @if (p.ID_Incasso.HasValue)
+                            {
+                                <a class="badge bg-success text-decoration-none"
+                                   href="javascript:void(0)"
+                                   onclick="apriSnapshot('INCASSO', @p.ID_Incasso)">
+
+                                    #@p.ID_Incasso
+
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+
+                        </td>
+
+                        <td>@p.Descrizione</td>
+
+                        <td class="text-end fw-bold">
+                            @p.Importo.ToString("N2") €
+                        </td>
+
+                        <td>
+                            @(p.DataRegistrazione?.ToString("dd/MM/yyyy") ?? "-")
+                        </td>
+
+                    </tr>
+                }
+            </tbody>
+
+        </table>
+    </div>
+</div>
+<!-- 📱 MOBILE CARD -->
+<div class="d-block d-md-none mt-3">
+
+    @foreach (var p in Model)
+    {
+        <div class="border rounded shadow-sm p-3 mb-3 bg-white">
+
+            <!-- 👤 Professionista -->
+            <div class="fw-bold text-primary">
+                @p.NomeProfessionista
+            </div>
+
+            <!-- 🏷 Categoria -->
+            <div class="mt-1">
+                @{
+                    var badgeClass = "bg-secondary";
+
+                    if (p.Categoria == "Owner Fee")
+                    {
+                        badgeClass = "bg-warning text-dark";
+                    }
+                    else if (p.Categoria == "Netto Effettivo Responsabile")
+                    {
+                        badgeClass = "bg-success";
+                    }
+                }
+
+                <span class="badge @badgeClass">
+                    @p.Categoria
+                </span>
+            </div>
+
+
+            <!-- 📁 PRATICA -->
+            <div class="small mt-2">
+                <strong>Pratica:</strong>
+
+                @if (p.ID_Pratiche.HasValue)
+                {
+                    <a class="text-decoration-none fw-semibold"
+                       href="javascript:void(0)"
+                       onclick="apriSnapshot('PRATICA', @p.ID_Pratiche)">
+
+                        @(p.TitoloPratica ?? "-")
+
+                    </a>
+                }
+                else
+                {
+                    <span class="text-muted">-</span>
+                }
+            </div>
+
+
+            <!-- 🆕 AVVISO -->
+            <div class="small mt-1">
+                <strong>Avviso:</strong>
+
+                @if (p.ID_AvvisoParcella.HasValue)
+                {
+                    <a class="badge bg-warning text-dark text-decoration-none"
+                       href="javascript:void(0)"
+                       onclick="apriSnapshot('AVVISO', @p.ID_AvvisoParcella)">
+
+                        #@p.ID_AvvisoParcella
+
+                    </a>
+                }
+                else
+                {
+                    <span class="text-muted">-</span>
+                }
+            </div>
+
+
+            <!-- 💰 INCASSO -->
+            <div class="small mt-1">
+                <strong>Incasso:</strong>
+
+                @if (p.ID_Incasso.HasValue)
+                {
+                    <a class="badge bg-success text-decoration-none"
+                       href="javascript:void(0)"
+                       onclick="apriSnapshot('INCASSO', @p.ID_Incasso)">
+
+                        #@p.ID_Incasso
+
+                    </a>
+                }
+                else
+                {
+                    <span class="text-muted">-</span>
+                }
+            </div>
+
+
+            <!-- 💶 IMPORTO -->
+            <div class="small mt-2">
+                <strong>Importo:</strong>
+                @p.Importo.ToString("N2") €
+            </div>
+
+
+            <!-- 📅 DATA -->
+            <div class="small text-muted">
+                <strong>Data:</strong>
+                @(p.DataRegistrazione?.ToString("dd/MM/yyyy") ?? "-")
+            </div>
+
+        </div>
+    }
+
+</div>
+<!-- ===================================================== -->
+<!-- 💰 Modale Conferma Pagamento -->
+<!-- ===================================================== -->
+<div class="modal fade" id="modalePagamentoSelezionati" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <!-- HEADER -->
+            <div class="modal-header bg-light border-bottom">
+                <h5 class="modal-title">
+                    <i class="fa fa-money-bill-wave me-2 text-success"></i>
+                    Pagamento Professionista
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+
+                <!-- ===================================================== -->
+                <!-- 👤 SELEZIONE PROFESSIONISTA (GESTITA DAL CONTROLLER) -->
+                <!-- ===================================================== -->
+
+                @{
+                    var listaProf = ViewBag.ListaProfessionisti as List<Sinergia.Model.Utenti>;
+                    int? idProfessionistaCorrente = ViewBag.IdProfessionistaCorrente as int?;
+                }
+
+                @if (listaProf != null && listaProf.Any())
+                {
+                    <!-- ADMIN -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Professionista</label>
+
+                            <select id="selectProfessionistaPagamento"
+                                    class="form-select form-select-sm">
+
+                                <option value="">-- Seleziona professionista --</option>
+
+                                @foreach (var p in listaProf)
+                                {
+                                    <option value="@p.ID_Utente"
+                                            @(idProfessionistaCorrente == p.ID_Utente ? "selected" : "")>
+                                        @p.Cognome @p.Nome
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <!-- PROFESSIONISTA o COLLABORATORE -->
+                    <input type="hidden"
+                           id="selectProfessionistaPagamento"
+                           value="@idProfessionistaCorrente" />
+                }
+
+                <!-- ===================================================== -->
+                <!-- 📅 FILTRI PERIODO -->
+                <!-- ===================================================== -->
+
+                <div class="row mb-4">
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Anno</label>
+                        <select id="selectAnnoPagamento" class="form-select form-select-sm">
+                            @{
+                                int annoCorrente = DateTime.Now.Year;
+                                for (int a = annoCorrente - 3; a <= annoCorrente + 1; a++)
+                                {
+                                    <option value="@a" @(a == annoCorrente ? "selected" : "")>
+                                        @a
+                                    </option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Trimestre</label>
+                        <select id="selectTrimestrePagamento" class="form-select form-select-sm">
+                            <option value="1">1° Trimestre (Gen - Mar)</option>
+                            <option value="2">2° Trimestre (Apr - Giu)</option>
+                            <option value="3">3° Trimestre (Lug - Set)</option>
+                            <option value="4">4° Trimestre (Ott - Dic)</option>
+                            <option value="12">Anno Completo (Gen - Dic)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="button"
+                                id="btnAggiornaRiepilogo"
+                                class="btn btn-outline-primary btn-sm ">
+                            <i class="fa fa-sync me-1"></i>
+                            Aggiorna Riepilogo
+                        </button>
+                    </div>
+
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 📄 RIGHE PAGAMENTO -->
+                <!-- ===================================================== -->
+
+                <div id="listaCostiSelezionati"></div>
+
+                <hr />
+
+                <!-- ===================================================== -->
+                <!-- 💵 TOTALE -->
+                <!-- ===================================================== -->
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="small text-muted">
+                            Seleziona le righe da liquidare.
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <div class="fw-bold fs-5">
+                            Totale selezionato:
+                            <span id="totaleModalePagamento" class="text-primary">
+                                0,00 €
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- FOOTER -->
+            <div class="modal-footer">
+                <button type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                    Annulla
+                </button>
+
+                <button type="button"
+                        id="btnConfermaPagamentoSelezionati"
+                        class="btn btn-success"
+                        disabled>
+                    <i class="fa fa-check me-1"></i>
+                    Conferma Pagamento
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+
+@*MI RAPPRESENTA IL DETTAGLIO DELLA PRATICA AVVISO PARCELLA E INCASSO*@
+<div id="snapshotContainer" class="card p-4 mt-3"></div>
+
+<div class="modal fade" id="globalSnapshotModal" tabindex="-1">
+
+    <div class="modal-dialog modal-xl">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <h5 class="modal-title" id="snapshotTitle">
+                    Snapshot
+                </h5>
+
+                <button class="btn-close" data-bs-dismiss="modal"></button>
+
+            </div>
+
+            <div class="modal-body" id="snapshotBody">
+
+                <div class="text-center p-4">
+                    Caricamento...
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+    function apriSnapshot(tipo, id) {
+
+        const modalElement = document.getElementById("globalSnapshotModal");
+        const modal = new bootstrap.Modal(modalElement);
+
+        const body = document.getElementById("snapshotBody");
+        const title = document.getElementById("snapshotTitle");
+
+        body.innerHTML = "Caricamento snapshot...";
+
+        modal.show();
+
+        fetch('/Snapshot/GetSnapshot?tipo=' + tipo + '&id=' + id)
+
+            .then(r => r.json())
+
+            .then(data => {
+
+                if (!data.success) {
+
+                    body.innerHTML =
+                        "<div class='alert alert-warning'>Snapshot non disponibile</div>";
+
+                    return;
+                }
+
+                const snap = JSON.parse(data.snapshot);
+
+                if (tipo === "PRATICA") {
+
+                    title.innerText = "Snapshot Pratica";
+
+                    renderSnapshotPratica(snap);
+
+                }
+
+                if (tipo === "AVVISO") {
+
+                    title.innerText = "Snapshot Avviso Parcella";
+
+                    renderSnapshotAvviso(snap);
+
+                }
+
+                if (tipo === "INCASSO") {
+
+                    title.innerText = "Snapshot Incasso";
+
+                    renderSnapshotIncasso(snap);
+
+                }
+
+            })
+
+            .catch(err => {
+
+                console.error(err);
+
+                body.innerHTML =
+                    "<div class='alert alert-danger'>Errore caricamento snapshot</div>";
+
+            });
+    }
+
+    function renderSnapshotPratica(p) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+            <div class="col-md-4 mb-2">
+                <small class="text-muted">${label}</small>
+                <div class="fw-semibold">${value ?? "-"}</div>
+            </div>`;
+        }
+
+        let html = `
+                <div class="container-fluid">
+
+                    <!-- CARD DATI PRATICA -->
+                    <div class="card shadow-sm mb-3">
+
+                        <div class="card-header bg-light fw-bold">
+                            <i class="bi bi-folder2-open"></i> Dati pratica
+                        </div>
+
+                        <div class="card-body">
+
+                            <div class="row">
+
+                                ${field("Titolo", p.Titolo)}
+                                ${field("Tipologia", p.Tipologia)}
+                                ${field("Oggetto", p.OggettoPratica)}
+                                ${field("Stato", `<span class="badge bg-primary">${p.Stato ?? "-"}</span>`)}
+                                ${field("Data Inizio Attività", formatDate(p.DataInizioAttivitaStimata))}
+                                ${field("Data Fine Attività", formatDate(p.DataFineAttivitaStimata))}
+                                ${field("Budget", `<span class="fw-bold text-success">${(p.Budget || 0)} €</span>`)}
+
+                            </div>
+
+                        </div>
+
+                    </div>
+                `;
+
+        // ======================
+        // COMPENSI
+        // ======================
+
+        if (p.compensi?.length) {
+
+            html += `
+                <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                        <i class="bi bi-cash-stack"></i> Compensi
+                    </div>
+
+                    <div class="card-body p-0">
+
+                        <table class="table table-hover mb-0">
+
+                        <thead class="table-light">
+                            <tr>
+                                <th>Descrizione</th>
+                                <th style="width:120px">Tipo</th>
+                                <th style="width:150px">Categoria</th>
+                                <th class="text-end" style="width:120px">Importo</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                `;
+
+            p.compensi.forEach(c => {
+
+                html += `
+                    <tr>
+                        <td>${c.Descrizione ?? "-"}</td>
+
+                        <td>
+                            <span class="badge bg-secondary">
+                                ${c.TipoCompenso ?? "-"}
+                            </span>
+                        </td>
+
+                        <td>${c.Categoria ?? "-"}</td>
+
+                        <td class="text-end fw-bold text-success">
+                            ${c.Importo ?? 0} €
+                        </td>
+                    </tr>
+                    `;
+            });
+
+            html += `
+                    </tbody>
+                    </table>
+
+                        </div>
+
+                    </div>
+                    `;
+        }
+
+        // ======================
+        // UTENTI ASSOCIATI
+        // ======================
+
+        if (p.utentiAssociati?.length) {
+
+            html += `
+                    <div class="card shadow-sm mb-3">
+
+                        <div class="card-header bg-light fw-bold">
+                            <i class="bi bi-people"></i> Utenti associati
+                        </div>
+
+                        <div class="list-group list-group-flush">
+                    `;
+
+            p.utentiAssociati.forEach(u => {
+
+                const nome = u.Nome ? u.Nome : ("Utente ID: " + u.ID_Utente);
+
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+
+                        <div>
+                            <i class="bi bi-person-circle me-1"></i>
+                            ${nome}
+                        </div>
+
+                        <span class="badge bg-info text-dark">
+                            ${u.Ruolo ?? "-"}
+                        </span>
+
+                    </div>
+                    `;
+            });
+
+            html += `</div></div>`;
+        }
+
+
+        // ======================
+        // DOCUMENTI INCARICO
+        // ======================
+
+        if (p.incarichi?.length) {
+
+            html += `
+                    <div class="card shadow-sm">
+
+                        <div class="card-header bg-light fw-bold">
+                            <i class="bi bi-file-earmark-text"></i> Documenti incarico
+                        </div>
+
+                        <div class="card-body p-0">
+
+                            <table class="table table-sm table-hover mb-0">
+
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Documento</th>
+                                    <th style="width:150px">Stato</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                    `;
+
+            p.incarichi.forEach(d => {
+
+                const badge =
+                    d.Stato === "Firmato"
+                        ? "bg-success"
+                        : "bg-secondary";
+
+                html += `
+                    <tr>
+
+                        <td>
+                            <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                            ${d.NomeFile}
+                        </td>
+
+                        <td>
+                            <span class="badge ${badge}">
+                                ${d.Stato}
+                            </span>
+                        </td>
+
+                    </tr>
+                    `;
+            });
+
+            html += `
+                            </tbody>
+                            </table>
+
+                        </div>
+
+                    </div>
+                    `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function renderSnapshotAvviso(a) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+            <div class="col-md-6 mb-2">
+                <small class="text-muted">${label}</small>
+                <div class="fw-semibold">${value ?? "-"}</div>
+            </div>`;
+        }
+
+        let html = `
+                    <div class="container-fluid">
+
+                    <!-- ============================= -->
+                    <!-- DATI AVVISO -->
+                    <!-- ============================= -->
+
+                    <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-receipt"></i> Avviso Parcella
+                    </div>
+
+                    <div class="card-body">
+
+                    <div class="row">
+
+                    ${field("Titolo Avviso", a.TitoloAvviso)}
+                    ${field("Pratica", a.pratica?.Titolo)}
+
+                    ${field("Anno pratica", a.pratica?.AnnoProgressivo)}
+                    ${field("Numero pratica", a.pratica?.ProgressivoAnno)}
+
+                    ${field("Data Avviso", formatDate(a.DataAvviso))}
+                    ${field("Data Invio", formatDate(a.DataInvio))}
+
+                    ${field("Competenza Economica", formatDate(a.DataCompetenzaEconomica))}
+
+                    ${field("Stato", `<span class="badge bg-primary">${a.Stato ?? "-"}</span>`)}
+
+                    ${field("Tipologia Avviso", a.TipologiaAvviso)}
+                    ${field("Regime Fiscale", a.RegimeFiscale)}
+
+                    ${field("Metodo Pagamento", a.MetodoPagamento)}
+
+                    ${field("Importo", `<span class="text-success fw-bold">${a.Importo || 0} €</span>`)}
+
+                    ${field("Acconto", (a.ImportoAcconto || 0) + " €")}
+
+                    ${field("Totale Avviso", `<span class="fw-bold text-primary">${a.TotaleAvvisiParcella || 0} €</span>`)}
+
+                    </div>
+
+                    </div>
+                    </div>
+                    `;
+
+        // =============================
+        // RIEPILOGO FISCALE (compatto)
+        // =============================
+
+        html += `
+                    <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-calculator"></i> Riepilogo fiscale
+                    </div>
+
+                    <div class="card-body p-0">
+
+                    <table class="table table-sm table-striped mb-0">
+
+                    <tbody>
+
+                    <tr>
+                    <td>Spese Generali</td>
+                    <td>${a.RimborsoSpesePercentuale || 0}%</td>
+                    <td class="text-end">${a.ImportoRimborsoSpese || 0} €</td>
+                    </tr>
+
+                    <tr>
+                    <td>Contributo Integrativo</td>
+                    <td>${a.ContributoIntegrativoPercentuale || 0}%</td>
+                    <td class="text-end">${a.ContributoIntegrativoImporto || 0} €</td>
+                    </tr>
+
+                    <tr>
+                    <td>IVA</td>
+                    <td>${a.AliquotaIVA || 0}%</td>
+                    <td class="text-end">${a.ImportoIVA || 0} €</td>
+                    </tr>
+
+                    </tbody>
+                    </table>
+
+                    </div>
+                    </div>
+                    `;
+
+        // =============================
+        // COMPENSO
+        // =============================
+
+        if (a.compenso) {
+
+            html += `
+                    <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-cash-stack"></i> Compenso
+                    </div>
+
+                    <div class="card-body p-0">
+
+                    <table class="table table-sm table-hover mb-0">
+
+                    <thead class="table-light">
+                    <tr>
+                    <th>Descrizione</th>
+                    <th style="width:120px">Tipo</th>
+                    <th class="text-end" style="width:120px">Importo</th>
+                    </tr>
+                    </thead>
+
+                    <tbody>
+
+                    <tr>
+                    <td>${a.compenso.Descrizione ?? "-"}</td>
+                    <td>
+                    <span class="badge bg-secondary">
+                    ${a.compenso.TipoCompenso ?? "-"}
+                    </span>
+                    </td>
+                    <td class="text-end fw-bold text-success">
+                    ${a.compenso.Importo ?? 0} €
+                    </td>
+                    </tr>
+
+                    </tbody>
+                    </table>
+
+                    </div>
+                    </div>
+                    `;
+        }
+
+        // =============================
+        // INCASSI
+        // =============================
+
+        if (a.incassi?.length) {
+
+            html += `
+                    <div class="card shadow-sm mb-3">
+
+                    <div class="card-header bg-light fw-bold">
+                    <i class="bi bi-cash"></i> Incassi
+                    </div>
+
+                    <div class="card-body p-0">
+
+                    <table class="table table-sm table-hover mb-0">
+
+                    <thead class="table-light">
+                    <tr>
+                    <th>Data</th>
+                    <th class="text-end">Importo</th>
+                    </tr>
+                    </thead>
+
+                    <tbody>
+                    `;
+
+            a.incassi.forEach(i => {
+
+                html += `
+                    <tr>
+                    <td>${formatDate(i.DataIncasso)}</td>
+                    <td class="text-end fw-bold text-success">
+                    ${i.Importo ?? 0} €
+                    </td>
+                    </tr>
+                    `;
+            });
+
+            html += `
+                    </tbody>
+                    </table>
+
+                    </div>
+                    </div>
+                    `;
+        }
+
+        // =============================
+        // DOCUMENTI
+        // =============================
+
+        if (a.documenti?.length) {
+
+            html += `
+                        <div class="card shadow-sm">
+
+                        <div class="card-header bg-light fw-bold">
+                        <i class="bi bi-file-earmark-text"></i> Documenti
+                        </div>
+
+                        <div class="list-group list-group-flush">
+                        `;
+
+            a.documenti.forEach(d => {
+
+                html += `
+                        <div class="list-group-item d-flex justify-content-between">
+
+                        <span>
+                        <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                        ${d.NomeFile}
+                        </span>
+
+                        <span class="badge bg-secondary">
+                        ${d.Stato ?? "-"}
+                        </span>
+
+                        </div>
+                        `;
+            });
+
+            html += `
+                        </div>
+                        </div>
+                        `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function renderSnapshotIncasso(i) {
+
+        const body = document.getElementById("snapshotBody");
+
+        function field(label, value) {
+            return `
+                <div class="col-md-6 mb-2">
+                    <small class="text-muted">${label}</small>
+                    <div class="fw-semibold">${value ?? "-"}</div>
+                </div>`;
+        }
+
+        let html = `
+                <div class="container-fluid">
+
+                <!-- ========================= -->
+                <!-- DATI INCASSO -->
+                <!-- ========================= -->
+
+                <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-cash-stack"></i> Incasso
+                </div>
+
+                <div class="card-body">
+
+                <div class="row">
+
+                ${field("Pratica", i.pratica?.Titolo)}
+                ${field("Titolo Avviso", i.avviso?.TitoloAvviso)}
+
+                ${field("Anno pratica", i.pratica?.AnnoProgressivo)}
+                ${field("Numero pratica", i.pratica?.ProgressivoAnno)}
+
+                ${field("Data Incasso", formatDate(i.DataIncasso))}
+                ${field("Competenza Economica", formatDate(i.DataCompetenzaEconomica))}
+
+                ${field("Competenza Finanziaria", formatDate(i.DataCompetenzaFinanziaria))}
+
+                ${field("Stato Incasso",
+            `<span class="badge bg-success">${i.StatoIncasso ?? "-"}</span>`)}
+
+                ${field("Versa in Plafond",
+                i.VersaInPlafond
+                    ? `<span class="badge bg-info text-dark">Si</span>`
+                    : `<span class="badge bg-secondary">No</span>`)}
+
+                ${field("Modalità pagamento", i.ModalitaPagamento)}
+
+                ${field("Importo Incasso",
+                        `<span class="fw-bold text-success">${i.Importo || 0} €</span>`)}
+
+                ${field("Importo Netto",
+                            `<span class="fw-bold text-primary">${i.ImportoNetto || 0} €</span>`)}
+
+                </div>
+
+                </div>
+                </div>
+                `;
+
+        // =========================
+        // AVVISO COLLEGATO
+        // =========================
+
+        if (i.avviso) {
+
+            html += `
+                <div class="card shadow-sm mb-3">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-receipt"></i> Avviso Parcella
+                </div>
+
+                <div class="card-body p-0">
+
+                <table class="table table-sm table-hover mb-0">
+
+                <thead class="table-light">
+                <tr>
+                <th>Compenso</th>
+                <th>Contributo</th>
+                <th>IVA</th>
+                <th class="text-end">Totale Avviso</th>
+                </tr>
+                </thead>
+
+                <tbody>
+
+                <tr>
+                <td>${i.avviso.Importo ?? 0} €</td>
+                <td>${i.avviso.ContributoIntegrativoImporto ?? 0} €</td>
+                <td>${i.avviso.ImportoIVA ?? 0} €</td>
+                <td class="text-end fw-bold text-primary">
+                ${i.avviso.TotaleAvvisiParcella ?? 0} €
+                </td>
+                </tr>
+
+                </tbody>
+                </table>
+
+                </div>
+                </div>
+                `;
+        }
+
+
+        // =========================
+        // NOTE
+        // =========================
+
+        if (i.Note) {
+
+            html += `
+                <div class="card shadow-sm">
+
+                <div class="card-header bg-light fw-bold">
+                <i class="bi bi-chat-left-text"></i> Note
+                </div>
+
+                <div class="card-body">
+
+                <div class="alert alert-light border mb-0">
+                ${i.Note}
+                </div>
+
+                </div>
+                </div>
+                `;
+        }
+
+        html += `</div>`;
+
+        body.innerHTML = html;
+    }
+
+    function formatDate(dateString) {
+
+        if (!dateString) return "-";
+
+        const d = new Date(dateString);
+
+        return d.toLocaleDateString("it-IT");
+    }
+</script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+
+        // =====================================================
+        // TABELLA FILTRI + PAGINAZIONE
+        // =====================================================
+        const table = document.getElementById("pagamentoTable");
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll("tbody tr"));
+
+        let controlliContainer = document.getElementById("controlliPagamentoTable");
+        if (!controlliContainer) {
+            controlliContainer = document.createElement("div");
+            controlliContainer.id = "controlliPagamentoTable";
+            controlliContainer.className = "d-flex flex-wrap gap-2 mb-3";
+            table.parentNode.insertBefore(controlliContainer, table);
+        }
+
+        let paginazioneContainer = document.getElementById("paginazionePagamentoTable");
+        if (!paginazioneContainer) {
+            paginazioneContainer = document.createElement("div");
+            paginazioneContainer.id = "paginazionePagamentoTable";
+            paginazioneContainer.className = "d-flex justify-content-end align-items-center gap-2 mt-2";
+            table.parentNode.appendChild(paginazioneContainer);
+        }
+
+        // ===============================
+        // CONTROLLI
+        // ===============================
+        const searchInput = document.createElement("input");
+        searchInput.type = "text";
+        searchInput.placeholder = "Cerca...";
+        searchInput.className = "form-control form-control-sm w-auto";
+
+        const selectProfessionista = document.createElement("select");
+        selectProfessionista.className = "form-select form-select-sm w-auto";
+
+        const selectCategoria = document.createElement("select");
+        selectCategoria.className = "form-select form-select-sm w-auto";
+
+        const selectPageSize = document.createElement("select");
+        selectPageSize.className = "form-select form-select-sm w-auto";
+
+
+        // 💰 Bottone pagamento
+        const btnPagamento = document.createElement("button");
+        btnPagamento.id = "btnApriModalePagamento";
+        btnPagamento.className = "btn btn-success btn-sm";
+        btnPagamento.innerHTML = `
+                <i class="fa fa-money-bill-wave me-1"></i>
+                Esegui Pagamento
+            `;
+
+        // Professionisti unici
+        const professionistiUnici = [...new Set(
+            rows.map(r => r.children[0].innerText.trim())
+        )].sort();
+
+        selectProfessionista.innerHTML = '<option value="">Tutti i Professionisti</option>';
+        professionistiUnici.forEach(p => {
+            const opt = document.createElement("option");
+            opt.value = p;
+            opt.textContent = p;
+            selectProfessionista.appendChild(opt);
+        });
+
+        // Categorie
+        selectCategoria.innerHTML = `
+            <option value="">Tutte le Categorie</option>
+            <option value="Owner Fee">Owner Fee</option>
+            <option value="Netto Effettivo Responsabile">Netto Effettivo Responsabile</option>
+        `;
+
+        // Page size
+        [10, 25, 50].forEach(n => {
+            const opt = document.createElement("option");
+            opt.value = n;
+            opt.textContent = n + " per pagina";
+            selectPageSize.appendChild(opt);
+        });
+
+        controlliContainer.appendChild(searchInput);
+        controlliContainer.appendChild(selectProfessionista);
+        controlliContainer.appendChild(selectCategoria);
+        controlliContainer.appendChild(selectPageSize);
+        controlliContainer.appendChild(btnPagamento);
+
+        let pageSize = 10;
+        let currentPage = 1;
+
+        function renderTable() {
+
+            const keyword = searchInput.value.toLowerCase();
+            const filtroProf = selectProfessionista.value;
+            const filtroCat = selectCategoria.value;
+
+            let filtered = rows.filter(r => {
+
+                const text = r.innerText.toLowerCase();
+                const nomeProf = r.children[0].innerText.trim();
+                const categoria = r.children[1].innerText.trim();
+
+                const matchSearch = text.includes(keyword);
+                const matchProf = !filtroProf || nomeProf === filtroProf;
+                const matchCat = !filtroCat || categoria.includes(filtroCat);
+
+                return matchSearch && matchProf && matchCat;
+            });
+
+            const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+            currentPage = Math.min(currentPage, totalPages);
+
+            rows.forEach(r => r.style.display = "none");
+
+            filtered
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .forEach(r => r.style.display = "");
+
+            paginazioneContainer.innerHTML = "";
+
+            const pageInfo = document.createElement("span");
+            pageInfo.textContent = `Pagina ${currentPage} di ${totalPages}`;
+            paginazioneContainer.appendChild(pageInfo);
+
+            const prevBtn = document.createElement("button");
+            prevBtn.textContent = "←";
+            prevBtn.className = "btn btn-sm btn-outline-primary";
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { currentPage--; renderTable(); };
+
+            const nextBtn = document.createElement("button");
+            nextBtn.textContent = "→";
+            nextBtn.className = "btn btn-sm btn-outline-primary";
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { currentPage++; renderTable(); };
+
+            paginazioneContainer.appendChild(prevBtn);
+            paginazioneContainer.appendChild(nextBtn);
+        }
+
+        searchInput.addEventListener("input", () => { currentPage = 1; renderTable(); });
+        selectProfessionista.addEventListener("change", () => { currentPage = 1; renderTable(); });
+        selectCategoria.addEventListener("change", () => { currentPage = 1; renderTable(); });
+        selectPageSize.addEventListener("change", function () {
+            pageSize = parseInt(this.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        renderTable();
+
+        // =====================================================
+        // MODALE PAGAMENTO PROFESSIONISTA
+        // =====================================================
+
+        const btnApri = document.getElementById("btnApriModalePagamento");
+        const modalElement = document.getElementById("modalePagamentoSelezionati");
+        const listaCosti = document.getElementById("listaCostiSelezionati");
+        const totaleSpan = document.getElementById("totaleModalePagamento");
+        const btnConferma = document.getElementById("btnConfermaPagamentoSelezionati");
+        const btnAggiorna = document.getElementById("btnAggiornaRiepilogo");
+
+        if (!btnApri) return;
+
+        let idProfessionistaAttivo = null;
+
+        // =============================
+        // CALCOLO TOTALE
+        // =============================
+        function aggiornaTotale() {
+
+            let totale = 0;
+
+            document.querySelectorAll(".chk-riga:checked")
+                .forEach(chk => {
+                    totale += parseFloat(chk.dataset.importo);
+                });
+
+            totaleSpan.innerText =
+                totale.toLocaleString("it-IT", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }) + " €";
+
+            btnConferma.disabled = totale <= 0;
+        }
+
+        // =============================
+        // CARICA RIEPILOGO
+        // =============================
+        function caricaRiepilogo() {
+
+            const selectProf = document.getElementById("selectProfessionistaPagamento");
+
+            if (!selectProf || !selectProf.value) {
+                listaCosti.innerHTML =
+                    "<div class='text-muted small'>Seleziona un professionista</div>";
+                return;
+            }
+
+            idProfessionistaAttivo = parseInt(selectProf.value);
+
+            const anno = parseInt(document.getElementById("selectAnnoPagamento")?.value);
+            const trimestre = parseInt(document.getElementById("selectTrimestrePagamento")?.value);
+
+            listaCosti.innerHTML = "<div class='text-muted small'>Caricamento...</div>";
+            totaleSpan.innerText = "0,00 €";
+            btnConferma.disabled = true;
+
+            $.get('/Utenti/GetRiepilogoPagamentoProfessionista',
+                {
+                    idProfessionista: idProfessionistaAttivo,
+                    anno: anno,
+                    trimestre: trimestre
+                },
+                function (res) {
+
+                    if (!res.success) {
+                        listaCosti.innerHTML =
+                            `<div class="text-muted small">${res.message}</div>`;
+                        return;
+                    }
+
+                    if (!res.righe || res.righe.length === 0) {
+                        listaCosti.innerHTML =
+                            "<div class='text-muted small'>Nessuna riga trovata per il periodo selezionato.</div>";
+                        return;
+                    }
+
+                    let html = `
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="chkSelezionaTutti">
+                        <label class="form-check-label fw-semibold">
+                            Seleziona tutto
+                        </label>
+                    </div>
+                `;
+
+                    res.righe.forEach(r => {
+
+                        html += `
+                        <div class="border rounded-3 p-3 mb-2 shadow-sm bg-light">
+
+                            <div class="d-flex justify-content-between align-items-start">
+
+                                <div class="d-flex gap-2">
+
+                                    <input type="checkbox"
+                                           class="form-check-input chk-riga"
+                                           value="${r.ID_Bilancio}"
+                                           data-importo="${r.Importo}">
+
+                                    <div>
+                                        <div class="fw-semibold">${r.Descrizione}</div>
+
+                                        <div class="small text-muted">
+                                            ${r.Categoria} |
+                                            📅 ${r.DataRegistrazione ?? "-"} |
+                                            📂 ${r.CodicePratica ?? "-"} |
+                                            🧾 Incasso: ${r.ID_Incasso ?? "-"} |
+                                            📄 Avviso: ${r.ID_AvvisoParcella ?? "-"}
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <div class="fw-bold">
+                                    € ${parseFloat(r.Importo).toLocaleString("it-IT", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        })}
+                                </div>
+
+                            </div>
+                        </div>
+                    `;
+                    });
+
+                    listaCosti.innerHTML = html;
+
+                    // Seleziona tutti
+                    const chkTutti = document.getElementById("chkSelezionaTutti");
+
+                    chkTutti?.addEventListener("change", function () {
+                        document.querySelectorAll(".chk-riga")
+                            .forEach(chk => chk.checked = this.checked);
+                        aggiornaTotale();
+                    });
+
+                    document.querySelectorAll(".chk-riga")
+                        .forEach(chk => {
+                            chk.addEventListener("change", aggiornaTotale);
+                        });
+                }
+            );
+        }
+
+        // =============================
+        // APERTURA MODALE
+        // =============================
+        btnApri.addEventListener("click", function () {
+
+            new bootstrap.Modal(modalElement).show();
+
+            // Se non è Admin (quindi hidden già valorizzato)
+            const selectProf = document.getElementById("selectProfessionistaPagamento");
+
+            if (selectProf && selectProf.value) {
+                caricaRiepilogo();
+            }
+        });
+
+        // =============================
+        // AGGIORNA RIEPILOGO
+        // =============================
+        btnAggiorna?.addEventListener("click", function () {
+            caricaRiepilogo();
+        });
+
+        // =============================
+        // CONFERMA PAGAMENTO
+        // =============================
+        btnConferma.addEventListener("click", function () {
+
+            const idBilanci = [];
+
+            document.querySelectorAll(".chk-riga:checked")
+                .forEach(chk => {
+                    idBilanci.push(parseInt(chk.value));
+                });
+
+            if (!idBilanci.length) {
+                toastr.warning("Seleziona almeno una riga.");
+                return;
+            }
+
+            btnConferma.disabled = true;
+
+            $.ajax({
+                url: '/Utenti/EseguiPagamentoProfessionista',
+                type: 'POST',
+                traditional: true,
+                data: {
+                    idProfessionista: idProfessionistaAttivo,
+                    idBilanci: idBilanci,
+                    modalitaPagamento: "Bonifico",
+                    note: "Pagamento automatico"
+                },
+                success: function (res) {
+
+                    btnConferma.disabled = false;
+
+                    if (res.success) {
+                        toastr.success(res.message);
+                        setTimeout(() => location.reload(), 1200);
+                    } else {
+                        toastr.error(res.message);
+                    }
+                },
+                error: function () {
+                    btnConferma.disabled = false;
+                    toastr.error("Errore durante la richiesta.");
+                }
+            });
+        });
+    });
+</script>

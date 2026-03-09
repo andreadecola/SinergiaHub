@@ -5,14 +5,18 @@ using System.Linq;
 using System.Web;
 using System.Web.Mvc;
 
-
 namespace Sinergia.Models
 {
     public class CostoProfessionistaCompletoViewModel
     {
-        
-    // 📌 Sezione Anagrafica Costo
-    public int ID_AnagraficaCostoProfessionista { get; set; }
+
+        // 📌 Sezione Anagrafica Costo
+        public int? ID_AnagraficaCostoProfessionista { get; set; }
+
+        // 🔹 NUOVO → per i costi di sistema (TipologieCosti)
+        public int? ID_TipoCosto { get; set; }
+
+        public int? IDProgressivoVisuale { get; set; }
 
         [Required]
         [StringLength(255)]
@@ -39,13 +43,27 @@ namespace Sinergia.Models
 
         public int NumeroAssegnati { get; set; }
 
-        public string ID_CodiceCosto => $"CPROF-{ID_AnagraficaCostoProfessionista}";
+        // 🔹 ID visivo
+        public string ID_CodiceCosto
+        {
+            get
+            {
+                int id = ID_AnagraficaCostoProfessionista
+                         ?? IDProgressivoVisuale
+                         ?? ID_TipoCosto
+                         ?? 0;
+
+                return $"CPROF-{id}";
+            }
+        }
 
         // 📌 Stato ricorrenza associata
         public bool? RicorrenzaAttiva { get; set; }
 
         public string StatoRicorrenza => RicorrenzaAttiva == true ? "Attiva" : "Nessuna";
 
+        // 🔹 costo assegnabile o automatico
+        public bool Assegnabile { get; set; }
 
         // 📌 Lista professionisti selezionabili
         [Required(ErrorMessage = "Seleziona almeno un professionista.")]

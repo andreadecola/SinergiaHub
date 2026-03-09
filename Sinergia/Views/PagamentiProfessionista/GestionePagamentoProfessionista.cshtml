@@ -1,0 +1,81 @@
+﻿@{
+    ViewBag.Title = "Gestione Pagamento Professionista";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section styles {
+    <style>
+        span[role="status"] {
+            display: none !important;
+        }
+
+        .table > tbody > tr > td {
+            padding: 8px;
+            vertical-align: middle;
+        }
+
+        .mylabel {
+            margin-bottom: 4px;
+            color: #999;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        .importo {
+            font-weight: 600;
+        }
+
+        .totale-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+    </style>
+}
+
+<div id="content">
+
+    <div class="row">
+        <div class="col-xs-12 col-sm-7 col-md-7 col-lg-6">
+            <h1 class="page-title txt-color-blueDark">
+                <i class="fa fa-money-check-alt fa-fw"></i> Pagamenti Professionisti
+            </h1>
+        </div>
+    </div>
+
+    <section id="widget-grid">
+        <div class="row">
+            <article class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
+
+                <div class="jarviswidget" id="wid-id-pagamenti"
+                     data-widget-editbutton="false"
+                     data-widget-deletebutton="false">
+
+                    <header>
+                        <h2 class="fadeInLeft animated">
+                            Debiti da Liquidare
+                        </h2>
+                    </header>
+
+                    <div>
+                        <div class="widget-body no-padding">
+
+                            <div id="contenitorePagamenti"
+                                 class="table-responsive">
+                                @Html.Action("GestionePagamentoProfessionistaList")
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+            </article>
+        </div>
+    </section>
+</div>

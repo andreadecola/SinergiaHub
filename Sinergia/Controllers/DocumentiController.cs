@@ -24,7 +24,7 @@ namespace Sinergia.Controllers
         }
 
         [HttpGet]
-        public ActionResult KnowledgeAziendaleList()
+        public ActionResult KnowledgeAziendaleList(string tipo = null, bool? soloNonLetti = null)
         {
             int idUtenteCorrente = UserManager.GetIDUtenteCollegato();
             var utenteCorrente = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteCorrente);
@@ -35,7 +35,15 @@ namespace Sinergia.Controllers
             // Filtro destinatario se non admin
             if (utenteCorrente != null && utenteCorrente.TipoUtente != "Admin")
             {
-                query = query.Where(k => k.Destinatario == utenteCorrente.TipoUtente || k.Destinatario == "Entrambi");
+                query = query.Where(k =>
+                    k.Destinatario == utenteCorrente.TipoUtente ||
+                    k.Destinatario == "Entrambi");
+            }
+
+            // 🔎 filtro categoria
+            if (!string.IsNullOrEmpty(tipo))
+            {
+                query = query.Where(k => k.Tipo == tipo);
             }
 
             // Query letture per l'utente corrente
@@ -49,7 +57,9 @@ namespace Sinergia.Controllers
                 .ToList()
                 .Select(k =>
                 {
-                    var lettura = lettureUtente.FirstOrDefault(l => l.KnowledgeAziendaleID == k.KnowledgeAziendaleID);
+                    var lettura = lettureUtente
+                        .FirstOrDefault(l => l.KnowledgeAziendaleID == k.KnowledgeAziendaleID);
+
                     return new KnowledgeAziendaleViewModel
                     {
                         KnowledgeAziendaleID = k.KnowledgeAziendaleID,
@@ -58,8 +68,13 @@ namespace Sinergia.Controllers
                         DataDocumento = k.DataDocumento,
                         Descrizione = k.Descrizione,
                         Destinatario = k.Destinatario,
+
                         AllegatoNome = k.AllegatoNome,
                         AllegatoPercorso = k.AllegatoPercorso,
+
+                        // 🎥 video
+                        VideoPercorso = k.VideoPercorso,
+
                         Versione = k.Versione,
                         Vecchio = k.Vecchio,
                         CreatoDa = k.CreatoDa,
@@ -67,8 +82,8 @@ namespace Sinergia.Controllers
                         ModificatoDa = k.ModificatoDa,
                         DataModifica = k.DataModifica,
 
-                        // ✅ Campi lettura
-                        Letto = lettura != null,
+                        // Stato lettura
+                        Letto = lettura != null && lettura.DataLettura != null,
                         DataLettura = lettura?.DataLettura
                     };
                 })
@@ -78,7 +93,9 @@ namespace Sinergia.Controllers
             var permessiUtente = new PermessiViewModel
             {
                 ID_Utente = utenteCorrente?.ID_Utente ?? 0,
-                NomeUtente = utenteCorrente != null ? $"{utenteCorrente.Nome} {utenteCorrente.Cognome}" : "",
+                NomeUtente = utenteCorrente != null
+                    ? $"{utenteCorrente.Nome} {utenteCorrente.Cognome}"
+                    : "",
                 Permessi = new List<PermessoSingoloViewModel>()
             };
 
@@ -94,6 +111,7 @@ namespace Sinergia.Controllers
                         Modifica = true,
                         Elimina = true
                     });
+
                     puoAggiungere = true;
                 }
                 else
@@ -125,10 +143,12 @@ namespace Sinergia.Controllers
         public ActionResult CreaKnowledgeAziendale()
         {
             int utenteId = UserManager.GetIDUtenteCollegato();
-            if (utenteId <= 0) return Json(new { success = false, message = "Utente non autenticato." });
+            if (utenteId <= 0)
+                return Json(new { success = false, message = "Utente non autenticato." });
 
             var utenteLoggato = db.Utenti.Find(utenteId);
-            if (utenteLoggato == null) return Json(new { success = false, message = "Utente non trovato." });
+            if (utenteLoggato == null)
+                return Json(new { success = false, message = "Utente non trovato." });
 
             if (utenteLoggato.TipoUtente != "Admin" && utenteLoggato.TipoUtente != "Professionista")
                 return Json(new { success = false, message = "Non hai i permessi per creare documentazione." });
@@ -150,30 +170,39 @@ namespace Sinergia.Controllers
                     DataCreazione = DateTime.Now
                 };
 
-                // 1) salvo senza allegati per ottenere l'ID
+                // 1️⃣ Salvo il record per ottenere ID
                 db.KnowledgeAziendale.Add(model);
                 db.SaveChanges();
 
-                // 2) preparo la cartella per questo documento
+                // 2️⃣ Creo cartella
                 string baseRel = $"/Allegati/KnowledgeAziendale/{model.KnowledgeAziendaleID}/";
                 string baseFis = Server.MapPath("~" + baseRel.TrimEnd('/'));
-                if (!Directory.Exists(baseFis)) Directory.CreateDirectory(baseFis);
 
-                // 3) salvo TUTTI i file caricati (input name="Allegati")
+                if (!Directory.Exists(baseFis))
+                    Directory.CreateDirectory(baseFis);
+
                 var files = Request.Files;
-                string primoNome = null;
-                string primoPercorsoRel = null;
+
+                string docNome = null;
+                string docPercorso = null;
+                string videoPercorso = null;
 
                 for (int i = 0; i < files.Count; i++)
                 {
                     var f = files[i];
-                    if (f == null || f.ContentLength <= 0) continue;
-                    if (!string.Equals(files.GetKey(i), "Allegati", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (f == null || f.ContentLength <= 0)
+                        continue;
 
-                    // sanitizza nome e gestisci collisioni
+                    var key = files.GetKey(i);
+
+                    if (key != "Allegato" && key != "Video")
+                        continue;
+
                     var nome = Path.GetFileName(f.FileName) ?? "file";
                     nome = nome.Replace("..", "").Trim();
+
                     string destinazione = Path.Combine(baseFis, nome);
+
                     if (System.IO.File.Exists(destinazione))
                     {
                         string name = Path.GetFileNameWithoutExtension(nome);
@@ -184,23 +213,38 @@ namespace Sinergia.Controllers
 
                     f.SaveAs(destinazione);
 
-                    var rel = baseRel + nome; // es. /Allegati/KnowledgeAziendale/15/manuale.pdf
+                    var rel = baseRel + nome;
 
-                    // Metto il primo file nei campi della tabella (retro-compatibile)
-                    if (primoNome == null)
+                    // 📄 Documento
+                    if (key == "Allegato")
                     {
-                        primoNome = nome;
-                        primoPercorsoRel = rel;
+                        if (docNome == null)
+                        {
+                            docNome = nome;
+                            docPercorso = rel;
+                        }
+                    }
+
+                    // 🎥 Video
+                    if (key == "Video")
+                    {
+                        videoPercorso = rel;
                     }
                 }
 
-                // 4) aggiorno il record con il primo allegato (se presente)
-                if (primoNome != null)
+                // 3️⃣ aggiorno record
+                if (docNome != null)
                 {
-                    model.AllegatoNome = primoNome;
-                    model.AllegatoPercorso = primoPercorsoRel;
-                    db.SaveChanges();
+                    model.AllegatoNome = docNome;
+                    model.AllegatoPercorso = docPercorso;
                 }
+
+                if (videoPercorso != null)
+                {
+                    model.VideoPercorso = videoPercorso;
+                }
+
+                db.SaveChanges();
 
                 return Json(new { success = true, message = "Documentazione creata con successo!" });
             }
@@ -224,10 +268,13 @@ namespace Sinergia.Controllers
             {
                 var originale = db.KnowledgeAziendale
                     .FirstOrDefault(k => k.KnowledgeAziendaleID == model.KnowledgeAziendaleID);
+
                 if (originale == null)
                     return Json(new { success = false, message = "Documento non trovato." });
 
-                // === Aggiorna campi principali ===
+                // ===============================
+                // Aggiornamento dati principali
+                // ===============================
                 originale.Tipo = model.Tipo;
                 originale.Titolo = model.Titolo;
                 originale.DataDocumento = model.DataDocumento;
@@ -238,60 +285,87 @@ namespace Sinergia.Controllers
 
                 int idUtenteModificatore = UserManager.GetIDUtenteCollegato();
                 var utenteMod = db.Utenti.Find(idUtenteModificatore);
-                originale.ModificatoDa = utenteMod != null ? $"{utenteMod.Nome} {utenteMod.Cognome}" : "Sistema";
+
+                originale.ModificatoDa = utenteMod != null
+                    ? $"{utenteMod.Nome} {utenteMod.Cognome}"
+                    : "Sistema";
+
                 originale.DataModifica = DateTime.Now;
 
-                // === Allegati multipli: aggiungi senza perdere il precedente ===
-                // cartella /Allegati/KnowledgeAziendale/{ID}/
+                // ===============================
+                // Cartella allegati
+                // ===============================
                 string baseRel = $"/Allegati/KnowledgeAziendale/{originale.KnowledgeAziendaleID}/";
                 string baseFis = Server.MapPath("~" + baseRel.TrimEnd('/'));
-                if (!Directory.Exists(baseFis)) Directory.CreateDirectory(baseFis);
+
+                if (!Directory.Exists(baseFis))
+                    Directory.CreateDirectory(baseFis);
 
                 var files = Request.Files;
-                string primoNuovoNome = null;
-                string primoNuovoRel = null;
+
+                string docNome = null;
+                string docRel = null;
+                string videoRel = null;
 
                 for (int i = 0; i < files.Count; i++)
                 {
                     var f = files[i];
-                    if (f == null || f.ContentLength <= 0) continue;
+                    if (f == null || f.ContentLength <= 0)
+                        continue;
 
-                    // accetta sia input name="Allegati" (multiplo) sia "Allegato"
-                    var key = files.GetKey(i) ?? "";
-                    if (!key.Equals("Allegati", StringComparison.OrdinalIgnoreCase) &&
-                        !key.Equals("Allegato", StringComparison.OrdinalIgnoreCase))
+                    var key = files.GetKey(i);
+
+                    if (key != "Allegato" && key != "Video")
                         continue;
 
                     var nome = Path.GetFileName(f.FileName) ?? "file";
                     nome = nome.Replace("..", "").Trim();
 
                     string destinazione = Path.Combine(baseFis, nome);
+
                     if (System.IO.File.Exists(destinazione))
                     {
                         string name = Path.GetFileNameWithoutExtension(nome);
                         string ext = Path.GetExtension(nome);
+
                         nome = $"{name}_{DateTime.Now:yyyyMMdd_HHmmssfff}{ext}";
                         destinazione = Path.Combine(baseFis, nome);
                     }
 
                     f.SaveAs(destinazione);
+
                     var rel = baseRel + nome;
 
-                    if (primoNuovoNome == null)
+                    // 📄 Documento
+                    if (key == "Allegato")
                     {
-                        primoNuovoNome = nome;
-                        primoNuovoRel = rel;
+                        docNome = nome;
+                        docRel = rel;
+                    }
+
+                    // 🎥 Video
+                    if (key == "Video")
+                    {
+                        videoRel = rel;
                     }
                 }
 
-                // Se c'è almeno un nuovo file e NON avevamo un "principale", imposta il primo nuovo come principale
-                if (!string.IsNullOrEmpty(primoNuovoNome) && string.IsNullOrEmpty(originale.AllegatoPercorso))
+                // ===============================
+                // Aggiornamento percorsi
+                // ===============================
+                if (!string.IsNullOrEmpty(docRel))
                 {
-                    originale.AllegatoNome = primoNuovoNome;
-                    originale.AllegatoPercorso = primoNuovoRel;
+                    originale.AllegatoNome = docNome;
+                    originale.AllegatoPercorso = docRel;
+                }
+
+                if (!string.IsNullOrEmpty(videoRel))
+                {
+                    originale.VideoPercorso = videoRel;
                 }
 
                 db.SaveChanges();
+
                 return Json(new { success = true, message = "Documento aggiornato con successo!" });
             }
             catch (Exception ex)
@@ -303,13 +377,19 @@ namespace Sinergia.Controllers
         [HttpGet]
         public JsonResult GetKnowledgeAziendale(int id)
         {
-            var doc = db.KnowledgeAziendale.FirstOrDefault(k => k.KnowledgeAziendaleID == id);
-            if (doc == null)
-                return Json(new { success = false, message = "Documento non trovato." }, JsonRequestBehavior.AllowGet);
+            var doc = db.KnowledgeAziendale
+                .FirstOrDefault(k => k.KnowledgeAziendaleID == id);
 
-            // Elenco di tutti gli allegati nella cartella /Allegati/KnowledgeAziendale/{ID}/
+            if (doc == null)
+                return Json(new { success = false, message = "Documento non trovato." },
+                    JsonRequestBehavior.AllowGet);
+
+            // =========================
+            // Allegati nella cartella
+            // =========================
             var baseRel = $"/Allegati/KnowledgeAziendale/{doc.KnowledgeAziendaleID}/";
             var baseFis = Server.MapPath("~" + baseRel.TrimEnd('/'));
+
             var allegati = new List<object>();
 
             if (System.IO.Directory.Exists(baseFis))
@@ -317,10 +397,18 @@ namespace Sinergia.Controllers
                 foreach (var path in System.IO.Directory.GetFiles(baseFis))
                 {
                     var nome = System.IO.Path.GetFileName(path);
-                    allegati.Add(new { Nome = nome, Percorso = baseRel + nome });
+
+                    allegati.Add(new
+                    {
+                        Nome = nome,
+                        Percorso = baseRel + nome
+                    });
                 }
             }
 
+            // =========================
+            // Oggetto restituito
+            // =========================
             var documento = new
             {
                 doc.KnowledgeAziendaleID,
@@ -328,22 +416,30 @@ namespace Sinergia.Controllers
                 doc.Titolo,
                 DataDocumento = doc.DataDocumento.ToString("yyyy-MM-dd"),
                 doc.Descrizione,
-                doc.Destinatario,          // stringa (se usi checkbox, la comporrai lato JS)
+                doc.Destinatario,
                 doc.Versione,
                 doc.Vecchio,
                 doc.CreatoDa,
                 DataCreazione = doc.DataCreazione.ToString("yyyy-MM-dd HH:mm"),
                 doc.ModificatoDa,
                 DataModifica = doc.DataModifica?.ToString("yyyy-MM-dd HH:mm"),
+
+                // 📄 documento principale
                 AllegatoPresente = !string.IsNullOrEmpty(doc.AllegatoPercorso),
-                doc.AllegatoNome,          // principale (retrocompatibilità)
-                doc.AllegatoPercorso,      // principale
+                doc.AllegatoNome,
+                doc.AllegatoPercorso,
+
+                // 🎥 VIDEO (nuovo campo)
+                VideoPresente = !string.IsNullOrEmpty(doc.VideoPercorso),
+                doc.VideoPercorso,
+
+                // elenco file cartella
                 Allegati = allegati
             };
 
-            return Json(new { success = true, documento }, JsonRequestBehavior.AllowGet);
+            return Json(new { success = true, documento },
+                JsonRequestBehavior.AllowGet);
         }
-
 
 
         [HttpPost]
@@ -352,41 +448,63 @@ namespace Sinergia.Controllers
             try
             {
                 int idUtenteLoggato = UserManager.GetIDUtenteCollegato();
+
                 if (idUtenteLoggato <= 0)
                     return Json(new { success = false, message = "Utente non autenticato o sessione scaduta." });
 
-                var utenteLoggato = db.Utenti.FirstOrDefault(u => u.ID_Utente == idUtenteLoggato);
+                var utenteLoggato = db.Utenti
+                    .FirstOrDefault(u => u.ID_Utente == idUtenteLoggato);
+
                 if (utenteLoggato == null)
                     return Json(new { success = false, message = "Utente non trovato." });
 
-                var doc = db.KnowledgeAziendale.FirstOrDefault(k => k.KnowledgeAziendaleID == id);
+                var doc = db.KnowledgeAziendale
+                    .FirstOrDefault(k => k.KnowledgeAziendaleID == id);
+
                 if (doc == null)
                     return Json(new { success = false, message = "Documento non trovato." });
 
-                // 🔐 Controllo permessi: Admin può sempre, altri solo se creatori
+                // 🔐 Controllo permessi
                 if (utenteLoggato.TipoUtente != "Admin" &&
                     !string.Equals(doc.CreatoDa, $"{utenteLoggato.Nome} {utenteLoggato.Cognome}", StringComparison.OrdinalIgnoreCase))
                 {
                     return Json(new { success = false, message = "Non hai i permessi per eliminare questo documento." });
                 }
 
-                // ✅ Elimina dal DB
+                // ==========================
+                // Elimina letture associate
+                // ==========================
+                var letture = db.KnowledgeAziendaleLetture
+                    .Where(x => x.KnowledgeAziendaleID == id)
+                    .ToList();
+
+                if (letture.Any())
+                {
+                    db.KnowledgeAziendaleLetture.RemoveRange(letture);
+                }
+
+                // ==========================
+                // Elimina documento
+                // ==========================
                 db.KnowledgeAziendale.Remove(doc);
+
                 db.SaveChanges();
 
-                // 🗑️ Elimina cartella allegati
+                // ==========================
+                // Elimina cartella file
+                // ==========================
                 try
                 {
                     var relFolder = $"/Allegati/KnowledgeAziendale/{id}/";
                     var absFolder = Server.MapPath("~" + relFolder.TrimEnd('/'));
+
                     if (System.IO.Directory.Exists(absFolder))
                     {
-                        System.IO.Directory.Delete(absFolder, recursive: true);
+                        System.IO.Directory.Delete(absFolder, true);
                     }
                 }
                 catch (Exception exAllegati)
                 {
-                    // Qui potresti salvare un log locale o in DB
                     System.Diagnostics.Debug.WriteLine("Errore cancellazione allegati: " + exAllegati.Message);
                 }
 
@@ -395,8 +513,12 @@ namespace Sinergia.Controllers
             catch (Exception ex)
             {
                 string msg = ex.Message;
-                if (ex.InnerException != null) msg += " | Inner: " + ex.InnerException.Message;
-                if (ex.InnerException?.InnerException != null) msg += " | Inner2: " + ex.InnerException.InnerException.Message;
+
+                if (ex.InnerException != null)
+                    msg += " | Inner: " + ex.InnerException.Message;
+
+                if (ex.InnerException?.InnerException != null)
+                    msg += " | Inner2: " + ex.InnerException.InnerException.Message;
 
                 return Json(new { success = false, message = "Errore nell'eliminazione: " + msg });
             }
@@ -434,6 +556,8 @@ namespace Sinergia.Controllers
                 {
                     // Aggiorno la data
                     lettura.DataLettura = DateTime.Now;
+                    lettura.Posticipato = false;
+                    lettura.DataPosticipo = null;
                 }
 
                 db.SaveChanges();
@@ -446,10 +570,113 @@ namespace Sinergia.Controllers
             }
         }
 
+        [HttpPost]
+        public JsonResult PosticipaDocumento()
+        {
+            try
+            {
+                int idUtente = UserManager.GetIDUtenteCollegato();
 
+                if (idUtente <= 0)
+                    return Json(new { success = false, message = "Utente non autenticato." });
 
+                var documenti = db.KnowledgeAziendale
+                    .Where(k => !k.Vecchio)
+                    .Select(k => k.KnowledgeAziendaleID)
+                    .ToList();
+
+                foreach (var idDoc in documenti)
+                {
+                    var record = db.KnowledgeAziendaleLetture
+                        .FirstOrDefault(x =>
+                            x.KnowledgeAziendaleID == idDoc &&
+                            x.ID_Utente == idUtente);
+
+                    if (record == null)
+                    {
+                        record = new KnowledgeAziendaleLetture
+                        {
+                            KnowledgeAziendaleID = idDoc,
+                            ID_Utente = idUtente,
+                            Posticipato = true,
+                            DataPosticipo = DateTime.Now,
+
+                        };
+
+                        db.KnowledgeAziendaleLetture.Add(record);
+                    }
+                    else
+                    {
+                        record.Posticipato = true;
+                        record.DataPosticipo = DateTime.Now;
+                    }
+                }
+
+                db.SaveChanges();
+
+                return Json(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("ERRORE POSTICIPO SUPPORTO: " + ex);
+
+                return Json(new
+                {
+                    success = false,
+                    message = ex.InnerException?.InnerException?.Message ?? ex.Message
+                });
+            }
+        }
+
+        [HttpGet]
+        public JsonResult GetDocumentiSupportoDaLeggere()
+        {
+            try
+            {
+                int idUtente = UserManager.GetIDUtenteCollegato();
+
+                // 📚 Documenti attivi
+                var documenti = db.KnowledgeAziendale
+                    .Where(k => !k.Vecchio)
+                    .ToList();
+
+                // 👁 Letture utente
+                var letture = db.KnowledgeAziendaleLetture
+                    .Where(l => l.ID_Utente == idUtente)
+                    .ToList();
+
+                // 📄 Documenti non letti
+                var daLeggere = documenti
+                    .Where(d =>
+                        !letture.Any(l =>
+                            l.KnowledgeAziendaleID == d.KnowledgeAziendaleID &&
+                            l.DataLettura != null))
+                    .ToList();
+
+                // ⏳ Controllo se ha già posticipato
+                bool haGiaPosticipato = letture.Any(l =>
+                    l.Posticipato == true);
+
+                return Json(new
+                {
+                    success = true,
+                    totale = documenti.Count,
+                    daLeggere = daLeggere.Count,
+
+                    // 👇 questo serve allo script JS
+                    puoPosporre = !haGiaPosticipato
+                }, JsonRequestBehavior.AllowGet);
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = ex.Message
+                }, JsonRequestBehavior.AllowGet);
+            }
+        }
 
         #endregion
-
     }
 }
